@@ -1,0 +1,23 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-liquorbot-dev-fa4d9-authRole",
+      "UnauthRoleArn": "arn:aws:iam::180294219536:role/amplify-liquorbot-dev-fa4d9-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::180294219536:role/amplify-liquorbot-dev-fa4d9-authRole",
+      "Region": "us-east-1",
+      "DeploymentBucketName": "amplify-liquorbot-dev-fa4d9-deployment",
+      "UnauthRoleName": "amplify-liquorbot-dev-fa4d9-unauthRole",
+      "StackName": "amplify-liquorbot-dev-fa4d9",
+      "StackId": "arn:aws:cloudformation:us-east-1:180294219536:stack/amplify-liquorbot-dev-fa4d9/a59a1370-0905-11f0-8a8c-120f2358f891",
+      "AmplifyAppId": "d20cmxzp4gosju"
+    },
+    "categories": {
+      "api": {
+        "liquorbot": {}
+      },
+      "auth": {
+        "liquorbotf668a8fa": {}
+      }
+    }
+  }
+}
