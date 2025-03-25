@@ -16,11 +16,15 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import TopView from '../components/TopView';
 
-// --- ADDED FROM OLD CODE ---
 import { Amplify } from 'aws-amplify';
 import { PubSub } from '@aws-amplify/pubsub';
 import config from '../../src/amplifyconfiguration.json';
 import { fetchAuthSession } from 'aws-amplify/auth';
+import API from '@aws-amplify/api';                  // For API.graphql(...)
+import Auth from '@aws-amplify/auth';
+import { graphqlOperation } from '@aws-amplify/api-graphql'; // For graphqlOperation(...)
+import { createFavorite, deleteFavorite } from '../../src/graphql/mutations';
+import { listFavorites } from '../../src/graphql/queries';
 
 // If you haven’t set up Amplify elsewhere, do it here:
 Amplify.configure(config);
@@ -310,11 +314,57 @@ export default function MenuScreen() {
   }, []);
   // --- END ADDED ---
 
-  const toggleFavorite = (id: number) => {
+  async function toggleFavorite(drinkId: number) {
+    // 1) Immediately update local UI
     setFavorites((prev) =>
-      prev.includes(id) ? prev.filter((favId) => favId !== id) : [...prev, id]
+      prev.includes(drinkId)
+        ? prev.filter((favId) => favId !== drinkId)
+        : [...prev, drinkId]
     );
-  };
+  
+    try {
+      // 2) Get the current user’s sub (unique ID)
+      const user = await (Auth as any).currentAuthenticatedUser();
+      const userSub = user.attributes.sub; // or user?.username if you prefer, but sub is more reliable
+  
+      // 3) Check if a Favorite already exists for this user & drink
+      // We'll treat the drinkId as a string in the DB to match the Favorite schema's `drinkID: ID!`
+      const existing = await (API as any).graphql(
+        graphqlOperation(listFavorites, {
+          filter: {
+            userSub: { eq: userSub },
+            drinkID: { eq: String(drinkId) },
+          },
+        })
+      );
+  
+      // 4) If exists, delete; otherwise create a new Favorite
+      const items = existing?.data?.listFavorites?.items || [];
+      if (items.length > 0) {
+        // There's already one -> delete it
+        const favoriteId = items[0].id; // the ID of the Favorite object
+        await (API as any).graphql(
+          graphqlOperation(deleteFavorite, {
+            input: { id: favoriteId },
+          })
+        );
+      } else {
+        // Need to create it
+        await (API as any).graphql(
+          graphqlOperation(createFavorite, {
+            input: {
+              userSub,
+              drinkID: String(drinkId),
+            },
+          })
+        );
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      // OPTIONAL: if you want to roll back local state upon error:
+      // setFavorites(prev => prev.includes(drinkId) ? prev.filter(i => i !== drinkId) : [...prev, drinkId]);
+    }
+  }
 
   const filteredDrinks =
     selectedCategory === 'All'

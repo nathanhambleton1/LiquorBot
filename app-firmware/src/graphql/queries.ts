@@ -8,222 +8,14 @@ type GeneratedQuery<InputType, OutputType> = string & {
   __generatedQueryOutput: OutputType;
 };
 
-export const getUser = /* GraphQL */ `query GetUser($id: ID!) {
-  getUser(id: $id) {
-    id
-    username
-    email
-    favorites {
-      nextToken
-      __typename
-    }
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedQuery<APITypes.GetUserQueryVariables, APITypes.GetUserQuery>;
-export const listUsers = /* GraphQL */ `query ListUsers(
-  $filter: ModelUserFilterInput
-  $limit: Int
-  $nextToken: String
-) {
-  listUsers(filter: $filter, limit: $limit, nextToken: $nextToken) {
-    items {
-      id
-      username
-      email
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    nextToken
-    __typename
-  }
-}
-` as GeneratedQuery<APITypes.ListUsersQueryVariables, APITypes.ListUsersQuery>;
-export const getUserFavorite = /* GraphQL */ `query GetUserFavorite($id: ID!) {
-  getUserFavorite(id: $id) {
-    id
-    userID
-    drinkID
-    user {
-      id
-      username
-      email
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    drink {
-      id
-      name
-      category
-      description
-      garnish
-      image
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedQuery<
-  APITypes.GetUserFavoriteQueryVariables,
-  APITypes.GetUserFavoriteQuery
->;
-export const listUserFavorites = /* GraphQL */ `query ListUserFavorites(
-  $filter: ModelUserFavoriteFilterInput
-  $limit: Int
-  $nextToken: String
-) {
-  listUserFavorites(filter: $filter, limit: $limit, nextToken: $nextToken) {
-    items {
-      id
-      userID
-      drinkID
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    nextToken
-    __typename
-  }
-}
-` as GeneratedQuery<
-  APITypes.ListUserFavoritesQueryVariables,
-  APITypes.ListUserFavoritesQuery
->;
-export const userFavoritesByUserID = /* GraphQL */ `query UserFavoritesByUserID(
-  $userID: ID!
-  $sortDirection: ModelSortDirection
-  $filter: ModelUserFavoriteFilterInput
-  $limit: Int
-  $nextToken: String
-) {
-  userFavoritesByUserID(
-    userID: $userID
-    sortDirection: $sortDirection
-    filter: $filter
-    limit: $limit
-    nextToken: $nextToken
-  ) {
-    items {
-      id
-      userID
-      drinkID
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    nextToken
-    __typename
-  }
-}
-` as GeneratedQuery<
-  APITypes.UserFavoritesByUserIDQueryVariables,
-  APITypes.UserFavoritesByUserIDQuery
->;
-export const userFavoritesByDrinkID = /* GraphQL */ `query UserFavoritesByDrinkID(
-  $drinkID: ID!
-  $sortDirection: ModelSortDirection
-  $filter: ModelUserFavoriteFilterInput
-  $limit: Int
-  $nextToken: String
-) {
-  userFavoritesByDrinkID(
-    drinkID: $drinkID
-    sortDirection: $sortDirection
-    filter: $filter
-    limit: $limit
-    nextToken: $nextToken
-  ) {
-    items {
-      id
-      userID
-      drinkID
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    nextToken
-    __typename
-  }
-}
-` as GeneratedQuery<
-  APITypes.UserFavoritesByDrinkIDQueryVariables,
-  APITypes.UserFavoritesByDrinkIDQuery
->;
-export const getIngredient = /* GraphQL */ `query GetIngredient($id: ID!) {
-  getIngredient(id: $id) {
-    id
-    name
-    drinkIngredients {
-      nextToken
-      __typename
-    }
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedQuery<
-  APITypes.GetIngredientQueryVariables,
-  APITypes.GetIngredientQuery
->;
-export const listIngredients = /* GraphQL */ `query ListIngredients(
-  $filter: ModelIngredientFilterInput
-  $limit: Int
-  $nextToken: String
-) {
-  listIngredients(filter: $filter, limit: $limit, nextToken: $nextToken) {
-    items {
-      id
-      name
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    nextToken
-    __typename
-  }
-}
-` as GeneratedQuery<
-  APITypes.ListIngredientsQueryVariables,
-  APITypes.ListIngredientsQuery
->;
 export const getDrink = /* GraphQL */ `query GetDrink($id: ID!) {
   getDrink(id: $id) {
     id
     name
     category
     description
-    garnish
-    image
-    ingredients {
-      nextToken
-      __typename
-    }
-    favorites {
-      nextToken
-      __typename
-    }
     createdAt
     updatedAt
-    owner
     __typename
   }
 }
@@ -239,11 +31,8 @@ export const listDrinks = /* GraphQL */ `query ListDrinks(
       name
       category
       description
-      garnish
-      image
       createdAt
       updatedAt
-      owner
       __typename
     }
     nextToken
@@ -254,33 +43,11 @@ export const listDrinks = /* GraphQL */ `query ListDrinks(
   APITypes.ListDrinksQueryVariables,
   APITypes.ListDrinksQuery
 >;
-export const getDrinkIngredient = /* GraphQL */ `query GetDrinkIngredient($id: ID!) {
-  getDrinkIngredient(id: $id) {
+export const getFavorite = /* GraphQL */ `query GetFavorite($id: ID!) {
+  getFavorite(id: $id) {
     id
-    amount
-    unit
+    userSub
     drinkID
-    ingredientID
-    ingredient {
-      id
-      name
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    drink {
-      id
-      name
-      category
-      description
-      garnish
-      image
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
     createdAt
     updatedAt
     owner
@@ -288,21 +55,19 @@ export const getDrinkIngredient = /* GraphQL */ `query GetDrinkIngredient($id: I
   }
 }
 ` as GeneratedQuery<
-  APITypes.GetDrinkIngredientQueryVariables,
-  APITypes.GetDrinkIngredientQuery
+  APITypes.GetFavoriteQueryVariables,
+  APITypes.GetFavoriteQuery
 >;
-export const listDrinkIngredients = /* GraphQL */ `query ListDrinkIngredients(
-  $filter: ModelDrinkIngredientFilterInput
+export const listFavorites = /* GraphQL */ `query ListFavorites(
+  $filter: ModelFavoriteFilterInput
   $limit: Int
   $nextToken: String
 ) {
-  listDrinkIngredients(filter: $filter, limit: $limit, nextToken: $nextToken) {
+  listFavorites(filter: $filter, limit: $limit, nextToken: $nextToken) {
     items {
       id
-      amount
-      unit
+      userSub
       drinkID
-      ingredientID
       createdAt
       updatedAt
       owner
@@ -313,72 +78,6 @@ export const listDrinkIngredients = /* GraphQL */ `query ListDrinkIngredients(
   }
 }
 ` as GeneratedQuery<
-  APITypes.ListDrinkIngredientsQueryVariables,
-  APITypes.ListDrinkIngredientsQuery
->;
-export const drinkIngredientsByDrinkID = /* GraphQL */ `query DrinkIngredientsByDrinkID(
-  $drinkID: ID!
-  $sortDirection: ModelSortDirection
-  $filter: ModelDrinkIngredientFilterInput
-  $limit: Int
-  $nextToken: String
-) {
-  drinkIngredientsByDrinkID(
-    drinkID: $drinkID
-    sortDirection: $sortDirection
-    filter: $filter
-    limit: $limit
-    nextToken: $nextToken
-  ) {
-    items {
-      id
-      amount
-      unit
-      drinkID
-      ingredientID
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    nextToken
-    __typename
-  }
-}
-` as GeneratedQuery<
-  APITypes.DrinkIngredientsByDrinkIDQueryVariables,
-  APITypes.DrinkIngredientsByDrinkIDQuery
->;
-export const drinkIngredientsByIngredientID = /* GraphQL */ `query DrinkIngredientsByIngredientID(
-  $ingredientID: ID!
-  $sortDirection: ModelSortDirection
-  $filter: ModelDrinkIngredientFilterInput
-  $limit: Int
-  $nextToken: String
-) {
-  drinkIngredientsByIngredientID(
-    ingredientID: $ingredientID
-    sortDirection: $sortDirection
-    filter: $filter
-    limit: $limit
-    nextToken: $nextToken
-  ) {
-    items {
-      id
-      amount
-      unit
-      drinkID
-      ingredientID
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    nextToken
-    __typename
-  }
-}
-` as GeneratedQuery<
-  APITypes.DrinkIngredientsByIngredientIDQueryVariables,
-  APITypes.DrinkIngredientsByIngredientIDQuery
+  APITypes.ListFavoritesQueryVariables,
+  APITypes.ListFavoritesQuery
 >;

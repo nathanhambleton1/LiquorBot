@@ -8,274 +8,14 @@ type GeneratedSubscription<InputType, OutputType> = string & {
   __generatedSubscriptionOutput: OutputType;
 };
 
-export const onCreateUser = /* GraphQL */ `subscription OnCreateUser(
-  $filter: ModelSubscriptionUserFilterInput
-  $owner: String
-) {
-  onCreateUser(filter: $filter, owner: $owner) {
-    id
-    username
-    email
-    favorites {
-      nextToken
-      __typename
-    }
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedSubscription<
-  APITypes.OnCreateUserSubscriptionVariables,
-  APITypes.OnCreateUserSubscription
->;
-export const onUpdateUser = /* GraphQL */ `subscription OnUpdateUser(
-  $filter: ModelSubscriptionUserFilterInput
-  $owner: String
-) {
-  onUpdateUser(filter: $filter, owner: $owner) {
-    id
-    username
-    email
-    favorites {
-      nextToken
-      __typename
-    }
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedSubscription<
-  APITypes.OnUpdateUserSubscriptionVariables,
-  APITypes.OnUpdateUserSubscription
->;
-export const onDeleteUser = /* GraphQL */ `subscription OnDeleteUser(
-  $filter: ModelSubscriptionUserFilterInput
-  $owner: String
-) {
-  onDeleteUser(filter: $filter, owner: $owner) {
-    id
-    username
-    email
-    favorites {
-      nextToken
-      __typename
-    }
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedSubscription<
-  APITypes.OnDeleteUserSubscriptionVariables,
-  APITypes.OnDeleteUserSubscription
->;
-export const onCreateUserFavorite = /* GraphQL */ `subscription OnCreateUserFavorite(
-  $filter: ModelSubscriptionUserFavoriteFilterInput
-  $owner: String
-) {
-  onCreateUserFavorite(filter: $filter, owner: $owner) {
-    id
-    userID
-    drinkID
-    user {
-      id
-      username
-      email
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    drink {
-      id
-      name
-      category
-      description
-      garnish
-      image
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedSubscription<
-  APITypes.OnCreateUserFavoriteSubscriptionVariables,
-  APITypes.OnCreateUserFavoriteSubscription
->;
-export const onUpdateUserFavorite = /* GraphQL */ `subscription OnUpdateUserFavorite(
-  $filter: ModelSubscriptionUserFavoriteFilterInput
-  $owner: String
-) {
-  onUpdateUserFavorite(filter: $filter, owner: $owner) {
-    id
-    userID
-    drinkID
-    user {
-      id
-      username
-      email
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    drink {
-      id
-      name
-      category
-      description
-      garnish
-      image
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedSubscription<
-  APITypes.OnUpdateUserFavoriteSubscriptionVariables,
-  APITypes.OnUpdateUserFavoriteSubscription
->;
-export const onDeleteUserFavorite = /* GraphQL */ `subscription OnDeleteUserFavorite(
-  $filter: ModelSubscriptionUserFavoriteFilterInput
-  $owner: String
-) {
-  onDeleteUserFavorite(filter: $filter, owner: $owner) {
-    id
-    userID
-    drinkID
-    user {
-      id
-      username
-      email
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    drink {
-      id
-      name
-      category
-      description
-      garnish
-      image
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedSubscription<
-  APITypes.OnDeleteUserFavoriteSubscriptionVariables,
-  APITypes.OnDeleteUserFavoriteSubscription
->;
-export const onCreateIngredient = /* GraphQL */ `subscription OnCreateIngredient(
-  $filter: ModelSubscriptionIngredientFilterInput
-  $owner: String
-) {
-  onCreateIngredient(filter: $filter, owner: $owner) {
-    id
-    name
-    drinkIngredients {
-      nextToken
-      __typename
-    }
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedSubscription<
-  APITypes.OnCreateIngredientSubscriptionVariables,
-  APITypes.OnCreateIngredientSubscription
->;
-export const onUpdateIngredient = /* GraphQL */ `subscription OnUpdateIngredient(
-  $filter: ModelSubscriptionIngredientFilterInput
-  $owner: String
-) {
-  onUpdateIngredient(filter: $filter, owner: $owner) {
-    id
-    name
-    drinkIngredients {
-      nextToken
-      __typename
-    }
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedSubscription<
-  APITypes.OnUpdateIngredientSubscriptionVariables,
-  APITypes.OnUpdateIngredientSubscription
->;
-export const onDeleteIngredient = /* GraphQL */ `subscription OnDeleteIngredient(
-  $filter: ModelSubscriptionIngredientFilterInput
-  $owner: String
-) {
-  onDeleteIngredient(filter: $filter, owner: $owner) {
-    id
-    name
-    drinkIngredients {
-      nextToken
-      __typename
-    }
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedSubscription<
-  APITypes.OnDeleteIngredientSubscriptionVariables,
-  APITypes.OnDeleteIngredientSubscription
->;
-export const onCreateDrink = /* GraphQL */ `subscription OnCreateDrink(
-  $filter: ModelSubscriptionDrinkFilterInput
-  $owner: String
-) {
-  onCreateDrink(filter: $filter, owner: $owner) {
+export const onCreateDrink = /* GraphQL */ `subscription OnCreateDrink($filter: ModelSubscriptionDrinkFilterInput) {
+  onCreateDrink(filter: $filter) {
     id
     name
     category
     description
-    garnish
-    image
-    ingredients {
-      nextToken
-      __typename
-    }
-    favorites {
-      nextToken
-      __typename
-    }
     createdAt
     updatedAt
-    owner
     __typename
   }
 }
@@ -283,28 +23,14 @@ export const onCreateDrink = /* GraphQL */ `subscription OnCreateDrink(
   APITypes.OnCreateDrinkSubscriptionVariables,
   APITypes.OnCreateDrinkSubscription
 >;
-export const onUpdateDrink = /* GraphQL */ `subscription OnUpdateDrink(
-  $filter: ModelSubscriptionDrinkFilterInput
-  $owner: String
-) {
-  onUpdateDrink(filter: $filter, owner: $owner) {
+export const onUpdateDrink = /* GraphQL */ `subscription OnUpdateDrink($filter: ModelSubscriptionDrinkFilterInput) {
+  onUpdateDrink(filter: $filter) {
     id
     name
     category
     description
-    garnish
-    image
-    ingredients {
-      nextToken
-      __typename
-    }
-    favorites {
-      nextToken
-      __typename
-    }
     createdAt
     updatedAt
-    owner
     __typename
   }
 }
@@ -312,28 +38,14 @@ export const onUpdateDrink = /* GraphQL */ `subscription OnUpdateDrink(
   APITypes.OnUpdateDrinkSubscriptionVariables,
   APITypes.OnUpdateDrinkSubscription
 >;
-export const onDeleteDrink = /* GraphQL */ `subscription OnDeleteDrink(
-  $filter: ModelSubscriptionDrinkFilterInput
-  $owner: String
-) {
-  onDeleteDrink(filter: $filter, owner: $owner) {
+export const onDeleteDrink = /* GraphQL */ `subscription OnDeleteDrink($filter: ModelSubscriptionDrinkFilterInput) {
+  onDeleteDrink(filter: $filter) {
     id
     name
     category
     description
-    garnish
-    image
-    ingredients {
-      nextToken
-      __typename
-    }
-    favorites {
-      nextToken
-      __typename
-    }
     createdAt
     updatedAt
-    owner
     __typename
   }
 }
@@ -341,36 +53,14 @@ export const onDeleteDrink = /* GraphQL */ `subscription OnDeleteDrink(
   APITypes.OnDeleteDrinkSubscriptionVariables,
   APITypes.OnDeleteDrinkSubscription
 >;
-export const onCreateDrinkIngredient = /* GraphQL */ `subscription OnCreateDrinkIngredient(
-  $filter: ModelSubscriptionDrinkIngredientFilterInput
+export const onCreateFavorite = /* GraphQL */ `subscription OnCreateFavorite(
+  $filter: ModelSubscriptionFavoriteFilterInput
   $owner: String
 ) {
-  onCreateDrinkIngredient(filter: $filter, owner: $owner) {
+  onCreateFavorite(filter: $filter, owner: $owner) {
     id
-    amount
-    unit
+    userSub
     drinkID
-    ingredientID
-    ingredient {
-      id
-      name
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    drink {
-      id
-      name
-      category
-      description
-      garnish
-      image
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
     createdAt
     updatedAt
     owner
@@ -378,39 +68,17 @@ export const onCreateDrinkIngredient = /* GraphQL */ `subscription OnCreateDrink
   }
 }
 ` as GeneratedSubscription<
-  APITypes.OnCreateDrinkIngredientSubscriptionVariables,
-  APITypes.OnCreateDrinkIngredientSubscription
+  APITypes.OnCreateFavoriteSubscriptionVariables,
+  APITypes.OnCreateFavoriteSubscription
 >;
-export const onUpdateDrinkIngredient = /* GraphQL */ `subscription OnUpdateDrinkIngredient(
-  $filter: ModelSubscriptionDrinkIngredientFilterInput
+export const onUpdateFavorite = /* GraphQL */ `subscription OnUpdateFavorite(
+  $filter: ModelSubscriptionFavoriteFilterInput
   $owner: String
 ) {
-  onUpdateDrinkIngredient(filter: $filter, owner: $owner) {
+  onUpdateFavorite(filter: $filter, owner: $owner) {
     id
-    amount
-    unit
+    userSub
     drinkID
-    ingredientID
-    ingredient {
-      id
-      name
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    drink {
-      id
-      name
-      category
-      description
-      garnish
-      image
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
     createdAt
     updatedAt
     owner
@@ -418,39 +86,17 @@ export const onUpdateDrinkIngredient = /* GraphQL */ `subscription OnUpdateDrink
   }
 }
 ` as GeneratedSubscription<
-  APITypes.OnUpdateDrinkIngredientSubscriptionVariables,
-  APITypes.OnUpdateDrinkIngredientSubscription
+  APITypes.OnUpdateFavoriteSubscriptionVariables,
+  APITypes.OnUpdateFavoriteSubscription
 >;
-export const onDeleteDrinkIngredient = /* GraphQL */ `subscription OnDeleteDrinkIngredient(
-  $filter: ModelSubscriptionDrinkIngredientFilterInput
+export const onDeleteFavorite = /* GraphQL */ `subscription OnDeleteFavorite(
+  $filter: ModelSubscriptionFavoriteFilterInput
   $owner: String
 ) {
-  onDeleteDrinkIngredient(filter: $filter, owner: $owner) {
+  onDeleteFavorite(filter: $filter, owner: $owner) {
     id
-    amount
-    unit
+    userSub
     drinkID
-    ingredientID
-    ingredient {
-      id
-      name
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    drink {
-      id
-      name
-      category
-      description
-      garnish
-      image
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
     createdAt
     updatedAt
     owner
@@ -458,6 +104,6 @@ export const onDeleteDrinkIngredient = /* GraphQL */ `subscription OnDeleteDrink
   }
 }
 ` as GeneratedSubscription<
-  APITypes.OnDeleteDrinkIngredientSubscriptionVariables,
-  APITypes.OnDeleteDrinkIngredientSubscription
+  APITypes.OnDeleteFavoriteSubscriptionVariables,
+  APITypes.OnDeleteFavoriteSubscription
 >;
