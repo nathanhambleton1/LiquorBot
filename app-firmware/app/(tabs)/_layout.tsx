@@ -1,7 +1,6 @@
 import { Tabs } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { View, StyleSheet, StatusBar, SafeAreaView } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 
 export default function TabLayout() {
   return (
@@ -13,25 +12,18 @@ export default function TabLayout() {
           tabBarInactiveTintColor: '#4F4F4F', // Set the color of the unselected icons
           headerShown: false,
           tabBarStyle: {
-            backgroundColor: 'transparent', // Make the background transparent to show the gradient
+            backgroundColor: '#141414', // Set a solid background color
             borderTopWidth: 0, // Remove the white line
             borderTopLeftRadius: 20, // Rounded corners
             borderTopRightRadius: 20, // Rounded corners
-            overflow: 'hidden', // Ensure the gradient is clipped to the rounded corners
-            position: 'absolute', // Remove whitespace from the rounded corners
+            overflow: 'hidden', // Ensure the background is clipped to the rounded corners
+            position: 'relative', // Change from 'absolute' to 'relative'
             left: 0,
             right: 0,
             bottom: 0,
+            elevation: 0, // Remove shadow on Android
+            shadowOpacity: 0, // Remove shadow on iOS
           },
-          tabBarBackground: () => (
-            <LinearGradient
-              colors={['#141414', '#000000']} // Gradient from black to gray
-              style={[
-                StyleSheet.absoluteFill,
-                { borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-              ]}
-            />
-          ),
         }}
       >
         <Tabs.Screen
