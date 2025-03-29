@@ -31,14 +31,15 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
+.env.local
+.env.*.local
 
-# typescript
+# TypeScript
 *.tsbuildinfo
 
-app-example
-
-#amplify-do-not-edit-begin
-amplify/\#current-cloud-backend
+# Amplify
+amplify/#current-cloud-backend
 amplify/.config/local-*
 amplify/logs
 amplify/mock-data
@@ -47,7 +48,6 @@ amplify/backend/amplify-meta.json
 amplify/backend/.temp
 build/
 dist/
-node_modules/
 aws-exports.js
 awsconfiguration.json
 amplifyconfiguration.json
@@ -57,4 +57,34 @@ amplify-gradle-config.json
 amplifytools.xcconfig
 .secret-*
 **.sample
-#amplify-do-not-edit-end
+
+# VS Code settings and workspace files
+.vscode/
+*.code-workspace
+
+# Android
+android/.gradle/
+android/.idea/
+android/build/
+android/app/build/
+*.keystore
+
+# iOS
+ios/Pods/
+ios/build/
+ios/DerivedData/
+*.xcworkspace
+*.xcuserstate
+
+# Generated GraphQL files
+src/graphql/*.js
+src/graphql/*.ts
+src/graphql/*.graphql
+
+# ESP32 Firmware (if applicable)
+esp32-firmware/.pio/
+esp32-firmware/.vscode/
+esp32-firmware/build/
+esp32-firmware/.clangd
+esp32-firmware/.ccls-cache/
+esp32-firmware/.cache/

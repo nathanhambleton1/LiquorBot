@@ -1,0 +1,12 @@
+{
+  "AppSyncApiName": "liquorbot",
+  "DynamoDBBillingMode": "PAY_PER_REQUEST",
+  "DynamoDBEnableServerSideEncryption": false,
+  "AuthCognitoUserPoolId": {
+    "Fn::GetAtt": [
+      "authliquorbotf668a8fa",
+      "Outputs.UserPoolId"
+    ]
+  },
+  "AuthModeLastUpdated": "2025-03-25T01:10:17.193Z"
+}

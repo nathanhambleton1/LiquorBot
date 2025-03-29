@@ -1,0 +1,90 @@
+{
+  "providers": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-liquorbot-dev-fa4d9-authRole",
+      "UnauthRoleArn": "arn:aws:iam::180294219536:role/amplify-liquorbot-dev-fa4d9-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::180294219536:role/amplify-liquorbot-dev-fa4d9-authRole",
+      "Region": "us-east-1",
+      "DeploymentBucketName": "amplify-liquorbot-dev-fa4d9-deployment",
+      "UnauthRoleName": "amplify-liquorbot-dev-fa4d9-unauthRole",
+      "StackName": "amplify-liquorbot-dev-fa4d9",
+      "StackId": "arn:aws:cloudformation:us-east-1:180294219536:stack/amplify-liquorbot-dev-fa4d9/a59a1370-0905-11f0-8a8c-120f2358f891",
+      "AmplifyAppId": "d20cmxzp4gosju"
+    }
+  },
+  "api": {
+    "liquorbot": {
+      "service": "AppSync",
+      "providerPlugin": "awscloudformation",
+      "dependsOn": [
+        {
+          "category": "auth",
+          "resourceName": "liquorbotf668a8fa",
+          "attributes": [
+            "UserPoolId"
+          ]
+        }
+      ],
+      "output": {
+        "authConfig": {
+          "defaultAuthentication": {
+            "authenticationType": "AMAZON_COGNITO_USER_POOLS",
+            "userPoolConfig": {
+              "userPoolId": "authliquorbotf668a8fa"
+            }
+          },
+          "additionalAuthenticationProviders": []
+        },
+        "GraphQLAPIIdOutput": "6q26rzjfbnckrldlxlwr3ra7e4",
+        "GraphQLAPIEndpointOutput": "https://vp6qp6lzkzhbrbjpixzeqmthhu.appsync-api.us-east-1.amazonaws.com/graphql"
+      },
+      "providerMetadata": {
+        "s3TemplateURL": "https://s3.amazonaws.com/amplify-liquorbot-dev-fa4d9-deployment/amplify-cfn-templates/api/cloudformation-template.json",
+        "logicalId": "apiliquorbot"
+      },
+      "lastPushTimeStamp": "2025-03-25T01:17:57.982Z",
+      "lastPushDirHash": "9DUgEvc/Q419FSASfp9OU8sup14="
+    }
+  },
+  "auth": {
+    "liquorbotf668a8fa": {
+      "service": "Cognito",
+      "providerPlugin": "awscloudformation",
+      "dependsOn": [],
+      "customAuth": false,
+      "frontendAuthConfig": {
+        "socialProviders": [],
+        "usernameAttributes": [],
+        "signupAttributes": [
+          "EMAIL"
+        ],
+        "passwordProtectionSettings": {
+          "passwordPolicyMinLength": 8,
+          "passwordPolicyCharacters": []
+        },
+        "mfaConfiguration": "OFF",
+        "mfaTypes": [
+          "SMS"
+        ],
+        "verificationMechanisms": [
+          "EMAIL"
+        ]
+      },
+      "providerMetadata": {
+        "s3TemplateURL": "https://s3.amazonaws.com/amplify-liquorbot-dev-fa4d9-deployment/amplify-cfn-templates/auth/liquorbotf668a8fa-cloudformation-template.json",
+        "logicalId": "authliquorbotf668a8fa"
+      },
+      "lastPushTimeStamp": "2025-03-25T01:17:56.513Z",
+      "output": {
+        "UserPoolId": "us-east-1_XoctjOdk0",
+        "AppClientIDWeb": "14udb621cmtpsdm1h3vlja7ti9",
+        "AppClientID": "4nv04g4rsbs1ri91on75t986ss",
+        "IdentityPoolId": "us-east-1:fdae1baf-d6a5-4c4f-8f81-1df83440077d",
+        "UserPoolArn": "arn:aws:cognito-idp:us-east-1:180294219536:userpool/us-east-1_XoctjOdk0",
+        "IdentityPoolName": "liquorbotf668a8fa_identitypool_f668a8fa__dev",
+        "UserPoolName": "liquorbotf668a8fa_userpool_f668a8fa"
+      },
+      "lastPushDirHash": "QJJe/enig5e+pTV5+5QJjJMq5wg="
+    }
+  }
+}
