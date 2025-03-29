@@ -17,6 +17,9 @@
       },
       "auth": {
         "liquorbotf668a8fa": {}
+      },
+      "storage": {
+        "profilePictureStorage": {}
       }
     }
   }

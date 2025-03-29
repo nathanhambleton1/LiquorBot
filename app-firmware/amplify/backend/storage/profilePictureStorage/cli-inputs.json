@@ -1,0 +1,14 @@
+{
+  "resourceName": "profilePictureStorage",
+  "policyUUID": "10f2f8d3",
+  "bucketName": "liquorbot-profile-pictures",
+  "storageAccess": "auth",
+  "guestAccess": [],
+  "authAccess": [
+    "CREATE_AND_UPDATE",
+    "READ",
+    "DELETE"
+  ],
+  "triggerFunction": "NONE",
+  "groupAccess": {}
+}
