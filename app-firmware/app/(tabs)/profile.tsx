@@ -9,66 +9,143 @@ import {
   Dimensions,
   PanResponder,
   Image,
-  TextInput,           // <-- IMPORTANT: import TextInput
+  TextInput,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
-import * as ImagePicker from 'expo-image-picker';
-import { getUrl, uploadData } from 'aws-amplify/storage';
 
+// Amplify (v6) import
+import {
+  fetchUserAttributes,
+  updateUserAttributes,
+  getCurrentUser
+} from 'aws-amplify/auth';
+import { getUrl, uploadData } from 'aws-amplify/storage';
+import * as ImagePicker from 'expo-image-picker';
+
+// ---------- TYPES ---------- //
+/**
+ * This is the shape of a single Cognito user attribute
+ * returned by `fetchUserAttributes()` in Amplify v6.
+ */
+interface CognitoUserAttribute {
+  Name: string;
+  Value: string;
+}
+
+/**
+ * The shape of our local user state. Note we allow `profilePicture`
+ * to be either string or null.
+ */
+interface UserState {
+  username: string;
+  email: string;
+  profilePicture: string | null; 
+}
+
+/**
+ * The shape of data passed to our popup (title + content).
+ */
+interface PopupData {
+  title: string;
+  content: string;
+}
+
+/**
+ * The Ionicon names we plan on using. (You can expand this if needed.)
+ * Alternatively, you can do: 
+ *   type IconName = keyof typeof Ionicons.glyphMap;
+ * and then use `IconName` below.
+ */
+type IconName =
+  | 'create-outline'
+  | 'heart-outline'
+  | 'time-outline'
+  | 'settings-outline'
+  | 'help-circle-outline'
+  | 'log-out-outline';
+
+/**
+ * The shape of each button object in `buttons`.
+ */
+interface ProfileButton {
+  title: string;
+  icon: IconName;   // or `keyof typeof Ionicons.glyphMap`
+  content: string;
+}
+
+// ---------- MAIN COMPONENT ---------- //
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function ProfileScreen() {
-  const [user, setUser] = useState<{
-    username: string;
-    email: string;
-    profilePicture: string | null;
-  }>({
+  const [user, setUser] = useState<UserState>({
     username: 'Loading...',
     email: 'Loading...',
     profilePicture: null,
   });
 
-  // New: Local states for user profile fields
+  // Local states for user profile fields
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [birthday, setBirthday] = useState('');
 
+  // For popups: store either null or an object
+  const [popupData, setPopupData] = useState<PopupData | null>(null);
   const [popupVisible, setPopupVisible] = useState(false);
-  const [popupData, setPopupData] = useState<{ title: string; content: string } | null>(null);
+
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
   useEffect(() => {
     const fetchUserData = async () => {
       try {
+        // 1) get user from Cognito
         const currentUser = await getCurrentUser();
-        const { username } = currentUser;
-        const { email } = await fetchUserAttributes();
+        if (!currentUser) return;
 
-        // Try to fetch existing profile pic from S3
-        let existingProfilePicture: string | null = null;
+        // username is a field on the Cognito user
+        const { username } = currentUser;
+
+        // 2) fetch user attributes from Cognito
+        // fetchUserAttributes() in Amplify v6 returns an array of { Name: string; Value: string }
+        const attributesObject: Partial<Record<string, string>> = await fetchUserAttributes();
+        const attributesArray: CognitoUserAttribute[] = Object.entries(attributesObject).map(([Name, Value]) => ({ Name, Value: Value ?? '' }));
+
+        // define helpers to find attribute by Name
+        const findAttr = (attrName: string) =>
+          attributesArray.find((attr) => attr.Name === attrName)?.Value ?? '';
+
+        // pull out the relevant attributes
+        const emailValue = findAttr('email');
+        const firstNameValue = findAttr('given_name');   // or 'name'
+        const lastNameValue = findAttr('family_name');   // or 'family_name'
+        const birthdayValue = findAttr('birthdate');     // or 'custom:birthday' if it's custom
+
+        // 3) set user info in state
+        setUser({
+          username: username || 'Guest',
+          email: emailValue || 'No email provided',
+          profilePicture: null,  // We'll fetch or assign below
+        });
+
+        setFirstName(firstNameValue);
+        setLastName(lastNameValue);
+        setBirthday(birthdayValue);
+
+        // 4) fetch profile pic from S3
         try {
           const { url } = await getUrl({
             path: `public/profilePictures/${username}.jpg`,
             options: { validateObjectExistence: false },
           });
-          existingProfilePicture = url.toString();
+          // If url is truthy, set user’s profilePicture
+          if (url) {
+            setUser((prevUser) => ({
+              ...prevUser,
+              profilePicture: url.toString(),
+            }));
+          }
         } catch (err) {
           console.log('No existing profile pic or error fetching it:', err);
         }
-
-        setUser({
-          username: username || 'Guest',
-          email: email || 'No email provided',
-          profilePicture: existingProfilePicture,
-        });
-
-        // OPTIONAL: If you already store firstName, lastName, birthdate in Cognito attributes,
-        // you could set them here by reading from "fetchUserAttributes()" results:
-        // setFirstName(...);
-        // setLastName(...);
-        // setBirthday(...);
-
       } catch (error) {
         console.error('Error fetching user data:', error);
         setUser({
@@ -78,10 +155,12 @@ export default function ProfileScreen() {
         });
       }
     };
+
     fetchUserData();
   }, []);
 
-  const buttons: { title: string; icon: keyof typeof Ionicons.glyphMap; content: string }[] = [
+  // The button data for the bottom list
+  const buttons: ProfileButton[] = [
     { title: 'Edit Profile', icon: 'create-outline', content: 'Edit your profile details below.' },
     { title: 'Liked Drinks', icon: 'heart-outline', content: 'View your liked drinks.' },
     { title: 'Pour History', icon: 'time-outline', content: 'View your pour history.' },
@@ -90,7 +169,8 @@ export default function ProfileScreen() {
     { title: 'Sign Out', icon: 'log-out-outline', content: 'Sign out of your account.' },
   ];
 
-  const openPopup = (data: { title: string; content: string }) => {
+  // Open the popup
+  const openPopup = (data: PopupData) => {
     setPopupData(data);
     setPopupVisible(true);
     slideAnim.setValue(SCREEN_WIDTH);
@@ -101,6 +181,7 @@ export default function ProfileScreen() {
     }).start();
   };
 
+  // Close the popup
   const closePopup = () => {
     Animated.timing(slideAnim, {
       toValue: SCREEN_WIDTH,
@@ -109,6 +190,7 @@ export default function ProfileScreen() {
     }).start(() => setPopupVisible(false));
   };
 
+  // PanResponder for swiping popup away
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (evt, gestureState) =>
@@ -130,80 +212,26 @@ export default function ProfileScreen() {
     })
   ).current;
 
-  // When "Save" is pressed in Edit Profile
+  // Save changes to Cognito
   const handleSaveProfile = async () => {
-    // If you want to store firstName/lastName/birthday in Cognito:
-    // import { Auth } from 'aws-amplify'
-    // let newAttributes = {
-    //   'given_name': firstName,
-    //   'family_name': lastName,
-    //   'birthdate': birthday,
-    // };
-    // await Auth.updateUserAttributes(await Auth.currentAuthenticatedUser(), newAttributes);
+    try {
+      // update these attributes in Cognito
+      await updateUserAttributes({
+        userAttributes: {
+          given_name: firstName,
+          family_name: lastName,
+          birthdate: birthday,
+        },
+      });
+      console.log('User attributes updated in Cognito.');
 
-    // For now, we'll just log them. Or you can store them in local state, etc.
-    console.log('Saving user profile: ', { firstName, lastName, birthday });
-
-    closePopup();
-  };
-
-  // Renders Edit Profile form or fallback text
-  const renderPopupContent = () => {
-    if (popupData?.title === 'Edit Profile') {
-      return (
-        <View style={styles.popupContent}>
-          <Text style={styles.popupText}>
-            {popupData.content}
-          </Text>
-
-          {/* ---- First Name ---- */}
-          <Text style={[styles.popupText, { marginTop: 20 }]}>First Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter first name"
-            placeholderTextColor="#666"
-            value={firstName}
-            onChangeText={setFirstName}
-          />
-
-          {/* ---- Last Name ---- */}
-          <Text style={[styles.popupText, { marginTop: 20 }]}>Last Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter last name"
-            placeholderTextColor="#666"
-            value={lastName}
-            onChangeText={setLastName}
-          />
-
-          {/* ---- Birthday ---- */}
-          <Text style={[styles.popupText, { marginTop: 20 }]}>Birthday</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor="#666"
-            value={birthday}
-            onChangeText={setBirthday}
-          />
-
-          {/* ---- Save and Cancel Buttons ---- */}
-          <View style={styles.saveCancelRow}>
-            <TouchableOpacity style={styles.saveButton} onPress={handleSaveProfile}>
-              <Text style={styles.saveButtonText}>Save</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.cancelButton} onPress={closePopup}>
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      );
+      closePopup();
+    } catch (error) {
+      console.log('Error updating user attributes:', error);
     }
-    // If it's not Edit Profile, just show the original content
-    return <Text style={styles.popupText}>{popupData?.content}</Text>;
   };
 
-  // Handle picking and uploading profile picture
+  // Handle picking & uploading a profile pic
   const handleProfilePictureUpload = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -219,13 +247,10 @@ export default function ProfileScreen() {
         const blob = await response.blob();
 
         const s3Path = `public/profilePictures/${user.username}.jpg`;
-
-        await uploadData({
-          path: s3Path,
-          data: blob,
-        });
+        await uploadData({ path: s3Path, data: blob });
 
         const { url } = await getUrl({ path: s3Path });
+        // Now set the new S3 url as user’s pic
         setUser((prevUser) => ({
           ...prevUser,
           profilePicture: url.toString(),
@@ -236,11 +261,70 @@ export default function ProfileScreen() {
     }
   };
 
+  // Render the content of the popup
+  const renderPopupContent = () => {
+    if (!popupData) return null; // Type-check safe
+
+    if (popupData.title === 'Edit Profile') {
+      return (
+        <View style={styles.popupContent}>
+          <Text style={styles.popupText}>
+            {popupData.content}
+          </Text>
+
+          {/* First Name */}
+          <Text style={[styles.popupText, { marginTop: 20 }]}>First Name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter first name"
+            placeholderTextColor="#666"
+            value={firstName}
+            onChangeText={setFirstName}
+          />
+
+          {/* Last Name */}
+          <Text style={[styles.popupText, { marginTop: 20 }]}>Last Name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter last name"
+            placeholderTextColor="#666"
+            value={lastName}
+            onChangeText={setLastName}
+          />
+
+          {/* Birthday */}
+          <Text style={[styles.popupText, { marginTop: 20 }]}>Birthday</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor="#666"
+            value={birthday}
+            onChangeText={setBirthday}
+          />
+
+          {/* Save / Cancel */}
+          <View style={styles.saveCancelRow}>
+            <TouchableOpacity style={styles.saveButton} onPress={handleSaveProfile}>
+              <Text style={styles.saveButtonText}>Save</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.cancelButton} onPress={closePopup}>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    // For non–“Edit Profile” popups
+    return <Text style={styles.popupText}>{popupData.content}</Text>;
+  };
+
   return (
     <View style={styles.container}>
-      {/* User Info Section */}
+
+      {/* Top user info */}
       <View style={styles.userInfoContainer}>
-        {/* Profile Picture */}
         <TouchableOpacity onPress={handleProfilePictureUpload}>
           <Image
             source={
@@ -255,16 +339,22 @@ export default function ProfileScreen() {
         <Text style={styles.emailText}>{user.email}</Text>
       </View>
 
+      {/* Scroll with buttons */}
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.buttonContainer}>
-          {buttons.map((button, index) => (
+          {buttons.map((button, idx) => (
             <TouchableOpacity
-              key={index}
+              key={idx}
               style={styles.button}
               onPress={() => openPopup({ title: button.title, content: button.content })}
             >
               <View style={styles.buttonRow}>
-                <Ionicons name={button.icon} size={24} color="#CE975E" style={styles.buttonIcon} />
+                <Ionicons
+                  name={button.icon}   // typed as IconName
+                  size={24}
+                  color="#CE975E"
+                  style={styles.buttonIcon}
+                />
                 <Text style={styles.buttonText}>{button.title}</Text>
               </View>
             </TouchableOpacity>
@@ -272,7 +362,8 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
-      {popupVisible && (
+      {/* Animated Popup */}
+      {popupVisible && popupData && (
         <Animated.View
           style={[styles.popup, { transform: [{ translateX: slideAnim }] }]}
           {...panResponder.panHandlers}
@@ -281,9 +372,10 @@ export default function ProfileScreen() {
             <TouchableOpacity onPress={closePopup}>
               <Ionicons name="arrow-back" size={24} color="#DFDCD9" />
             </TouchableOpacity>
-            <Text style={styles.popupTitle}>{popupData?.title}</Text>
+            <Text style={styles.popupTitle}>{popupData.title}</Text>
             <View style={{ width: 24 }} />
           </View>
+
           {renderPopupContent()}
         </Animated.View>
       )}
@@ -291,6 +383,7 @@ export default function ProfileScreen() {
   );
 }
 
+// ------------------ STYLES ------------------ //
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -382,7 +475,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
-  // Add a consistent style for the new text inputs:
   input: {
     width: '80%',
     borderWidth: 1,
