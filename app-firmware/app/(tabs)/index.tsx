@@ -2,7 +2,6 @@ import { Text, View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFonts } from 'expo-font';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import TopView from '../components/TopView';
 
 export default function Index() {
   const router = useRouter();
@@ -12,7 +11,6 @@ export default function Index() {
 
   return (
     <View style={styles.container}>
-      <TopView title="LiquorBot" />
       <View style={styles.contentContainer}>
         <Text style={styles.text}>
           Raise your glasses—our robot bartender is here to make your special day even more 

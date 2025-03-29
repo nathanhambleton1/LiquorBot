@@ -12,7 +12,7 @@ export default function TabLayout() {
           tabBarInactiveTintColor: '#4F4F4F', // Set the color of the unselected icons
           headerShown: false,
           tabBarStyle: {
-            backgroundColor: '#141414', // Set a solid background color
+            backgroundColor: '#000', // Set a solid background color
             borderTopWidth: 0, // Remove the white line
             borderTopLeftRadius: 20, // Rounded corners
             borderTopRightRadius: 20, // Rounded corners

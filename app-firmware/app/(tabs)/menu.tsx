@@ -11,10 +11,9 @@ import {
   Platform,
   UIManager,
   Animated,
+  TextInput, // Add this import
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import TopView from '../components/TopView';
 
 import { Amplify } from 'aws-amplify';
 import { PubSub } from '@aws-amplify/pubsub';
@@ -34,7 +33,6 @@ const pubsub = new PubSub({
   region: 'us-east-1',
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
-// --- END ADDED ---
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -134,7 +132,6 @@ function DrinkItem({
   // We'll track how many servings user wants
   const [quantity, setQuantity] = useState(1);
 
-  // For demonstration, subscription usage. Not strictly necessary if you just want to publish.
   const incrementQuantity = () => {
     setQuantity((prev) => (prev < 3 ? prev + 1 : prev));
   };
@@ -280,13 +277,12 @@ export default function MenuScreen() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [favorites, setFavorites] = useState<number[]>([]);
   const [expandedDrink, setExpandedDrink] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState(''); // State for the search query
   const scrollViewRef = useRef<ScrollView>(null);
   const [scrollViewHeight, setScrollViewHeight] = useState(0);
 
-  // --- ADDED FROM OLD CODE ---
   const [latestMessage, setLatestMessage] = useState('');
   useEffect(() => {
-    // On mount, log the Identity ID (just to confirm we’re authenticated).
     (async () => {
       try {
         const info = await fetchAuthSession();
@@ -296,7 +292,6 @@ export default function MenuScreen() {
       }
     })();
 
-    // Subscribe to messages from IoT
     const subscription = pubsub.subscribe({ topics: ['messages'] }).subscribe({
       next: (data) => {
         console.log('Received message from IoT:', data);
@@ -312,23 +307,18 @@ export default function MenuScreen() {
 
     return () => subscription.unsubscribe();
   }, []);
-  // --- END ADDED ---
 
   async function toggleFavorite(drinkId: number) {
-    // 1) Immediately update local UI
     setFavorites((prev) =>
       prev.includes(drinkId)
         ? prev.filter((favId) => favId !== drinkId)
         : [...prev, drinkId]
     );
-  
+
     try {
-      // 2) Get the current user’s sub (unique ID)
       const user = await (Auth as any).currentAuthenticatedUser();
-      const userSub = user.attributes.sub; // or user?.username if you prefer, but sub is more reliable
-  
-      // 3) Check if a Favorite already exists for this user & drink
-      // We'll treat the drinkId as a string in the DB to match the Favorite schema's `drinkID: ID!`
+      const userSub = user.attributes.sub;
+
       const existing = await (API as any).graphql(
         graphqlOperation(listFavorites, {
           filter: {
@@ -337,19 +327,16 @@ export default function MenuScreen() {
           },
         })
       );
-  
-      // 4) If exists, delete; otherwise create a new Favorite
+
       const items = existing?.data?.listFavorites?.items || [];
       if (items.length > 0) {
-        // There's already one -> delete it
-        const favoriteId = items[0].id; // the ID of the Favorite object
+        const favoriteId = items[0].id;
         await (API as any).graphql(
           graphqlOperation(deleteFavorite, {
             input: { id: favoriteId },
           })
         );
       } else {
-        // Need to create it
         await (API as any).graphql(
           graphqlOperation(createFavorite, {
             input: {
@@ -361,17 +348,17 @@ export default function MenuScreen() {
       }
     } catch (error) {
       console.error('Error toggling favorite:', error);
-      // OPTIONAL: if you want to roll back local state upon error:
-      // setFavorites(prev => prev.includes(drinkId) ? prev.filter(i => i !== drinkId) : [...prev, drinkId]);
     }
   }
 
-  const filteredDrinks =
-    selectedCategory === 'All'
-      ? drinks
-      : drinks.filter((drink) => drink.category === selectedCategory);
+  // Filter drinks based on category and search query
+  const filteredDrinks = drinks.filter((drink) => {
+    const matchesCategory =
+      selectedCategory === 'All' || drink.category === selectedCategory;
+    const matchesSearch = drink.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
-  // If the expanded drink is in an odd index, shift it to appear on the left column
   const renderedDrinks = [...filteredDrinks];
   if (expandedDrink != null) {
     const expandedIndex = renderedDrinks.findIndex((d) => d.id === expandedDrink);
@@ -389,7 +376,12 @@ export default function MenuScreen() {
 
   return (
     <View style={styles.container}>
-      <TopView title="Menu" noBorderRadius />
+      {/* Header Text */}
+      <View style={styles.headerContainer}>
+        <Text style={styles.headerText}>Drinks</Text>
+        <Text style={styles.subHeaderText}>LiquorBot #001</Text>
+      </View>
+
       {/* Horizontal category picker */}
       <View style={styles.horizontalPickerContainer}>
         <ScrollView
@@ -419,6 +411,19 @@ export default function MenuScreen() {
         </ScrollView>
       </View>
 
+      {/* Search Bar with Icon */}
+      <View style={styles.searchBarContainer}>
+        <Ionicons name="search" size={20} color="#4F4F4F" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchBar}
+          placeholder="Search"
+          placeholderTextColor="#4F4F4F"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+      </View>
+
+      {/* Drinks Grid */}
       <ScrollView
         ref={scrollViewRef}
         onLayout={() => setScrollViewHeight(500)}
@@ -440,7 +445,7 @@ export default function MenuScreen() {
         </View>
       </ScrollView>
 
-      {/* OPTIONAL: Show the latest IoT message at bottom */}
+      {/* Latest IoT Message */}
       {latestMessage ? (
         <View style={{ padding: 10, backgroundColor: '#333' }}>
           <Text style={{ color: '#fff' }}>Latest IoT Message: {latestMessage}</Text>
@@ -457,15 +462,33 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#141414',
   },
+  headerContainer: {
+    paddingTop: 80, // Padding from the top
+    paddingHorizontal: 20, // Padding on the sides
+    marginBottom: 10, // Space between the header and the filter buttons
+  },
+  headerText: {
+    color: '#DFDCD9', // Light color for the main header
+    fontSize: 36, // Larger font size for "Drinks"
+    fontFamily: 'AzoMonoTest',
+    textAlign: 'left',
+  },
+  subHeaderText: {
+    color: '#4F4F4F', // Darker color for the subheader
+    fontSize: 20, // Smaller font size for "Connected to LiquorBot"
+    fontFamily: 'AzoMonoTest',
+    textAlign: 'left',
+    marginTop: 5, // Space between the header and subheader
+  },
   horizontalPickerContainer: {
     alignItems: 'center',
-    backgroundColor: '#000',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
+    paddingVertical: 5, // Reduced padding for the filter buttons
+    marginBottom: -10, // Reduced space between the filter buttons and the search bar
   },
   horizontalPicker: {
     flexDirection: 'row',
-    marginTop: 10,
     alignItems: 'center',
   },
   categoryButton: {
@@ -487,6 +510,26 @@ const styles = StyleSheet.create({
   },
   categoryButtonText: {
     color: '#4F4F4F',
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1F1F1F',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    marginHorizontal: 20,
+    marginVertical: 10, // Existing vertical margin
+    marginBottom: 10, // Added extra padding under the search bar
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchBar: {
+    flex: 1,
+    color: '#DFDCD9',
+    fontSize: 16,
+    fontFamily: 'AzoMonoTest',
+    paddingVertical: 10,
   },
   scrollContainer: {
     flexGrow: 1,
