@@ -261,6 +261,25 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleBirthdayInput = (text: string) => {
+    // Remove any non-numeric characters
+    let formattedText = text.replace(/[^0-9]/g, '');
+
+    // Automatically add slashes as the user types
+    if (formattedText.length > 2 && formattedText.length <= 4) {
+      formattedText = `${formattedText.slice(0, 2)}/${formattedText.slice(2)}`;
+    } else if (formattedText.length > 4) {
+      formattedText = `${formattedText.slice(0, 2)}/${formattedText.slice(2, 4)}/${formattedText.slice(4, 8)}`;
+    }
+
+    // Limit the input to MM/DD/YYYY format
+    if (formattedText.length > 10) {
+      formattedText = formattedText.slice(0, 10);
+    }
+
+    setBirthday(formattedText);
+  };
+
   // Render the content of the popup
   const renderPopupContent = () => {
     if (!popupData) return null; // Type-check safe
@@ -268,46 +287,51 @@ export default function ProfileScreen() {
     if (popupData.title === 'Edit Profile') {
       return (
         <View style={styles.popupContent}>
-          <Text style={styles.popupText}>
-            {popupData.content}
-          </Text>
+          {/* Removed the "Edit your profile details below." text */}
 
           {/* First Name */}
-          <Text style={[styles.popupText, { marginTop: 20 }]}>First Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter first name"
-            placeholderTextColor="#666"
-            value={firstName}
-            onChangeText={setFirstName}
-          />
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>First Name</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter first name"
+              placeholderTextColor="#666"
+              value={firstName}
+              onChangeText={setFirstName}
+            />
+          </View>
 
           {/* Last Name */}
-          <Text style={[styles.popupText, { marginTop: 20 }]}>Last Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter last name"
-            placeholderTextColor="#666"
-            value={lastName}
-            onChangeText={setLastName}
-          />
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Last Name</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter last name"
+              placeholderTextColor="#666"
+              value={lastName}
+              onChangeText={setLastName}
+            />
+          </View>
 
           {/* Birthday */}
-          <Text style={[styles.popupText, { marginTop: 20 }]}>Birthday</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor="#666"
-            value={birthday}
-            onChangeText={setBirthday}
-          />
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Birthday</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="MM/DD/YYYY"
+              placeholderTextColor="#666"
+              value={birthday}
+              onChangeText={(text) => handleBirthdayInput(text)}
+              keyboardType="numeric"
+              maxLength={10}
+            />
+          </View>
 
-          {/* Save / Cancel */}
+          {/* Save / Cancel Buttons */}
           <View style={styles.saveCancelRow}>
             <TouchableOpacity style={styles.saveButton} onPress={handleSaveProfile}>
-              <Text style={styles.saveButtonText}>Save</Text>
+              <Text style={styles.buttonText}>Save</Text>
             </TouchableOpacity>
-
             <TouchableOpacity style={styles.cancelButton} onPress={closePopup}>
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
@@ -476,40 +500,49 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   input: {
-    width: '80%',
-    borderWidth: 1,
-    borderColor: '#CE975E',
-    borderRadius: 8,
-    padding: 10,
+    backgroundColor: '#1F1F1F',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 15,
     color: '#DFDCD9',
     fontSize: 16,
-    marginTop: 5,
+    fontFamily: 'AzoMonoTest',
   },
   saveCancelRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 40, // Increased spacing between buttons
     marginTop: 30,
   },
   saveButton: {
     backgroundColor: '#CE975E',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    marginRight: 10,
-  },
-  saveButtonText: {
-    color: '#141414',
-    fontSize: 16,
-    fontWeight: '600',
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    borderRadius: 10,
+    marginHorizontal: 10, // Adds spacing between buttons
   },
   cancelButton: {
     backgroundColor: '#444',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    borderRadius: 10,
+    marginHorizontal: 10, // Adds spacing between buttons
   },
   cancelButtonText: {
     color: '#DFDCD9',
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: 'AzoMonoTest',
+  },
+  inputContainer: {
+    width: '100%',
+    marginBottom: 20,
+    paddingHorizontal: 20,
+  },
+  inputLabel: {
+    color: '#DFDCD9',
+    fontSize: 16,
+    marginBottom: 5,
+    fontFamily: 'AzoMonoTest',
   },
 });
