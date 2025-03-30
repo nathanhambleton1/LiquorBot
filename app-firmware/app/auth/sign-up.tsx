@@ -1,3 +1,4 @@
+// app/auth/sign-up.tsx
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -6,43 +7,72 @@ import { signUp, confirmSignUp } from 'aws-amplify/auth';
 export default function SignUp() {
   const router = useRouter();
 
-  // We’ll alternate between "REGISTER" (collect user details) and
-  // "CONFIRM" (collect the confirmation code).
+  // We’ll alternate between "REGISTER" and "CONFIRM"
   const [step, setStep] = useState<'REGISTER' | 'CONFIRM'>('REGISTER');
 
-  // Form fields for sign-up
+  // Sign-up fields
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [email, setEmail] = useState(''); // Removed phoneNumber state
+  const [email, setEmail] = useState('');
+  const [birthday, setBirthday] = useState(''); // NEW: store "MM/DD/YYYY" format
 
-  // Form field for confirmation step
+  // Confirmation code
   const [confirmationCode, setConfirmationCode] = useState('');
 
-  // For displaying messages
+  // Feedback messages
   const [errorMessage, setErrorMessage] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
 
-  // 1) Handle initial sign-up
+  // -- (A) Helper to format user input as MM/DD/YYYY --
+  const handleBirthdayInput = (text: string) => {
+    // Only digits
+    let formattedText = text.replace(/[^0-9]/g, '');
+
+    // Insert slashes
+    if (formattedText.length > 2 && formattedText.length <= 4) {
+      formattedText = `${formattedText.slice(0, 2)}/${formattedText.slice(2)}`;
+    } else if (formattedText.length > 4) {
+      formattedText = `${formattedText.slice(0, 2)}/${formattedText.slice(2, 4)}/${formattedText.slice(4, 8)}`;
+    }
+
+    // Limit length to 10 total chars (MM/DD/YYYY)
+    if (formattedText.length > 10) {
+      formattedText = formattedText.slice(0, 10);
+    }
+    setBirthday(formattedText);
+  };
+
+  // -- (B) Convert "MM/DD/YYYY" => "YYYY-MM-DD" for Cognito
+  const convertToISODate = (mdy: string) => {
+    if (mdy.length !== 10) return ''; // If user hasn't fully typed it
+    const [mm, dd, yyyy] = mdy.split('/');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  // -- (C) Register new user
   const onSignUpPress = async () => {
     try {
       setErrorMessage('');
       setInfoMessage('');
+
+      // Convert birthday to "YYYY-MM-DD"
+      const isoBirthday = convertToISODate(birthday);
+
       const { isSignUpComplete, nextStep } = await signUp({
         username,
         password,
         options: {
           userAttributes: {
             email,
+            birthdate: isoBirthday, // pass to Cognito
           },
         },
       });
 
       if (!isSignUpComplete && nextStep?.signUpStep === 'CONFIRM_SIGN_UP') {
-        // We now need to confirm sign-up with a code
         setInfoMessage('A confirmation code has been sent to your email.');
         setStep('CONFIRM');
       } else {
-        // If nextStep says 'DONE', sign-up might be complete
         setInfoMessage('Sign-up complete! You can sign in now.');
       }
     } catch (err: any) {
@@ -50,7 +80,7 @@ export default function SignUp() {
     }
   };
 
-  // 2) Handle confirmation of sign-up
+  // -- (D) Confirm sign-up with code
   const onConfirmSignUpPress = async () => {
     try {
       setErrorMessage('');
@@ -60,7 +90,6 @@ export default function SignUp() {
         confirmationCode,
       });
       setInfoMessage('Your account has been confirmed! Please sign in.');
-      // Optionally, navigate directly to sign-in
       setTimeout(() => router.replace('/auth/sign-in'), 1500);
     } catch (err: any) {
       setErrorMessage(err?.message || 'Something went wrong confirming sign-up');
@@ -99,6 +128,18 @@ export default function SignUp() {
             style={styles.input}
             keyboardType="email-address"
             autoCapitalize="none"
+          />
+
+          {/* Birthday Field (MM/DD/YYYY) */}
+          <Text style={styles.label}>Birthday</Text>
+          <TextInput
+            value={birthday}
+            onChangeText={handleBirthdayInput}
+            style={styles.input}
+            keyboardType="numeric"
+            placeholder="MM/DD/YYYY"
+            placeholderTextColor="#666"
+            maxLength={10}
           />
 
           {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
@@ -143,7 +184,7 @@ export default function SignUp() {
   );
 }
 
-// Example styling
+// ---------------- Styles ----------------
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -182,10 +223,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
   },
-  backButton: {
-    marginTop: 10,
-    backgroundColor: 'gray',
-  },
   buttonText: {
     color: '#DFDCD9',
     fontSize: 18,
@@ -199,29 +236,16 @@ const styles = StyleSheet.create({
     color: '#CE975E',
     marginTop: 8,
   },
-  signUpButton: {
-    backgroundColor: '#CE975E', // Gold color for the button
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8, // Rounded corners
-    alignItems: 'center',
-    marginTop: 20, // Adds spacing above the button
-  },
-  signUpButtonText: {
-    color: '#141414', // Dark text color for contrast
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
   signUpContainer: {
-    marginTop: 100, // Adds spacing above the section
-    alignItems: 'center', // Centers the content horizontally
+    marginTop: 60,
+    alignItems: 'center',
   },
   signUpText: {
-    fontSize: 14, // Font size for the text
-    color: '#fff', // White text color for "Back to"
+    fontSize: 14,
+    color: '#fff',
   },
   signUpLink: {
-    color: '#CE975E', // Gold color for "Sign In"
-    fontWeight: 'bold', // Makes "Sign In" bold
+    color: '#CE975E',
+    fontWeight: 'bold',
   },
 });
