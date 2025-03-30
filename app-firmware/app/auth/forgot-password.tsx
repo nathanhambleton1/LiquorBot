@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { resetPassword, confirmResetPassword } from 'aws-amplify/auth';
 
 export default function ForgotPassword() {
@@ -15,7 +16,7 @@ export default function ForgotPassword() {
   const [infoMessage, setInfoMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  // 1) Request password reset, which will trigger an email/SMS with the code
+  // 1) Request password reset
   const onRequestResetPress = async () => {
     try {
       setErrorMessage('');
@@ -28,8 +29,6 @@ export default function ForgotPassword() {
           setStep('CONFIRM');
           break;
         case 'DONE':
-          // In some cases, Amplify may complete the process immediately,
-          // but typically you'll get CONFIRM_RESET_PASSWORD_WITH_CODE.
           setInfoMessage(`Password reset process is already done. Try signing in.`);
           break;
       }
@@ -38,7 +37,7 @@ export default function ForgotPassword() {
     }
   };
 
-  // 2) Confirm password reset using the code and new password
+  // 2) Confirm password reset
   const onConfirmResetPress = async () => {
     try {
       setErrorMessage('');
@@ -49,7 +48,6 @@ export default function ForgotPassword() {
         newPassword,
       });
       setInfoMessage('Password successfully reset! Please sign in with your new password.');
-      // Optionally navigate back to sign-in after a short delay
       setTimeout(() => {
         router.push('/auth/sign-in');
       }, 1500);
@@ -60,6 +58,11 @@ export default function ForgotPassword() {
 
   return (
     <View style={styles.container}>
+      {/* Back Arrow */}
+      <TouchableOpacity style={styles.backArrow} onPress={() => router.replace('/auth/sign-in')}>
+        <Ionicons name="chevron-back-outline" size={28} color="#fff" />
+      </TouchableOpacity>
+
       <Text style={styles.title}>Forgot Password</Text>
 
       {step === 'REQUEST' && (
@@ -76,7 +79,7 @@ export default function ForgotPassword() {
           {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
           {!!infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
 
-          {/* Submit Button for Requesting Reset */}
+          {/* Submit Button */}
           <TouchableOpacity style={styles.button} onPress={onRequestResetPress}>
             <Text style={styles.buttonText}>Send Reset Code</Text>
           </TouchableOpacity>
@@ -123,11 +126,23 @@ const styles = StyleSheet.create({
     padding: 24,
     justifyContent: 'center',
   },
+  backArrow: {
+    position: 'absolute',
+    top: 24,
+    left: 16,
+    zIndex: 10,
+  },
+  backArrowText: {
+    fontSize: 24,
+    color: '#CE975E', // Gold color for the back arrow
+    fontWeight: 'bold',
+  },
   title: {
     fontSize: 36,
     color: '#fff',
     marginBottom: 24,
     fontWeight: 'bold',
+    textAlign: 'center',
   },
   label: {
     fontSize: 16,
@@ -150,7 +165,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 20,
   },
   buttonText: {
     color: '#DFDCD9',
@@ -163,6 +178,6 @@ const styles = StyleSheet.create({
   },
   info: {
     color: '#CE975E',
-    marginBottom: 8,
+    marginBottom: 10,
   },
 });

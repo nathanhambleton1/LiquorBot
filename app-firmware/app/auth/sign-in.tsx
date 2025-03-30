@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { signIn } from 'aws-amplify/auth';
+import { signIn, signOut } from 'aws-amplify/auth'; // Import signOut
 
 export default function SignIn() {
   const router = useRouter();
@@ -14,8 +14,12 @@ export default function SignIn() {
   const onSignInPress = async () => {
     setError(''); // Reset error
     try {
+      // Sign out any existing user session
+      await signOut();
+
       // Use username and password for sign-in
       await signIn({ username, password });
+
       // Redirect to main tabs (or profile, etc.)
       router.replace('/(tabs)');
     } catch (e: any) {
