@@ -11,7 +11,7 @@ import {
   Platform,
   UIManager,
   Animated,
-  TextInput, // Add this import
+  TextInput,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -19,16 +19,14 @@ import { Amplify } from 'aws-amplify';
 import { PubSub } from '@aws-amplify/pubsub';
 import config from '../../src/amplifyconfiguration.json';
 import { fetchAuthSession } from 'aws-amplify/auth';
-import API from '@aws-amplify/api';                  // For API.graphql(...)
+import API from '@aws-amplify/api';
 import Auth from '@aws-amplify/auth';
-import { graphqlOperation } from '@aws-amplify/api-graphql'; // For graphqlOperation(...)
+import { graphqlOperation } from '@aws-amplify/api-graphql';
 import { createFavorite, deleteFavorite } from '../../src/graphql/mutations';
 import { listFavorites } from '../../src/graphql/queries';
 
-// If you haven’t set up Amplify elsewhere, do it here:
 Amplify.configure(config);
 
-// Create a PubSub instance for AWS IoT – old code style or pass creds via AWS exports
 const pubsub = new PubSub({
   region: 'us-east-1',
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
@@ -44,7 +42,7 @@ type Drink = {
   name: string;
   category: string;
   description: string;
-  image: any; // or ImageSourcePropType
+  image: any;
 };
 
 interface DrinkItemProps {
@@ -128,8 +126,6 @@ function DrinkItem({
   onExpandedLayout,
 }: DrinkItemProps) {
   const [animValue] = useState(new Animated.Value(isExpanded ? 1 : 0));
-
-  // We'll track how many servings user wants
   const [quantity, setQuantity] = useState(1);
 
   const incrementQuantity = () => {
@@ -139,7 +135,6 @@ function DrinkItem({
     setQuantity((prev) => (prev > 1 ? prev - 1 : prev));
   };
 
-  // 1) Animate expand/collapse
   useEffect(() => {
     Animated.timing(animValue, {
       toValue: isExpanded ? 1 : 0,
@@ -148,10 +143,9 @@ function DrinkItem({
     }).start();
   }, [isExpanded]);
 
-  // 2) Publish to IoT when user hits “Pour Drink”
   async function handlePourDrink() {
     try {
-      const randomCode = Math.floor(1000 + Math.random() * 9000); // some random 4-digit
+      const randomCode = Math.floor(1000 + Math.random() * 9000);
       await pubsub.publish({
         topics: ['liquorbot/publish'],
         message: { code: randomCode, drinkName: drink.name, quantity },
@@ -181,7 +175,6 @@ function DrinkItem({
           },
         ]}
       >
-        {/* Close Button */}
         <TouchableOpacity
           onPress={() => {
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -192,7 +185,6 @@ function DrinkItem({
           <Ionicons name="close" size={24} color="#DFDCD9" />
         </TouchableOpacity>
 
-        {/* Favorite Button */}
         <TouchableOpacity
           onPress={(e) => {
             e.stopPropagation();
@@ -207,7 +199,6 @@ function DrinkItem({
           />
         </TouchableOpacity>
 
-        {/* Drink Information and Image */}
         <View style={styles.expandedContent}>
           <View style={styles.expandedTitleContainer}>
             <Text style={styles.expandedboxText}>{drink.name}</Text>
@@ -220,7 +211,6 @@ function DrinkItem({
           <Text style={styles.expandeddescriptionText}>{drink.description}</Text>
         </View>
 
-        {/* Quantity */}
         <View style={styles.quantityContainer}>
           <TouchableOpacity onPress={decrementQuantity} style={styles.quantityButton}>
             <Text style={styles.quantityButtonText}>-</Text>
@@ -231,14 +221,12 @@ function DrinkItem({
           </TouchableOpacity>
         </View>
 
-        {/* Pour Drink Button */}
         <TouchableOpacity style={styles.button} onPress={handlePourDrink}>
           <Text style={styles.buttonText}>Pour Drink</Text>
         </TouchableOpacity>
       </Animated.View>
     );
   } else {
-    // Collapsed card
     return (
       <TouchableOpacity
         key={drink.id}
@@ -249,7 +237,6 @@ function DrinkItem({
         activeOpacity={0.9}
         style={styles.box}
       >
-        {/* Favorite Button */}
         <TouchableOpacity
           onPress={(e) => {
             e.stopPropagation();
@@ -263,9 +250,7 @@ function DrinkItem({
             color={favorites.includes(drink.id) ? '#CE975E' : '#4F4F4F'}
           />
         </TouchableOpacity>
-        {/* Drink Image */}
         <Image source={drink.image} style={styles.image} />
-        {/* Drink Info */}
         <Text style={styles.boxText}>{drink.name}</Text>
         <Text style={styles.categoryText}>{drink.category}</Text>
       </TouchableOpacity>
@@ -277,11 +262,31 @@ export default function MenuScreen() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [favorites, setFavorites] = useState<number[]>([]);
   const [expandedDrink, setExpandedDrink] = useState<number | null>(null);
-  const [searchQuery, setSearchQuery] = useState(''); // State for the search query
+  const [searchQuery, setSearchQuery] = useState('');
   const scrollViewRef = useRef<ScrollView>(null);
   const [scrollViewHeight, setScrollViewHeight] = useState(0);
-
   const [latestMessage, setLatestMessage] = useState('');
+
+  // Create the animated value for the green dot
+  const glowAnimation = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnimation, {
+          toValue: 1.2,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnimation, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [glowAnimation]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -353,8 +358,7 @@ export default function MenuScreen() {
 
   // Filter drinks based on category and search query
   const filteredDrinks = drinks.filter((drink) => {
-    const matchesCategory =
-      selectedCategory === 'All' || drink.category === selectedCategory;
+    const matchesCategory = selectedCategory === 'All' || drink.category === selectedCategory;
     const matchesSearch = drink.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
@@ -376,10 +380,32 @@ export default function MenuScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header Text */}
+      {/* Header with Drinks title and LiquorBot connection info */}
       <View style={styles.headerContainer}>
         <Text style={styles.headerText}>Drinks</Text>
-        <Text style={styles.subHeaderText}>LiquorBot #001</Text>
+        <View style={styles.connectionRow}>
+          <Animated.View
+            style={[
+              styles.greenDot,
+              {
+                transform: [{ scale: glowAnimation }],
+                shadowOpacity: glowAnimation.interpolate({
+                  inputRange: [1, 1.2],
+                  outputRange: [0.3, 0.8],
+                }),
+              },
+            ]}
+          />
+          <Text style={styles.subHeaderText}>LiquorBot #001</Text>
+        </View>
+
+        {/* Edit Icon in the top-right corner */}
+        <TouchableOpacity
+          style={styles.editIconContainer}
+          onPress={() => console.log('Edit icon pressed')}
+        >
+          <Ionicons name="create-outline" size={30} color="#CE975E" />
+        </TouchableOpacity>
       </View>
 
       {/* Horizontal category picker */}
@@ -463,29 +489,46 @@ const styles = StyleSheet.create({
     backgroundColor: '#141414',
   },
   headerContainer: {
-    paddingTop: 80, // Padding from the top
-    paddingHorizontal: 20, // Padding on the sides
-    marginBottom: 10, // Space between the header and the filter buttons
+    paddingTop: 80,
+    paddingHorizontal: 20,
+    marginBottom: 10,
   },
   headerText: {
-    color: '#DFDCD9', // Light color for the main header
-    fontSize: 36, // Larger font size for "Drinks"
-    fontFamily: 'AzoMonoTest',
+    color: '#DFDCD9',
+    fontWeight: 'bold',
+    fontSize: 36,
     textAlign: 'left',
   },
   subHeaderText: {
-    color: '#4F4F4F', // Darker color for the subheader
-    fontSize: 20, // Smaller font size for "Connected to LiquorBot"
+    color: '#4F4F4F',
+    fontSize: 20,
     fontFamily: 'AzoMonoTest',
     textAlign: 'left',
-    marginTop: 5, // Space between the header and subheader
+    marginTop: 0,
+  },
+  connectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  greenDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 5,
+    backgroundColor: '#63d44a',
+    marginRight: 8,
+    shadowColor: '#00FF00',
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 5,
+    shadowOpacity: 0.6,
+    elevation: 5,
   },
   horizontalPickerContainer: {
     alignItems: 'center',
     borderBottomLeftRadius: 10,
     borderBottomRightRadius: 10,
-    paddingVertical: 5, // Reduced padding for the filter buttons
-    marginBottom: -10, // Reduced space between the filter buttons and the search bar
+    paddingVertical: 5,
+    marginBottom: -10,
   },
   horizontalPicker: {
     flexDirection: 'row',
@@ -518,8 +561,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 15,
     marginHorizontal: 20,
-    marginVertical: 10, // Existing vertical margin
-    marginBottom: 10, // Added extra padding under the search bar
+    marginVertical: 10,
+    marginBottom: 10,
   },
   searchIcon: {
     marginRight: 10,
@@ -686,4 +729,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'AzoMonoTest',
   },
+  editIconContainer: {
+    position: 'absolute',
+    top: 100,
+    right: 30,
+  },
 });
+
+export { MenuScreen };

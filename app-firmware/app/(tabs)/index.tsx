@@ -1,59 +1,86 @@
-import { Text, View, StyleSheet, TouchableOpacity, ImageBackground } from 'react-native';
+import React, { useRef, useEffect, useState } from 'react';
+import { StyleSheet, ImageBackground, Text, View, Animated, TouchableOpacity, Modal, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useFonts } from 'expo-font';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '@expo/vector-icons/Ionicons'; // Import Ionicons for the arrow
 
 export default function Index() {
   const router = useRouter();
-  useFonts({
-    AzoMonoTest: require('@/assets/fonts/AzoSansTest-Regular.otf'), // Adjust path if needed
-  });
+  const glowAnimation = useRef(new Animated.Value(1)).current;
+  const [modalVisible, setModalVisible] = useState(false); // State for modal visibility
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnimation, {
+          toValue: 1.2, // Scale up slightly
+          duration: 800, // Faster glow effect
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnimation, {
+          toValue: 1, // Scale back down
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [glowAnimation]);
 
   return (
     <ImageBackground
-      source={require('@/assets/images/home-background.jpg')} // Add a background image
+      source={require('@/assets/images/home-background.jpg')} // Add your background image
       style={styles.background}
       resizeMode="cover"
     >
-      <View style={styles.overlay} />
-      <View style={styles.container}>
-        {/* Welcome Section */}
-        <Text style={styles.welcomeTitle}>Welcome to LiquorBot</Text>
-
-        {/* Hero Section */}
-        <Text style={styles.title}>Raise Your Glasses</Text>
-        <Text style={styles.tagline}>
-          Your personal robot bartender is here to make every moment unforgettable.
-        </Text>
-
-        {/* How It Works Section */}
-        <View style={styles.howItWorksContainer}>
-          <Text style={styles.subheading}>How It Works</Text>
-          <View style={styles.step}>
-            <Ionicons name="wine-outline" size={24} color="#CE975E" style={styles.stepIcon} />
-            <Text style={styles.stepText}>Choose Your Drink: Browse our curated menu or create your signature cocktail.</Text>
-          </View>
-          <View style={styles.step}>
-            <Ionicons name="qr-code-outline" size={24} color="#CE975E" style={styles.stepIcon} />
-            <Text style={styles.stepText}>Place Your Order: Tap the screen or scan your personalized QR code.</Text>
-          </View>
-          <View style={styles.step}>
-            <Ionicons name="sparkles-outline" size={24} color="#CE975E" style={styles.stepIcon} />
-            <Text style={styles.stepText}>Watch the Magic: Your drink is poured to perfection, ready to toast to love!</Text>
-          </View>
-        </View>
-
-        {/* Call-to-Action Button */}
-        <TouchableOpacity style={styles.button} onPress={() => router.push('/menu')}>
-          <Text style={styles.buttonText}>Explore Drinks</Text>
-          <Ionicons
-            name="chevron-forward-circle"
-            size={36}
-            color="#CE975E"
-            style={styles.buttonIcon}
-          />
+      {/* WiFi Icon in the top-right corner */}
+      <View style={styles.wifiIconContainer}>
+        <TouchableOpacity onPress={() => setModalVisible(true)}>
+          <Ionicons name="hardware-chip" size={30} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
+
+      {/* Modal for device information */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Device Information</Text>
+            <Text style={styles.modalText}>Connected to LiquorBot #001</Text>
+            <Text style={styles.modalText}>Status: Online</Text>
+            <Pressable style={styles.closeButton} onPress={() => setModalVisible(false)}>
+              <Text style={styles.closeButtonText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <View style={styles.overlay}>
+        <Text style={styles.title}>LiquorBot</Text>
+        <View style={styles.connectionRow}>
+          <Animated.View
+            style={[
+              styles.greenDot,
+              {
+                transform: [{ scale: glowAnimation }], // Apply the animation
+                shadowOpacity: glowAnimation.interpolate({
+                  inputRange: [1, 1.2],
+                  outputRange: [0.3, 0.8], // Glow intensity
+                }),
+              },
+            ]}
+          />
+          <Text style={styles.connectionText}>Connected to LiquorBot #001</Text>
+        </View>
+      </View>
+
+      {/* Button to navigate to the Menu page */}
+      <TouchableOpacity style={styles.menuButton} onPress={() => router.push('/menu')}>
+        <Text style={styles.menuButtonText}>Explore Drinks</Text>
+        <Ionicons name="chevron-forward" size={20} color="#141414" style={styles.arrowIcon} />
+      </TouchableOpacity>
     </ImageBackground>
   );
 }
@@ -65,84 +92,97 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(20, 20, 20, 0.7)', // Dark overlay for better text visibility
-  },
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  welcomeTitle: {
-    color: '#DFDCD9',
-    fontSize: 28,
-    fontFamily: 'AzoMonoTest',
-    textAlign: 'center',
-    marginBottom: 20,
+    position: 'absolute',
+    top: 100, // Lower the text
+    alignItems: 'flex-start', // Align text to the left
+    width: '100%',
+    paddingLeft: 20, // Add some padding from the left edge
   },
   title: {
-    color: '#CE975E',
-    fontSize: 32,
-    fontFamily: 'AzoMonoTest',
-    textAlign: 'center',
+    fontSize: 48, // Large font size
+    color: '#DFDCD9', // White text color
+    fontWeight: 'bold', // Bold text
+    textAlign: 'left', // Align text to the left
+  },
+  connectionRow: {
+    flexDirection: 'row', // Arrange the dot and text in a row
+    alignItems: 'center', // Align items vertically
+    marginTop: 10, // Add some spacing below the title
+  },
+  greenDot: {
+    width: 8, // Size of the green dot
+    height: 8,
+    borderRadius: 5, // Make it circular
+    backgroundColor: '#63d44a', // Green color
+    marginRight: 8, // Add spacing between the dot and the text
+    shadowColor: '#00FF00', // Green glow color
+    shadowOffset: { width: 0, height: 0 }, // Center the shadow
+    shadowRadius: 5, // Larger radius for a soft glow
+    shadowOpacity: 0.6, // Glow intensity
+    elevation: 5, // Add elevation for Android shadow support
+  },
+  connectionText: {
+    fontSize: 18, // Smaller font size
+    color: '#4F4F4F', // Darker text color
+  },
+  menuButton: {
+    position: 'absolute',
+    bottom: 90, // Position the button at the bottom
+    alignSelf: 'center', // Center the button horizontally
+    backgroundColor: '#CE975E', // Light background color
+    paddingVertical: 16,
+    paddingHorizontal: 26,
+    borderRadius: 10, // Rounded corners
+    flexDirection: 'row', // Arrange text and arrow in a row
+    alignItems: 'center', // Align items vertically
+  },
+  menuButtonText: {
+    color: '#141414', // Dark text color
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginRight: 8, // Add spacing between the text and the arrow
+  },
+  arrowIcon: {
+    marginLeft: 5, // Add spacing between the arrow and the text
+  },
+  wifiIconContainer: {
+    position: 'absolute',
+    top: 115, // Adjust the top position
+    right: 50, // Adjust the right position
+    zIndex: 10, // Ensure it appears above other elements
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent background
+  },
+  modalContent: {
+    width: '80%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 20,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
     marginBottom: 10,
   },
-  tagline: {
-    color: '#DFDCD9',
-    fontSize: 18,
-    fontFamily: 'AzoMonoTest',
-    textAlign: 'center',
-    marginBottom: 30,
-  },
-  howItWorksContainer: {
-    width: '100%',
-    marginBottom: 40,
-  },
-  subheading: {
-    color: '#CE975E',
-    fontSize: 22,
-    fontFamily: 'AzoMonoTest',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  step: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 15,
-  },
-  stepIcon: {
-    marginRight: 10,
-    marginTop: 3,
-  },
-  stepText: {
-    color: '#DFDCD9',
+  modalText: {
     fontSize: 16,
-    fontFamily: 'AzoMonoTest',
-    flex: 1,
+    marginBottom: 10,
+    textAlign: 'center',
   },
-  button: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#4f4f4f',
-    paddingVertical: 15,
-    paddingHorizontal: 35,
-    borderRadius: 30,
-    width: '80%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+  closeButton: {
+    marginTop: 10,
+    backgroundColor: '#CE975E',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
   },
-  buttonText: {
-    color: '#DFDCD9',
-    fontSize: 18,
-    fontFamily: 'AzoMonoTest',
-    marginRight: 10,
-  },
-  buttonIcon: {
-    marginLeft: 10,
+  closeButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });
