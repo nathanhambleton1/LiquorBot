@@ -13,49 +13,31 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-// Amplify (v6) import
-import {
-  fetchUserAttributes,
-  updateUserAttributes,
-  getCurrentUser
-} from 'aws-amplify/auth';
+// Amplify (v6) imports
+import { fetchUserAttributes, updateUserAttributes, getCurrentUser } from 'aws-amplify/auth';
 import { getUrl, uploadData } from 'aws-amplify/storage';
 import * as ImagePicker from 'expo-image-picker';
 
-// ---------- TYPES ---------- //
-/**
- * This is the shape of a single Cognito user attribute
- * returned by `fetchUserAttributes()` in Amplify v6.
- */
+// 1) Import the Amplify UI hook for sign-out
+import { useAuthenticator } from '@aws-amplify/ui-react-native';
+
+// ---------- TYPES ----------
 interface CognitoUserAttribute {
   Name: string;
   Value: string;
 }
 
-/**
- * The shape of our local user state. Note we allow `profilePicture`
- * to be either string or null.
- */
 interface UserState {
   username: string;
   email: string;
-  profilePicture: string | null; 
+  profilePicture: string | null;
 }
 
-/**
- * The shape of data passed to our popup (title + content).
- */
 interface PopupData {
   title: string;
   content: string;
 }
 
-/**
- * The Ionicon names we plan on using. (You can expand this if needed.)
- * Alternatively, you can do: 
- *   type IconName = keyof typeof Ionicons.glyphMap;
- * and then use `IconName` below.
- */
 type IconName =
   | 'create-outline'
   | 'heart-outline'
@@ -64,16 +46,13 @@ type IconName =
   | 'help-circle-outline'
   | 'log-out-outline';
 
-/**
- * The shape of each button object in `buttons`.
- */
 interface ProfileButton {
   title: string;
-  icon: IconName;   // or `keyof typeof Ionicons.glyphMap`
+  icon: IconName;
   content: string;
 }
 
-// ---------- MAIN COMPONENT ---------- //
+// ---------- MAIN COMPONENT ----------
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function ProfileScreen() {
@@ -88,11 +67,14 @@ export default function ProfileScreen() {
   const [lastName, setLastName] = useState('');
   const [birthday, setBirthday] = useState('');
 
-  // For popups: store either null or an object
+  // Popup states
   const [popupData, setPopupData] = useState<PopupData | null>(null);
   const [popupVisible, setPopupVisible] = useState(false);
-
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
+
+  // 2) Get the signOut function from useAuthenticator
+  const userSelector = (context: any) => [context.user];
+  const { signOut } = useAuthenticator(userSelector);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -101,29 +83,28 @@ export default function ProfileScreen() {
         const currentUser = await getCurrentUser();
         if (!currentUser) return;
 
-        // username is a field on the Cognito user
         const { username } = currentUser;
 
         // 2) fetch user attributes from Cognito
-        // fetchUserAttributes() in Amplify v6 returns an array of { Name: string; Value: string }
         const attributesObject: Partial<Record<string, string>> = await fetchUserAttributes();
-        const attributesArray: CognitoUserAttribute[] = Object.entries(attributesObject).map(([Name, Value]) => ({ Name, Value: Value ?? '' }));
+        const attributesArray: CognitoUserAttribute[] = Object.entries(attributesObject).map(
+          ([Name, Value]) => ({ Name, Value: Value ?? '' })
+        );
 
-        // define helpers to find attribute by Name
+        // Helper to find attribute by name
         const findAttr = (attrName: string) =>
           attributesArray.find((attr) => attr.Name === attrName)?.Value ?? '';
 
-        // pull out the relevant attributes
-        const emailValue = findAttr('email');
-        const firstNameValue = findAttr('given_name');   // or 'name'
-        const lastNameValue = findAttr('family_name');   // or 'family_name'
-        const birthdayValue = findAttr('birthdate');     // or 'custom:birthday' if it's custom
-
         // 3) set user info in state
+        const emailValue = findAttr('email');
+        const firstNameValue = findAttr('given_name');
+        const lastNameValue = findAttr('family_name');
+        const birthdayValue = findAttr('birthdate');
+
         setUser({
           username: username || 'Guest',
           email: emailValue || 'No email provided',
-          profilePicture: null,  // We'll fetch or assign below
+          profilePicture: null,
         });
 
         setFirstName(firstNameValue);
@@ -136,7 +117,6 @@ export default function ProfileScreen() {
             path: `public/profilePictures/${username}.jpg`,
             options: { validateObjectExistence: false },
           });
-          // If url is truthy, set user’s profilePicture
           if (url) {
             setUser((prevUser) => ({
               ...prevUser,
@@ -169,7 +149,7 @@ export default function ProfileScreen() {
     { title: 'Sign Out', icon: 'log-out-outline', content: 'Sign out of your account.' },
   ];
 
-  // Open the popup
+  // Popup open/close
   const openPopup = (data: PopupData) => {
     setPopupData(data);
     setPopupVisible(true);
@@ -181,7 +161,6 @@ export default function ProfileScreen() {
     }).start();
   };
 
-  // Close the popup
   const closePopup = () => {
     Animated.timing(slideAnim, {
       toValue: SCREEN_WIDTH,
@@ -190,7 +169,6 @@ export default function ProfileScreen() {
     }).start(() => setPopupVisible(false));
   };
 
-  // PanResponder for swiping popup away
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (evt, gestureState) =>
@@ -215,7 +193,6 @@ export default function ProfileScreen() {
   // Save changes to Cognito
   const handleSaveProfile = async () => {
     try {
-      // update these attributes in Cognito
       await updateUserAttributes({
         userAttributes: {
           given_name: firstName,
@@ -224,7 +201,6 @@ export default function ProfileScreen() {
         },
       });
       console.log('User attributes updated in Cognito.');
-
       closePopup();
     } catch (error) {
       console.log('Error updating user attributes:', error);
@@ -250,7 +226,6 @@ export default function ProfileScreen() {
         await uploadData({ path: s3Path, data: blob });
 
         const { url } = await getUrl({ path: s3Path });
-        // Now set the new S3 url as user’s pic
         setUser((prevUser) => ({
           ...prevUser,
           profilePicture: url.toString(),
@@ -261,34 +236,27 @@ export default function ProfileScreen() {
     }
   };
 
+  // Format birthday
   const handleBirthdayInput = (text: string) => {
-    // Remove any non-numeric characters
     let formattedText = text.replace(/[^0-9]/g, '');
-
-    // Automatically add slashes as the user types
     if (formattedText.length > 2 && formattedText.length <= 4) {
       formattedText = `${formattedText.slice(0, 2)}/${formattedText.slice(2)}`;
     } else if (formattedText.length > 4) {
       formattedText = `${formattedText.slice(0, 2)}/${formattedText.slice(2, 4)}/${formattedText.slice(4, 8)}`;
     }
-
-    // Limit the input to MM/DD/YYYY format
     if (formattedText.length > 10) {
       formattedText = formattedText.slice(0, 10);
     }
-
     setBirthday(formattedText);
   };
 
   // Render the content of the popup
   const renderPopupContent = () => {
-    if (!popupData) return null; // Type-check safe
+    if (!popupData) return null;
 
     if (popupData.title === 'Edit Profile') {
       return (
         <View style={styles.popupContent}>
-          {/* Removed the "Edit your profile details below." text */}
-
           {/* First Name */}
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>First Name</Text>
@@ -321,13 +289,13 @@ export default function ProfileScreen() {
               placeholder="MM/DD/YYYY"
               placeholderTextColor="#666"
               value={birthday}
-              onChangeText={(text) => handleBirthdayInput(text)}
+              onChangeText={handleBirthdayInput}
               keyboardType="numeric"
               maxLength={10}
             />
           </View>
 
-          {/* Save / Cancel Buttons */}
+          {/* Save/Cancel Buttons */}
           <View style={styles.saveCancelRow}>
             <TouchableOpacity style={styles.saveButton} onPress={handleSaveProfile}>
               <Text style={styles.buttonText}>Save</Text>
@@ -340,7 +308,6 @@ export default function ProfileScreen() {
       );
     }
 
-    // For non–“Edit Profile” popups
     return <Text style={styles.popupText}>{popupData.content}</Text>;
   };
 
@@ -370,11 +337,19 @@ export default function ProfileScreen() {
             <TouchableOpacity
               key={idx}
               style={styles.button}
-              onPress={() => openPopup({ title: button.title, content: button.content })}
+              onPress={() => {
+                // 3) If user taps the Sign Out item, call signOut directly.
+                if (button.title === 'Sign Out') {
+                  signOut();
+                  return;
+                }
+                // Otherwise, show the popup as before
+                openPopup({ title: button.title, content: button.content });
+              }}
             >
               <View style={styles.buttonRow}>
                 <Ionicons
-                  name={button.icon}   // typed as IconName
+                  name={button.icon}
                   size={24}
                   color="#CE975E"
                   style={styles.buttonIcon}
@@ -499,6 +474,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
+  inputContainer: {
+    width: '100%',
+    marginBottom: 20,
+    paddingHorizontal: 20,
+  },
+  inputLabel: {
+    color: '#DFDCD9',
+    fontSize: 16,
+    marginBottom: 5,
+    fontFamily: 'AzoMonoTest',
+  },
   input: {
     backgroundColor: '#1F1F1F',
     borderRadius: 10,
@@ -511,7 +497,7 @@ const styles = StyleSheet.create({
   saveCancelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 40, // Increased spacing between buttons
+    paddingHorizontal: 40,
     marginTop: 30,
   },
   saveButton: {
@@ -519,30 +505,19 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 25,
     borderRadius: 10,
-    marginHorizontal: 10, // Adds spacing between buttons
+    marginHorizontal: 10,
   },
   cancelButton: {
     backgroundColor: '#444',
     paddingVertical: 12,
     paddingHorizontal: 25,
     borderRadius: 10,
-    marginHorizontal: 10, // Adds spacing between buttons
+    marginHorizontal: 10,
   },
   cancelButtonText: {
     color: '#DFDCD9',
     fontSize: 16,
     fontWeight: '600',
-    fontFamily: 'AzoMonoTest',
-  },
-  inputContainer: {
-    width: '100%',
-    marginBottom: 20,
-    paddingHorizontal: 20,
-  },
-  inputLabel: {
-    color: '#DFDCD9',
-    fontSize: 16,
-    marginBottom: 5,
     fontFamily: 'AzoMonoTest',
   },
 });
