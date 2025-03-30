@@ -1,45 +1,69 @@
 // app/auth/sign-in.tsx
-import React, { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { signIn, signOut } from 'aws-amplify/auth'; // Import signOut
+import { signIn, getCurrentUser } from 'aws-amplify/auth';
 
 export default function SignIn() {
   const router = useRouter();
 
-  const [username, setUsername] = useState(''); // Changed from email to username
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  const onSignInPress = async () => {
-    setError(''); // Reset error
+  // 1) On screen load, check if a user is already signed in
+  useEffect(() => {
+    checkUserSession();
+  }, []);
+
+  const checkUserSession = async () => {
     try {
-      // Sign out any existing user session
-      await signOut();
+      const currentUser = await getCurrentUser();
+      if (currentUser) {
+        // If user is already authenticated, redirect to main tabs
+        router.replace('/(tabs)');
+        return;
+      }
+    } catch (err) {
+      // Means no user is logged in, just show sign-in form
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-      // Use username and password for sign-in
+  // 2) If user isn't logged in, allow them to sign in
+  const onSignInPress = async () => {
+    setError('');
+    try {
       await signIn({ username, password });
-
-      // Redirect to main tabs (or profile, etc.)
       router.replace('/(tabs)');
     } catch (e: any) {
       setError(e?.message || 'Something went wrong');
     }
   };
 
+  if (isLoading) {
+    // Show a loading spinner or placeholder while checking session
+    return (
+      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color="#CE975E" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Sign In</Text>
 
-      {/* Username Label */}
       <Text style={styles.label}>Username</Text>
       <TextInput
         onChangeText={setUsername}
         value={username}
         style={styles.input}
+        autoCapitalize="none"
       />
 
-      {/* Password Label */}
       <Text style={styles.label}>Password</Text>
       <TextInput
         onChangeText={setPassword}
@@ -48,22 +72,22 @@ export default function SignIn() {
         secureTextEntry
       />
 
-      {/* Forgot Password Button */}
-      <TouchableOpacity onPress={() => router.push('./forgot-password')} style={styles.forgotPassword}>
+      <TouchableOpacity
+        onPress={() => router.push('./forgot-password')}
+        style={styles.forgotPassword}
+      >
         <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
       </TouchableOpacity>
 
       {!!error && <Text style={{ color: 'red', marginTop: 10 }}>{error}</Text>}
 
-      {/* Sign In Button */}
       <TouchableOpacity style={styles.button} onPress={onSignInPress}>
         <Text style={styles.buttonText}>Sign In</Text>
       </TouchableOpacity>
 
-      {/* Sign Up Section */}
       <View style={styles.signUpContainer}>
         <Text style={styles.signUpText}>
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Text style={styles.signUpLink} onPress={() => router.push('./sign-up')}>
             Sign Up
           </Text>
@@ -81,61 +105,61 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   title: {
-    fontSize: 48, // Increased font size
+    fontSize: 48,
     color: '#fff',
     marginBottom: 24,
-    textAlign: 'left', // Align text to the left
-    fontWeight: 'bold', // Make the text bold
+    textAlign: 'left',
+    fontWeight: 'bold',
+  },
+  label: {
+    fontSize: 16,
+    color: '#fff',
+    marginBottom: -5,
+    marginTop: 10,
+    textAlign: 'left',
   },
   input: {
-    backgroundColor: '#141414', // Light grey background
-    marginVertical: 12, // Increased vertical margin for spacing
-    paddingHorizontal: 16, // Increased horizontal padding
-    paddingVertical: 12, // Increased vertical padding for larger text boxes
-    borderRadius: 8, // Slightly larger border radius for rounded corners
-    fontSize: 16, // Larger font size for better readability
-    color: '#DFDCD9', // Makes the entered text white
+    backgroundColor: '#141414',
+    marginVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    fontSize: 16,
+    color: '#DFDCD9',
   },
   button: {
-    backgroundColor: '#CE975E', // Gold color
+    backgroundColor: '#CE975E',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8, // Rounded corners
+    borderRadius: 8,
     alignItems: 'center',
     marginTop: 20,
   },
   buttonText: {
-    color: '#DFDCD9', // Dark text color for contrast
+    color: '#DFDCD9',
     fontSize: 18,
     fontWeight: 'bold',
   },
-  label: {
-    fontSize: 16, // Font size for the labels
-    color: '#fff', // White text color
-    marginBottom: -5, // Spacing between label and input box
-    marginTop: 10, // Spacing between label and input box
-    textAlign: 'left', // Align text to the left
-  },
   forgotPassword: {
-    alignSelf: 'flex-end', // Aligns the button to the right
-    marginTop: 8, // Adds spacing above the button
-    marginBottom: 16, // Adds spacing below the button
+    alignSelf: 'flex-end',
+    marginTop: 8,
+    marginBottom: 16,
   },
   forgotPasswordText: {
-    color: '#CE975E', // Gold color for the text
-    fontSize: 14, // Slightly smaller font size
-    fontWeight: 'bold', // Makes the text bold
+    color: '#CE975E',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   signUpContainer: {
-    marginTop: 100, // Adds spacing above the sign-up section
-    alignItems: 'center', // Centers the content horizontally
+    marginTop: 100,
+    alignItems: 'center',
   },
   signUpText: {
-    fontSize: 14, // Font size for the text
-    color: '#fff', // White text color
+    fontSize: 14,
+    color: '#fff',
   },
   signUpLink: {
-    color: '#CE975E', // Gold color for the "Sign Up" text
-    fontWeight: 'bold', // Makes the "Sign Up" text bold
+    color: '#CE975E',
+    fontWeight: 'bold',
   },
 });
