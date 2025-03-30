@@ -1,4 +1,4 @@
-import { Text, View, StyleSheet, TouchableOpacity } from 'react-native';
+import { Text, View, StyleSheet, TouchableOpacity, ImageBackground } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFonts } from 'expo-font';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -10,30 +10,40 @@ export default function Index() {
   });
 
   return (
-    <View style={styles.container}>
-      <View style={styles.contentContainer}>
-        <Text style={styles.text}>
-          Raise your glasses—our robot bartender is here to make your special day even more 
-          unforgettable! From classic cocktails to custom creations, this sleek drink-pouring 
-          genius is ready to serve up smiles and keep the celebration flowing.
-          {'\n\n'}
-          <Text style={styles.subheading}>How It Works:</Text>
-          {'\n\n'}
-          <Text style={styles.listItem}>
-            1. Choose Your Drink: Browse our curated wedding menu or create your signature cocktail.
-          </Text>
-          {'\n'}
-          <Text style={styles.listItem}>
-            2. Place Your Order: Tap the screen or scan your personalized QR code.
-          </Text>
-          {'\n'}
-          <Text style={styles.listItem}>
-            3. Watch the Magic: Your drink is poured to perfection, ready to toast to love!
-          </Text>
-          {'\n\n'}
-          Let’s make your big day as smooth as our robot's pours. Cheers to love, laughter, and happily
-          ever after! 🥂✨
+    <ImageBackground
+      source={require('@/assets/images/home-background.jpg')} // Add a background image
+      style={styles.background}
+      resizeMode="cover"
+    >
+      <View style={styles.overlay} />
+      <View style={styles.container}>
+        {/* Welcome Section */}
+        <Text style={styles.welcomeTitle}>Welcome to LiquorBot</Text>
+
+        {/* Hero Section */}
+        <Text style={styles.title}>Raise Your Glasses</Text>
+        <Text style={styles.tagline}>
+          Your personal robot bartender is here to make every moment unforgettable.
         </Text>
+
+        {/* How It Works Section */}
+        <View style={styles.howItWorksContainer}>
+          <Text style={styles.subheading}>How It Works</Text>
+          <View style={styles.step}>
+            <Ionicons name="wine-outline" size={24} color="#CE975E" style={styles.stepIcon} />
+            <Text style={styles.stepText}>Choose Your Drink: Browse our curated menu or create your signature cocktail.</Text>
+          </View>
+          <View style={styles.step}>
+            <Ionicons name="qr-code-outline" size={24} color="#CE975E" style={styles.stepIcon} />
+            <Text style={styles.stepText}>Place Your Order: Tap the screen or scan your personalized QR code.</Text>
+          </View>
+          <View style={styles.step}>
+            <Ionicons name="sparkles-outline" size={24} color="#CE975E" style={styles.stepIcon} />
+            <Text style={styles.stepText}>Watch the Magic: Your drink is poured to perfection, ready to toast to love!</Text>
+          </View>
+        </View>
+
+        {/* Call-to-Action Button */}
         <TouchableOpacity style={styles.button} onPress={() => router.push('/menu')}>
           <Text style={styles.buttonText}>Explore Drinks</Text>
           <Ionicons
@@ -44,57 +54,93 @@ export default function Index() {
           />
         </TouchableOpacity>
       </View>
-    </View>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
+  background: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(20, 20, 20, 0.7)', // Dark overlay for better text visibility
+  },
   container: {
     flex: 1,
-    alignItems: 'center',
-    backgroundColor: '#141414',
-  },
-  contentContainer: {
-    flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
     paddingHorizontal: 20,
   },
-  text: {
+  welcomeTitle: {
     color: '#DFDCD9',
-    fontSize: 16,
-    marginBottom: 20,
+    fontSize: 28,
     fontFamily: 'AzoMonoTest',
-    textAlign: 'left',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  title: {
+    color: '#CE975E',
+    fontSize: 32,
+    fontFamily: 'AzoMonoTest',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  tagline: {
+    color: '#DFDCD9',
+    fontSize: 18,
+    fontFamily: 'AzoMonoTest',
+    textAlign: 'center',
+    marginBottom: 30,
+  },
+  howItWorksContainer: {
+    width: '100%',
+    marginBottom: 40,
   },
   subheading: {
     color: '#CE975E',
-    fontSize: 18,
+    fontSize: 22,
     fontFamily: 'AzoMonoTest',
-    marginBottom: 10,
+    textAlign: 'center',
+    marginBottom: 20,
   },
-  listItem: {
+  step: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 15,
+  },
+  stepIcon: {
+    marginRight: 10,
+    marginTop: 3,
+  },
+  stepText: {
     color: '#DFDCD9',
     fontSize: 16,
     fontFamily: 'AzoMonoTest',
-    marginBottom: 5,
+    flex: 1,
   },
   button: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#4F4F4F',
+    justifyContent: 'center',
+    backgroundColor: '#4f4f4f',
     paddingVertical: 15,
     paddingHorizontal: 35,
-    borderRadius: 20,
-    marginVertical: 10,
+    borderRadius: 30,
     width: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
   buttonText: {
     color: '#DFDCD9',
     fontSize: 18,
     fontFamily: 'AzoMonoTest',
-    flex: 1,
+    marginRight: 10,
   },
   buttonIcon: {
     marginLeft: 10,
