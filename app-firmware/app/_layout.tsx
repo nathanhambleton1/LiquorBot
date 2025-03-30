@@ -1,28 +1,33 @@
-// app/_layout.tsx
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Stack } from 'expo-router';
-import { withAuthenticator } from '@aws-amplify/ui-react-native';
 import { Amplify } from 'aws-amplify';
 import config from '../src/amplifyconfiguration.json';
-import { PubSub } from '@aws-amplify/pubsub';
-import { fetchAuthSession } from 'aws-amplify/auth';
 
-// Create PubSub instance for AWS IoT
+// 1) Import from Amplify UI
+import { Authenticator } from '@aws-amplify/ui-react-native';
+
+// Optionally, if you use PubSub:
+import { PubSub } from '@aws-amplify/pubsub';
 export const pubsub = new PubSub({
-    region: 'us-east-1',
-    endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt'
+  region: 'us-east-1',
+  endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt'
 });
 
 Amplify.configure(config);
 
-function RootLayout() {
+export default function RootLayout() {
   return (
-    <Stack>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="drinkDetails" options={{ title: 'Drink Details' }} />
-      <Stack.Screen name="+not-found" />
-    </Stack>
+    // 2) Wrap your layout with Authenticator.Provider
+    <Authenticator.Provider>
+      <Stack
+        screenOptions={{
+          headerShown: false, // Ensure no headers are shown globally
+        }}
+      >
+        {/* Define your app's main routes */}
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="auth" />
+      </Stack>
+    </Authenticator.Provider>
   );
 }
-
-export default withAuthenticator(RootLayout);

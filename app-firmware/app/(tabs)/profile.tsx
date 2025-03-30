@@ -14,11 +14,15 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 // Amplify (v6) imports
-import { fetchUserAttributes, updateUserAttributes, getCurrentUser } from 'aws-amplify/auth';
+import {
+  fetchUserAttributes,
+  updateUserAttributes,
+  getCurrentUser
+} from 'aws-amplify/auth';
 import { getUrl, uploadData } from 'aws-amplify/storage';
 import * as ImagePicker from 'expo-image-picker';
 
-// 1) Import the Amplify UI hook for sign-out
+// (A) Import the Amplify UI hook for sign-out
 import { useAuthenticator } from '@aws-amplify/ui-react-native';
 
 // ---------- TYPES ----------
@@ -72,7 +76,7 @@ export default function ProfileScreen() {
   const [popupVisible, setPopupVisible] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
-  // 2) Get the signOut function from useAuthenticator
+  // (B) Get the signOut function from useAuthenticator
   const userSelector = (context: any) => [context.user];
   const { signOut } = useAuthenticator(userSelector);
 
@@ -338,9 +342,9 @@ export default function ProfileScreen() {
               key={idx}
               style={styles.button}
               onPress={() => {
-                // 3) If user taps the Sign Out item, call signOut directly.
+                // (C) If user taps the Sign Out item, call signOut directly.
                 if (button.title === 'Sign Out') {
-                  signOut();
+                  signOut(); 
                   return;
                 }
                 // Otherwise, show the popup as before
@@ -483,7 +487,6 @@ const styles = StyleSheet.create({
     color: '#DFDCD9',
     fontSize: 16,
     marginBottom: 5,
-    fontFamily: 'AzoMonoTest',
   },
   input: {
     backgroundColor: '#1F1F1F',
@@ -492,7 +495,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     color: '#DFDCD9',
     fontSize: 16,
-    fontFamily: 'AzoMonoTest',
   },
   saveCancelRow: {
     flexDirection: 'row',
@@ -518,6 +520,5 @@ const styles = StyleSheet.create({
     color: '#DFDCD9',
     fontSize: 16,
     fontWeight: '600',
-    fontFamily: 'AzoMonoTest',
   },
 });
