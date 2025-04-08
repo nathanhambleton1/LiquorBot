@@ -18,6 +18,10 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Amplify } from 'aws-amplify';
 import { PubSub } from '@aws-amplify/pubsub';
 import config from '../../src/amplifyconfiguration.json';
+
+// NEW IMPORT: getUrl from Storage
+import { getUrl } from 'aws-amplify/storage';
+
 import { fetchAuthSession } from 'aws-amplify/auth';
 import API from '@aws-amplify/api';
 import Auth from '@aws-amplify/auth';
@@ -42,7 +46,8 @@ type Drink = {
   name: string;
   category: string;
   description: string;
-  image: any;
+  // image can be string (from S3) or require() – you can type as `string` if storing S3 URLs
+  image: string;
 };
 
 interface DrinkItemProps {
@@ -55,67 +60,7 @@ interface DrinkItemProps {
   onExpandedLayout?: (layout: { x: number; y: number; width: number; height: number }) => void;
 }
 
-const drinks: Drink[] = [
-  {
-    id: 1,
-    name: 'Margarita',
-    category: 'Tequila',
-    image: require('@/assets/images/drink_pics/margarita.png'),
-    description: 'A refreshing cocktail made with tequila, lime juice, and triple sec.',
-  },
-  {
-    id: 2,
-    name: 'Mojito',
-    category: 'Rum',
-    image: require('@/assets/images/drink_pics/mojito.png'),
-    description: 'A classic Cuban cocktail made with rum, mint, lime, sugar, and soda water.',
-  },
-  {
-    id: 3,
-    name: 'Old Fashioned',
-    category: 'Whiskey',
-    image: require('@/assets/images/drink_pics/old_fashioned.png'),
-    description: 'A timeless cocktail made with whiskey, sugar, bitters, and a twist of citrus rind.',
-  },
-  {
-    id: 4,
-    name: 'Cosmopolitan',
-    category: 'Vodka',
-    image: require('@/assets/images/drink_pics/cosmo.png'),
-    description: 'A stylish cocktail made with vodka, triple sec, cranberry juice, and lime juice.',
-  },
-  {
-    id: 5,
-    name: 'Pina Colada',
-    category: 'Rum',
-    image: require('@/assets/images/drink_pics/pina_colada.png'),
-    description: 'A tropical cocktail made with rum, coconut cream, and pineapple juice.',
-  },
-  {
-    id: 6,
-    name: 'Whiskey Sour',
-    category: 'Whiskey',
-    image: require('@/assets/images/drink_pics/whiskey_sour.png'),
-    description: 'A tangy cocktail made with whiskey, lemon juice, and sugar.',
-  },
-  {
-    id: 7,
-    name: 'Martini',
-    category: 'Vodka',
-    image: require('@/assets/images/drink_pics/martini.png'),
-    description: 'A classic cocktail made with gin or vodka and vermouth, garnished with an olive.',
-  },
-  {
-    id: 8,
-    name: 'Bloody Mary',
-    category: 'Vodka',
-    image: require('@/assets/images/drink_pics/bloody_mary.png'),
-    description: 'A savory cocktail made with vodka, tomato juice, and various spices.',
-  },
-];
-
-const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey'];
-
+// A single drink component
 function DrinkItem({
   drink,
   isExpanded,
@@ -156,6 +101,7 @@ function DrinkItem({
     }
   }
 
+  // For the expanded layout
   if (isExpanded) {
     return (
       <Animated.View
@@ -204,7 +150,8 @@ function DrinkItem({
             <Text style={styles.expandedboxText}>{drink.name}</Text>
             <Text style={styles.expandedcategoryText}>{drink.category}</Text>
           </View>
-          <Image source={drink.image} style={styles.expandedImage} />
+          {/* If `image` is a URL string, use: <Image source={{ uri: drink.image }} ... /> */}
+          <Image source={{ uri: drink.image }} style={styles.expandedImage} />
         </View>
 
         <View style={styles.expandeddetailContainer}>
@@ -227,6 +174,7 @@ function DrinkItem({
       </Animated.View>
     );
   } else {
+    // Collapsed item
     return (
       <TouchableOpacity
         key={drink.id}
@@ -250,7 +198,7 @@ function DrinkItem({
             color={favorites.includes(drink.id) ? '#CE975E' : '#4F4F4F'}
           />
         </TouchableOpacity>
-        <Image source={drink.image} style={styles.image} />
+        <Image source={{ uri: drink.image }} style={styles.image} />
         <Text style={styles.boxText}>{drink.name}</Text>
         <Text style={styles.categoryText}>{drink.category}</Text>
       </TouchableOpacity>
@@ -259,17 +207,23 @@ function DrinkItem({
 }
 
 export default function MenuScreen() {
+  const scrollViewRef = useRef<ScrollView>(null);
+  
+  // NEW: We store the drinks from S3 in state
+  const [drinks, setDrinks] = useState<Drink[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [favorites, setFavorites] = useState<number[]>([]);
   const [expandedDrink, setExpandedDrink] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const scrollViewRef = useRef<ScrollView>(null);
   const [scrollViewHeight, setScrollViewHeight] = useState(0);
   const [latestMessage, setLatestMessage] = useState('');
 
   // Create the animated value for the green dot
   const glowAnimation = useRef(new Animated.Value(1)).current;
 
+  // Glow animation for the green dot
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -287,6 +241,35 @@ export default function MenuScreen() {
     ).start();
   }, [glowAnimation]);
 
+  // Fetch the drinks from S3 once on mount
+  useEffect(() => {
+    async function fetchDrinksFromS3() {
+      try {
+        // 1. Get a signed URL for the S3 file
+        //    By default this tries the 'public/' path with guest access
+        const drinksUrl = await getUrl({
+          key: 'drinkMenu/drinks.json' // path in S3 (under 'public/drinkMenu/drinks.json')
+          // If you need to specify explicitly:
+          // options: { level: 'guest' }
+        });
+
+        // 2. Fetch the JSON from that URL
+        const response = await fetch(drinksUrl.url);
+        const data = await response.json();
+
+        // 3. Set our state
+        setDrinks(data);
+      } catch (error) {
+        console.error('Error fetching drinks from S3:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchDrinksFromS3();
+  }, []);
+
+  // If you want to log the identity ID
   useEffect(() => {
     (async () => {
       try {
@@ -297,6 +280,7 @@ export default function MenuScreen() {
       }
     })();
 
+    // IoT subscription
     const subscription = pubsub.subscribe({ topics: ['messages'] }).subscribe({
       next: (data) => {
         console.log('Received message from IoT:', data);
@@ -313,6 +297,7 @@ export default function MenuScreen() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Handle toggle favorite
   async function toggleFavorite(drinkId: number) {
     setFavorites((prev) =>
       prev.includes(drinkId)
@@ -356,13 +341,17 @@ export default function MenuScreen() {
     }
   }
 
-  // Filter drinks based on category and search query
+  // Categories you had
+  const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey'];
+
+  // Filter drinks based on category + search
   const filteredDrinks = drinks.filter((drink) => {
     const matchesCategory = selectedCategory === 'All' || drink.category === selectedCategory;
     const matchesSearch = drink.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
+  // We rearrange if expanded
   const renderedDrinks = [...filteredDrinks];
   if (expandedDrink != null) {
     const expandedIndex = renderedDrinks.findIndex((d) => d.id === expandedDrink);
@@ -377,6 +366,15 @@ export default function MenuScreen() {
       scrollViewRef.current.scrollTo({ y: layout.y, animated: true });
     }
   };
+
+  // If you want a spinner or fallback
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: '#DFDCD9', fontSize: 18 }}>Loading drinks...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -437,7 +435,7 @@ export default function MenuScreen() {
         </ScrollView>
       </View>
 
-      {/* Search Bar with Icon */}
+      {/* Search Bar */}
       <View style={styles.searchBarContainer}>
         <Ionicons name="search" size={20} color="#4F4F4F" style={styles.searchIcon} />
         <TextInput
@@ -502,7 +500,6 @@ const styles = StyleSheet.create({
   subHeaderText: {
     color: '#4F4F4F',
     fontSize: 20,
-    fontFamily: 'AzoMonoTest',
     textAlign: 'left',
     marginTop: 0,
   },
@@ -571,7 +568,6 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#DFDCD9',
     fontSize: 16,
-    fontFamily: 'AzoMonoTest',
     paddingVertical: 10,
   },
   scrollContainer: {
@@ -629,7 +625,6 @@ const styles = StyleSheet.create({
   expandedboxText: {
     color: '#DFDCD9',
     fontSize: 24,
-    fontFamily: 'AzoMonoTest',
     marginBottom: 10,
     textAlign: 'left',
     alignSelf: 'flex-start',
@@ -643,14 +638,12 @@ const styles = StyleSheet.create({
   expandedcategoryText: {
     color: '#CE975E',
     fontSize: 14,
-    fontFamily: 'AzoMonoTest',
     textAlign: 'left',
     alignSelf: 'flex-start',
   },
   expandeddescriptionText: {
     color: '#4F4F4F',
     fontSize: 14,
-    fontFamily: 'AzoMonoTest',
     textAlign: 'left',
     alignSelf: 'flex-start',
   },
@@ -673,7 +666,6 @@ const styles = StyleSheet.create({
   boxText: {
     color: '#DFDCD9',
     fontSize: 18,
-    fontFamily: 'AzoMonoTest',
     paddingLeft: 10,
     marginBottom: 0,
     textAlign: 'left',
@@ -682,7 +674,6 @@ const styles = StyleSheet.create({
   categoryText: {
     color: '#CE975E',
     fontSize: 14,
-    fontFamily: 'AzoMonoTest',
     marginBottom: 10,
     paddingLeft: 10,
     textAlign: 'left',
@@ -705,12 +696,10 @@ const styles = StyleSheet.create({
   quantityButtonText: {
     color: '#FFFFFF',
     fontSize: 20,
-    fontFamily: 'AzoMonoTest',
   },
   quantityText: {
     color: '#FFFFFF',
     fontSize: 20,
-    fontFamily: 'AzoMonoTest',
     marginHorizontal: 20,
   },
   button: {
@@ -727,7 +716,6 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#FFFFFF',
     fontSize: 20,
-    fontFamily: 'AzoMonoTest',
   },
   editIconContainer: {
     position: 'absolute',
@@ -735,5 +723,3 @@ const styles = StyleSheet.create({
     right: 30,
   },
 });
-
-export { MenuScreen };
