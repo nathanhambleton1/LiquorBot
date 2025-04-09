@@ -401,6 +401,13 @@ export default function ProfileScreen() {
   };
 
   // --------------------------------------------------------------------
+  // Remove liked drink
+  // --------------------------------------------------------------------
+  const removeLikedDrink = (drinkId: number) => {
+    setLikedDrinksData((prev) => prev.filter((drink) => drink.id !== drinkId));
+  };
+
+  // --------------------------------------------------------------------
   // Render the content of the popup
   // --------------------------------------------------------------------
   const renderPopupContent = () => {
@@ -492,7 +499,7 @@ export default function ProfileScreen() {
                     style={{ marginRight: 10 }}
                   />
                   {/* Grey X Icon */}
-                  <TouchableOpacity onPress={() => console.log(`Remove ${drink.name}`)}>
+                  <TouchableOpacity onPress={() => removeLikedDrink(drink.id)}>
                     <Ionicons
                       name="close"
                       size={24}
