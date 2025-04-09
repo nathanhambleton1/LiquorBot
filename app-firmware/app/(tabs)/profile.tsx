@@ -27,7 +27,6 @@ import { Amplify } from 'aws-amplify';
 import config from '../../src/amplifyconfiguration.json';
 import { generateClient } from 'aws-amplify/api';
 import { listLikedDrinks } from '../../src/graphql/queries';
-import { createLikedDrink, deleteLikedDrink } from '../../src/graphql/mutations';
 
 // (B) Import the Amplify UI hook for sign-out
 import { useAuthenticator } from '@aws-amplify/ui-react-native';
@@ -402,72 +401,6 @@ export default function ProfileScreen() {
   };
 
   // --------------------------------------------------------------------
-  // Toggle a like/unlike for a single drink in the "Liked Drinks" popup
-  // --------------------------------------------------------------------
-  const toggleDrinkLike = async (drink: Drink) => {
-    if (!user.username) return;
-
-    // Check if currently "liked"
-    const isCurrentlyLiked = likedIDsInPopup.has(drink.id);
-
-    try {
-      if (isCurrentlyLiked) {
-        // Un-liking => delete from DynamoDB
-        const existingRecordId = recordMap[drink.id];
-        if (!existingRecordId) {
-          console.warn('No LikedDrink record found for unliking. Aborting.');
-          return;
-        }
-
-        await client.graphql({
-          query: deleteLikedDrink,
-          variables: { input: { id: existingRecordId } },
-        });
-
-        // Remove from the local set
-        const updatedSet = new Set(likedIDsInPopup);
-        updatedSet.delete(drink.id);
-        setLikedIDsInPopup(updatedSet);
-
-        // Also remove it from recordMap
-        const newMap = { ...recordMap };
-        delete newMap[drink.id];
-        setRecordMap(newMap);
-
-        // Item remains displayed in likedDrinksData, but now with a gray heart
-      } else {
-        // Re-liking => create in DynamoDB
-        const createRes: any = await client.graphql({
-          query: createLikedDrink,
-          variables: {
-            input: {
-              userID: user.username,
-              drinkID: drink.id,
-            },
-          },
-        });
-        const newId = createRes?.data?.createLikedDrink?.id;
-        if (!newId) {
-          console.warn('No new ID returned from createLikedDrink.');
-          return;
-        }
-
-        // Add to the local set
-        const updatedSet = new Set(likedIDsInPopup);
-        updatedSet.add(drink.id);
-        setLikedIDsInPopup(updatedSet);
-
-        // Add to recordMap
-        const newMap = { ...recordMap };
-        newMap[drink.id] = newId;
-        setRecordMap(newMap);
-      }
-    } catch (err) {
-      console.error('Error toggling like state:', err);
-    }
-  };
-
-  // --------------------------------------------------------------------
   // Render the content of the popup
   // --------------------------------------------------------------------
   const renderPopupContent = () => {
@@ -530,7 +463,6 @@ export default function ProfileScreen() {
 
     // --------------------- LIKED DRINKS -------------------
     if (popupData.title === 'Liked Drinks') {
-      // Even after un-liking, we keep them displayed. The heart color reflects isCurrentlyLiked
       return (
         <View style={[styles.popupContent, { alignItems: 'flex-start' }]}>
           {likedDrinksData.length === 0 ? (
@@ -540,36 +472,36 @@ export default function ProfileScreen() {
               </Text>
             </View>
           ) : (
-            <ScrollView style={{ marginTop: 10, width: '100%' }}>
-              {likedDrinksData.map((drink) => {
-                const isCurrentlyLiked = likedIDsInPopup.has(drink.id);
-                return (
-                  <View key={drink.id} style={styles.likedDrinkItem}>
-                    {/* Drink Image */}
-                    <Image
-                      source={{ uri: drink.image }}
-                      style={styles.likedDrinkImage}
-                    />
-
-                    <View style={{ marginLeft: 10, flex: 1, marginRight: 20 }}>
-                      <Text style={styles.likedDrinkName}>{drink.name}</Text>
-                      <Text style={styles.likedDrinkCategory}>{drink.category}</Text>
-                    </View>
-
-                    {/* Heart Icon */}
-                    <TouchableOpacity
-                      onPress={() => toggleDrinkLike(drink)}
-                      style={{ marginRight: 20 }} // Adjusted marginRight to move the heart icon further left
-                    >
-                      <Ionicons
-                        name={isCurrentlyLiked ? 'heart' : 'heart-outline'}
-                        size={24}
-                        color={isCurrentlyLiked ? '#CE975E' : '#4F4F4F'}
-                      />
-                    </TouchableOpacity>
+            <ScrollView style={{ marginTop: 10, width: '100%' }} contentContainerStyle={{ paddingBottom: 70 }}>
+              {likedDrinksData.map((drink) => (
+                <View key={drink.id} style={styles.likedDrinkItem}>
+                  {/* Drink Image */}
+                  <Image
+                    source={{ uri: drink.image }}
+                    style={styles.likedDrinkImage}
+                  />
+                  <View style={{ marginLeft: 10, flex: 1 }}>
+                    <Text style={styles.likedDrinkName}>{drink.name}</Text>
+                    <Text style={styles.likedDrinkCategory}>{drink.category}</Text>
                   </View>
-                );
-              })}
+                  {/* Colored Heart Icon */}
+                  <Ionicons
+                    name="heart"
+                    size={24}
+                    color="#CE975E"
+                    style={{ marginRight: 10 }}
+                  />
+                  {/* Grey X Icon */}
+                  <TouchableOpacity onPress={() => console.log(`Remove ${drink.name}`)}>
+                    <Ionicons
+                      name="close"
+                      size={24}
+                      color="#4F4F4F"
+                      style={{ marginRight: 10 }}
+                    />
+                  </TouchableOpacity>
+                </View>
+              ))}
             </ScrollView>
           )}
         </View>
