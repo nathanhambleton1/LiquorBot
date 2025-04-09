@@ -42,7 +42,7 @@
         "s3TemplateURL": "https://s3.amazonaws.com/amplify-liquorbot-dev-fa4d9-deployment/amplify-cfn-templates/api/cloudformation-template.json",
         "logicalId": "apiliquorbot"
       },
-      "lastPushTimeStamp": "2025-03-29T20:18:41.036Z",
+      "lastPushTimeStamp": "2025-04-09T03:21:59.143Z",
       "lastPushDirHash": "9DUgEvc/Q419FSASfp9OU8sup14="
     }
   },
@@ -74,7 +74,7 @@
         "s3TemplateURL": "https://s3.amazonaws.com/amplify-liquorbot-dev-fa4d9-deployment/amplify-cfn-templates/auth/liquorbotf668a8fa-cloudformation-template.json",
         "logicalId": "authliquorbotf668a8fa"
       },
-      "lastPushTimeStamp": "2025-03-29T20:18:41.038Z",
+      "lastPushTimeStamp": "2025-04-09T03:21:59.145Z",
       "output": {
         "UserPoolId": "us-east-1_XoctjOdk0",
         "AppClientIDWeb": "14udb621cmtpsdm1h3vlja7ti9",
@@ -88,20 +88,16 @@
     }
   },
   "storage": {
-    "profilePictureStorage": {
+    "liquorbotd7022146": {
       "service": "S3",
+      "serviceType": "imported",
       "providerPlugin": "awscloudformation",
       "dependsOn": [],
-      "lastPushTimeStamp": "2025-04-08T23:52:58.410Z",
-      "providerMetadata": {
-        "s3TemplateURL": "https://s3.amazonaws.com/amplify-liquorbot-dev-fa4d9-deployment/amplify-cfn-templates/storage/cloudformation-template.json",
-        "logicalId": "storageprofilePictureStorage"
-      },
       "output": {
-        "BucketName": "liquorbot-profile-picturesfa4d9-dev",
+        "BucketName": "liquorbot-app-storage",
         "Region": "us-east-1"
       },
-      "lastPushDirHash": "wT1dqoAjqeAR/zfDEEW4hgv6jM8="
+      "lastPushTimeStamp": "2025-04-09T03:21:30.192Z"
     }
   }
 }

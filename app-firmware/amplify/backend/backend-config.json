@@ -51,11 +51,30 @@
       "service": "Cognito"
     }
   },
+  "parameters": {
+    "AMPLIFY_storage_liquorbotd7022146_bucketName": {
+      "usedBy": [
+        {
+          "category": "storage",
+          "resourceName": "liquorbotd7022146"
+        }
+      ]
+    },
+    "AMPLIFY_storage_liquorbotd7022146_region": {
+      "usedBy": [
+        {
+          "category": "storage",
+          "resourceName": "liquorbotd7022146"
+        }
+      ]
+    }
+  },
   "storage": {
-    "profilePictureStorage": {
+    "liquorbotd7022146": {
       "dependsOn": [],
       "providerPlugin": "awscloudformation",
-      "service": "S3"
+      "service": "S3",
+      "serviceType": "imported"
     }
   }
 }
