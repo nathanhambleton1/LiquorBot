@@ -92,7 +92,7 @@
       "service": "S3",
       "providerPlugin": "awscloudformation",
       "dependsOn": [],
-      "lastPushTimeStamp": "2025-03-30T22:15:32.997Z",
+      "lastPushTimeStamp": "2025-04-08T23:52:58.410Z",
       "providerMetadata": {
         "s3TemplateURL": "https://s3.amazonaws.com/amplify-liquorbot-dev-fa4d9-deployment/amplify-cfn-templates/storage/cloudformation-template.json",
         "logicalId": "storageprofilePictureStorage"
