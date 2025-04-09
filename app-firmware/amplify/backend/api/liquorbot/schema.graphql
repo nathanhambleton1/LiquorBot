@@ -1,21 +1,12 @@
-type Drink @model
-  @auth(rules: [
-    { allow: private, operations: [read] }
-  ])
-{
+type LikedDrink 
+  @model
+  @auth(
+    rules: [
+      # Let only the "owner" (the user who created the record) access that record
+      { allow: owner, ownerField: "userID", identityClaim: "username", operations: [create, read, update, delete] }
+    ]
+  ) {
   id: ID!
-  name: String!
-  category: String
-  description: String
-}
-
-type Favorite @model 
-  @auth(rules: [
-    { allow: owner },            # only the user can create/delete their favorites
-    { allow: private, operations: [read] } # all signed-in users can read others' favorites
-  ]) 
-{
-  id: ID!
-  userSub: String!  # The user’s Cognito user sub
-  drinkID: ID!      # ID of the favorited drink
+  userID: String!
+  drinkID: Int!
 }

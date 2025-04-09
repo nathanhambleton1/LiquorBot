@@ -2,20 +2,18 @@
 /* eslint-disable */
 //  This file was automatically generated and should not be edited.
 
-export type CreateDrinkInput = {
+export type CreateLikedDrinkInput = {
   id?: string | null,
-  name: string,
-  category?: string | null,
-  description?: string | null,
+  userID: string,
+  drinkID: number,
 };
 
-export type ModelDrinkConditionInput = {
-  name?: ModelStringInput | null,
-  category?: ModelStringInput | null,
-  description?: ModelStringInput | null,
-  and?: Array< ModelDrinkConditionInput | null > | null,
-  or?: Array< ModelDrinkConditionInput | null > | null,
-  not?: ModelDrinkConditionInput | null,
+export type ModelLikedDrinkConditionInput = {
+  userID?: ModelStringInput | null,
+  drinkID?: ModelIntInput | null,
+  and?: Array< ModelLikedDrinkConditionInput | null > | null,
+  or?: Array< ModelLikedDrinkConditionInput | null > | null,
+  not?: ModelLikedDrinkConditionInput | null,
   createdAt?: ModelStringInput | null,
   updatedAt?: ModelStringInput | null,
 };
@@ -60,42 +58,46 @@ export type ModelSizeInput = {
   between?: Array< number | null > | null,
 };
 
-export type Drink = {
-  __typename: "Drink",
+export type ModelIntInput = {
+  ne?: number | null,
+  eq?: number | null,
+  le?: number | null,
+  lt?: number | null,
+  ge?: number | null,
+  gt?: number | null,
+  between?: Array< number | null > | null,
+  attributeExists?: boolean | null,
+  attributeType?: ModelAttributeTypes | null,
+};
+
+export type LikedDrink = {
+  __typename: "LikedDrink",
   id: string,
-  name: string,
-  category?: string | null,
-  description?: string | null,
+  userID: string,
+  drinkID: number,
   createdAt: string,
   updatedAt: string,
 };
 
-export type UpdateDrinkInput = {
+export type UpdateLikedDrinkInput = {
   id: string,
-  name?: string | null,
-  category?: string | null,
-  description?: string | null,
+  userID?: string | null,
+  drinkID?: number | null,
 };
 
-export type DeleteDrinkInput = {
+export type DeleteLikedDrinkInput = {
   id: string,
 };
 
-export type CreateFavoriteInput = {
-  id?: string | null,
-  userSub: string,
-  drinkID: string,
-};
-
-export type ModelFavoriteConditionInput = {
-  userSub?: ModelStringInput | null,
-  drinkID?: ModelIDInput | null,
-  and?: Array< ModelFavoriteConditionInput | null > | null,
-  or?: Array< ModelFavoriteConditionInput | null > | null,
-  not?: ModelFavoriteConditionInput | null,
+export type ModelLikedDrinkFilterInput = {
+  id?: ModelIDInput | null,
+  userID?: ModelStringInput | null,
+  drinkID?: ModelIntInput | null,
   createdAt?: ModelStringInput | null,
   updatedAt?: ModelStringInput | null,
-  owner?: ModelStringInput | null,
+  and?: Array< ModelLikedDrinkFilterInput | null > | null,
+  or?: Array< ModelLikedDrinkFilterInput | null > | null,
+  not?: ModelLikedDrinkFilterInput | null,
 };
 
 export type ModelIDInput = {
@@ -114,71 +116,20 @@ export type ModelIDInput = {
   size?: ModelSizeInput | null,
 };
 
-export type Favorite = {
-  __typename: "Favorite",
-  id: string,
-  userSub: string,
-  drinkID: string,
-  createdAt: string,
-  updatedAt: string,
-  owner?: string | null,
-};
-
-export type UpdateFavoriteInput = {
-  id: string,
-  userSub?: string | null,
-  drinkID?: string | null,
-};
-
-export type DeleteFavoriteInput = {
-  id: string,
-};
-
-export type ModelDrinkFilterInput = {
-  id?: ModelIDInput | null,
-  name?: ModelStringInput | null,
-  category?: ModelStringInput | null,
-  description?: ModelStringInput | null,
-  createdAt?: ModelStringInput | null,
-  updatedAt?: ModelStringInput | null,
-  and?: Array< ModelDrinkFilterInput | null > | null,
-  or?: Array< ModelDrinkFilterInput | null > | null,
-  not?: ModelDrinkFilterInput | null,
-};
-
-export type ModelDrinkConnection = {
-  __typename: "ModelDrinkConnection",
-  items:  Array<Drink | null >,
+export type ModelLikedDrinkConnection = {
+  __typename: "ModelLikedDrinkConnection",
+  items:  Array<LikedDrink | null >,
   nextToken?: string | null,
 };
 
-export type ModelFavoriteFilterInput = {
-  id?: ModelIDInput | null,
-  userSub?: ModelStringInput | null,
-  drinkID?: ModelIDInput | null,
-  createdAt?: ModelStringInput | null,
-  updatedAt?: ModelStringInput | null,
-  and?: Array< ModelFavoriteFilterInput | null > | null,
-  or?: Array< ModelFavoriteFilterInput | null > | null,
-  not?: ModelFavoriteFilterInput | null,
-  owner?: ModelStringInput | null,
-};
-
-export type ModelFavoriteConnection = {
-  __typename: "ModelFavoriteConnection",
-  items:  Array<Favorite | null >,
-  nextToken?: string | null,
-};
-
-export type ModelSubscriptionDrinkFilterInput = {
+export type ModelSubscriptionLikedDrinkFilterInput = {
   id?: ModelSubscriptionIDInput | null,
-  name?: ModelSubscriptionStringInput | null,
-  category?: ModelSubscriptionStringInput | null,
-  description?: ModelSubscriptionStringInput | null,
+  drinkID?: ModelSubscriptionIntInput | null,
   createdAt?: ModelSubscriptionStringInput | null,
   updatedAt?: ModelSubscriptionStringInput | null,
-  and?: Array< ModelSubscriptionDrinkFilterInput | null > | null,
-  or?: Array< ModelSubscriptionDrinkFilterInput | null > | null,
+  and?: Array< ModelSubscriptionLikedDrinkFilterInput | null > | null,
+  or?: Array< ModelSubscriptionLikedDrinkFilterInput | null > | null,
+  userID?: ModelStringInput | null,
 };
 
 export type ModelSubscriptionIDInput = {
@@ -196,6 +147,18 @@ export type ModelSubscriptionIDInput = {
   notIn?: Array< string | null > | null,
 };
 
+export type ModelSubscriptionIntInput = {
+  ne?: number | null,
+  eq?: number | null,
+  le?: number | null,
+  lt?: number | null,
+  ge?: number | null,
+  gt?: number | null,
+  between?: Array< number | null > | null,
+  in?: Array< number | null > | null,
+  notIn?: Array< number | null > | null,
+};
+
 export type ModelSubscriptionStringInput = {
   ne?: string | null,
   eq?: string | null,
@@ -211,150 +174,83 @@ export type ModelSubscriptionStringInput = {
   notIn?: Array< string | null > | null,
 };
 
-export type ModelSubscriptionFavoriteFilterInput = {
-  id?: ModelSubscriptionIDInput | null,
-  userSub?: ModelSubscriptionStringInput | null,
-  drinkID?: ModelSubscriptionIDInput | null,
-  createdAt?: ModelSubscriptionStringInput | null,
-  updatedAt?: ModelSubscriptionStringInput | null,
-  and?: Array< ModelSubscriptionFavoriteFilterInput | null > | null,
-  or?: Array< ModelSubscriptionFavoriteFilterInput | null > | null,
-  owner?: ModelStringInput | null,
+export type CreateLikedDrinkMutationVariables = {
+  input: CreateLikedDrinkInput,
+  condition?: ModelLikedDrinkConditionInput | null,
 };
 
-export type CreateDrinkMutationVariables = {
-  input: CreateDrinkInput,
-  condition?: ModelDrinkConditionInput | null,
-};
-
-export type CreateDrinkMutation = {
-  createDrink?:  {
-    __typename: "Drink",
+export type CreateLikedDrinkMutation = {
+  createLikedDrink?:  {
+    __typename: "LikedDrink",
     id: string,
-    name: string,
-    category?: string | null,
-    description?: string | null,
+    userID: string,
+    drinkID: number,
     createdAt: string,
     updatedAt: string,
   } | null,
 };
 
-export type UpdateDrinkMutationVariables = {
-  input: UpdateDrinkInput,
-  condition?: ModelDrinkConditionInput | null,
+export type UpdateLikedDrinkMutationVariables = {
+  input: UpdateLikedDrinkInput,
+  condition?: ModelLikedDrinkConditionInput | null,
 };
 
-export type UpdateDrinkMutation = {
-  updateDrink?:  {
-    __typename: "Drink",
+export type UpdateLikedDrinkMutation = {
+  updateLikedDrink?:  {
+    __typename: "LikedDrink",
     id: string,
-    name: string,
-    category?: string | null,
-    description?: string | null,
+    userID: string,
+    drinkID: number,
     createdAt: string,
     updatedAt: string,
   } | null,
 };
 
-export type DeleteDrinkMutationVariables = {
-  input: DeleteDrinkInput,
-  condition?: ModelDrinkConditionInput | null,
+export type DeleteLikedDrinkMutationVariables = {
+  input: DeleteLikedDrinkInput,
+  condition?: ModelLikedDrinkConditionInput | null,
 };
 
-export type DeleteDrinkMutation = {
-  deleteDrink?:  {
-    __typename: "Drink",
+export type DeleteLikedDrinkMutation = {
+  deleteLikedDrink?:  {
+    __typename: "LikedDrink",
     id: string,
-    name: string,
-    category?: string | null,
-    description?: string | null,
+    userID: string,
+    drinkID: number,
     createdAt: string,
     updatedAt: string,
   } | null,
 };
 
-export type CreateFavoriteMutationVariables = {
-  input: CreateFavoriteInput,
-  condition?: ModelFavoriteConditionInput | null,
-};
-
-export type CreateFavoriteMutation = {
-  createFavorite?:  {
-    __typename: "Favorite",
-    id: string,
-    userSub: string,
-    drinkID: string,
-    createdAt: string,
-    updatedAt: string,
-    owner?: string | null,
-  } | null,
-};
-
-export type UpdateFavoriteMutationVariables = {
-  input: UpdateFavoriteInput,
-  condition?: ModelFavoriteConditionInput | null,
-};
-
-export type UpdateFavoriteMutation = {
-  updateFavorite?:  {
-    __typename: "Favorite",
-    id: string,
-    userSub: string,
-    drinkID: string,
-    createdAt: string,
-    updatedAt: string,
-    owner?: string | null,
-  } | null,
-};
-
-export type DeleteFavoriteMutationVariables = {
-  input: DeleteFavoriteInput,
-  condition?: ModelFavoriteConditionInput | null,
-};
-
-export type DeleteFavoriteMutation = {
-  deleteFavorite?:  {
-    __typename: "Favorite",
-    id: string,
-    userSub: string,
-    drinkID: string,
-    createdAt: string,
-    updatedAt: string,
-    owner?: string | null,
-  } | null,
-};
-
-export type GetDrinkQueryVariables = {
+export type GetLikedDrinkQueryVariables = {
   id: string,
 };
 
-export type GetDrinkQuery = {
-  getDrink?:  {
-    __typename: "Drink",
+export type GetLikedDrinkQuery = {
+  getLikedDrink?:  {
+    __typename: "LikedDrink",
     id: string,
-    name: string,
-    category?: string | null,
-    description?: string | null,
+    userID: string,
+    drinkID: number,
     createdAt: string,
     updatedAt: string,
   } | null,
 };
 
-export type ListDrinksQueryVariables = {
-  filter?: ModelDrinkFilterInput | null,
+export type ListLikedDrinksQueryVariables = {
+  filter?: ModelLikedDrinkFilterInput | null,
   limit?: number | null,
   nextToken?: string | null,
 };
 
-export type ListDrinksQuery = {
-  listDrinks?:  {
-    __typename: "ModelDrinkConnection",
+export type ListLikedDrinksQuery = {
+  listLikedDrinks?:  {
+    __typename: "ModelLikedDrinkConnection",
     items:  Array< {
-      __typename: "Drink",
+      __typename: "LikedDrink",
       id: string,
-      name: string,
-      category?: string | null,
-      description?: string | null,
+      userID: string,
+      drinkID: number,
       createdAt: string,
       updatedAt: string,
     } | null >,
@@ -362,139 +258,50 @@ export type ListDrinksQuery = {
   } | null,
 };
 
-export type GetFavoriteQueryVariables = {
-  id: string,
+export type OnCreateLikedDrinkSubscriptionVariables = {
+  filter?: ModelSubscriptionLikedDrinkFilterInput | null,
+  userID?: string | null,
 };
 
-export type GetFavoriteQuery = {
-  getFavorite?:  {
-    __typename: "Favorite",
+export type OnCreateLikedDrinkSubscription = {
+  onCreateLikedDrink?:  {
+    __typename: "LikedDrink",
     id: string,
-    userSub: string,
-    drinkID: string,
-    createdAt: string,
-    updatedAt: string,
-    owner?: string | null,
-  } | null,
-};
-
-export type ListFavoritesQueryVariables = {
-  filter?: ModelFavoriteFilterInput | null,
-  limit?: number | null,
-  nextToken?: string | null,
-};
-
-export type ListFavoritesQuery = {
-  listFavorites?:  {
-    __typename: "ModelFavoriteConnection",
-    items:  Array< {
-      __typename: "Favorite",
-      id: string,
-      userSub: string,
-      drinkID: string,
-      createdAt: string,
-      updatedAt: string,
-      owner?: string | null,
-    } | null >,
-    nextToken?: string | null,
-  } | null,
-};
-
-export type OnCreateDrinkSubscriptionVariables = {
-  filter?: ModelSubscriptionDrinkFilterInput | null,
-};
-
-export type OnCreateDrinkSubscription = {
-  onCreateDrink?:  {
-    __typename: "Drink",
-    id: string,
-    name: string,
-    category?: string | null,
-    description?: string | null,
+    userID: string,
+    drinkID: number,
     createdAt: string,
     updatedAt: string,
   } | null,
 };
 
-export type OnUpdateDrinkSubscriptionVariables = {
-  filter?: ModelSubscriptionDrinkFilterInput | null,
+export type OnUpdateLikedDrinkSubscriptionVariables = {
+  filter?: ModelSubscriptionLikedDrinkFilterInput | null,
+  userID?: string | null,
 };
 
-export type OnUpdateDrinkSubscription = {
-  onUpdateDrink?:  {
-    __typename: "Drink",
+export type OnUpdateLikedDrinkSubscription = {
+  onUpdateLikedDrink?:  {
+    __typename: "LikedDrink",
     id: string,
-    name: string,
-    category?: string | null,
-    description?: string | null,
+    userID: string,
+    drinkID: number,
     createdAt: string,
     updatedAt: string,
   } | null,
 };
 
-export type OnDeleteDrinkSubscriptionVariables = {
-  filter?: ModelSubscriptionDrinkFilterInput | null,
+export type OnDeleteLikedDrinkSubscriptionVariables = {
+  filter?: ModelSubscriptionLikedDrinkFilterInput | null,
+  userID?: string | null,
 };
 
-export type OnDeleteDrinkSubscription = {
-  onDeleteDrink?:  {
-    __typename: "Drink",
+export type OnDeleteLikedDrinkSubscription = {
+  onDeleteLikedDrink?:  {
+    __typename: "LikedDrink",
     id: string,
-    name: string,
-    category?: string | null,
-    description?: string | null,
+    userID: string,
+    drinkID: number,
     createdAt: string,
     updatedAt: string,
-  } | null,
-};
-
-export type OnCreateFavoriteSubscriptionVariables = {
-  filter?: ModelSubscriptionFavoriteFilterInput | null,
-  owner?: string | null,
-};
-
-export type OnCreateFavoriteSubscription = {
-  onCreateFavorite?:  {
-    __typename: "Favorite",
-    id: string,
-    userSub: string,
-    drinkID: string,
-    createdAt: string,
-    updatedAt: string,
-    owner?: string | null,
-  } | null,
-};
-
-export type OnUpdateFavoriteSubscriptionVariables = {
-  filter?: ModelSubscriptionFavoriteFilterInput | null,
-  owner?: string | null,
-};
-
-export type OnUpdateFavoriteSubscription = {
-  onUpdateFavorite?:  {
-    __typename: "Favorite",
-    id: string,
-    userSub: string,
-    drinkID: string,
-    createdAt: string,
-    updatedAt: string,
-    owner?: string | null,
-  } | null,
-};
-
-export type OnDeleteFavoriteSubscriptionVariables = {
-  filter?: ModelSubscriptionFavoriteFilterInput | null,
-  owner?: string | null,
-};
-
-export type OnDeleteFavoriteSubscription = {
-  onDeleteFavorite?:  {
-    __typename: "Favorite",
-    id: string,
-    userSub: string,
-    drinkID: string,
-    createdAt: string,
-    updatedAt: string,
-    owner?: string | null,
   } | null,
 };

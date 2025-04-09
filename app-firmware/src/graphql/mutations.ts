@@ -8,111 +8,54 @@ type GeneratedMutation<InputType, OutputType> = string & {
   __generatedMutationOutput: OutputType;
 };
 
-export const createDrink = /* GraphQL */ `mutation CreateDrink(
-  $input: CreateDrinkInput!
-  $condition: ModelDrinkConditionInput
+export const createLikedDrink = /* GraphQL */ `mutation CreateLikedDrink(
+  $input: CreateLikedDrinkInput!
+  $condition: ModelLikedDrinkConditionInput
 ) {
-  createDrink(input: $input, condition: $condition) {
+  createLikedDrink(input: $input, condition: $condition) {
     id
-    name
-    category
-    description
-    createdAt
-    updatedAt
-    __typename
-  }
-}
-` as GeneratedMutation<
-  APITypes.CreateDrinkMutationVariables,
-  APITypes.CreateDrinkMutation
->;
-export const updateDrink = /* GraphQL */ `mutation UpdateDrink(
-  $input: UpdateDrinkInput!
-  $condition: ModelDrinkConditionInput
-) {
-  updateDrink(input: $input, condition: $condition) {
-    id
-    name
-    category
-    description
-    createdAt
-    updatedAt
-    __typename
-  }
-}
-` as GeneratedMutation<
-  APITypes.UpdateDrinkMutationVariables,
-  APITypes.UpdateDrinkMutation
->;
-export const deleteDrink = /* GraphQL */ `mutation DeleteDrink(
-  $input: DeleteDrinkInput!
-  $condition: ModelDrinkConditionInput
-) {
-  deleteDrink(input: $input, condition: $condition) {
-    id
-    name
-    category
-    description
-    createdAt
-    updatedAt
-    __typename
-  }
-}
-` as GeneratedMutation<
-  APITypes.DeleteDrinkMutationVariables,
-  APITypes.DeleteDrinkMutation
->;
-export const createFavorite = /* GraphQL */ `mutation CreateFavorite(
-  $input: CreateFavoriteInput!
-  $condition: ModelFavoriteConditionInput
-) {
-  createFavorite(input: $input, condition: $condition) {
-    id
-    userSub
+    userID
     drinkID
     createdAt
     updatedAt
-    owner
     __typename
   }
 }
 ` as GeneratedMutation<
-  APITypes.CreateFavoriteMutationVariables,
-  APITypes.CreateFavoriteMutation
+  APITypes.CreateLikedDrinkMutationVariables,
+  APITypes.CreateLikedDrinkMutation
 >;
-export const updateFavorite = /* GraphQL */ `mutation UpdateFavorite(
-  $input: UpdateFavoriteInput!
-  $condition: ModelFavoriteConditionInput
+export const updateLikedDrink = /* GraphQL */ `mutation UpdateLikedDrink(
+  $input: UpdateLikedDrinkInput!
+  $condition: ModelLikedDrinkConditionInput
 ) {
-  updateFavorite(input: $input, condition: $condition) {
+  updateLikedDrink(input: $input, condition: $condition) {
     id
-    userSub
+    userID
     drinkID
     createdAt
     updatedAt
-    owner
     __typename
   }
 }
 ` as GeneratedMutation<
-  APITypes.UpdateFavoriteMutationVariables,
-  APITypes.UpdateFavoriteMutation
+  APITypes.UpdateLikedDrinkMutationVariables,
+  APITypes.UpdateLikedDrinkMutation
 >;
-export const deleteFavorite = /* GraphQL */ `mutation DeleteFavorite(
-  $input: DeleteFavoriteInput!
-  $condition: ModelFavoriteConditionInput
+export const deleteLikedDrink = /* GraphQL */ `mutation DeleteLikedDrink(
+  $input: DeleteLikedDrinkInput!
+  $condition: ModelLikedDrinkConditionInput
 ) {
-  deleteFavorite(input: $input, condition: $condition) {
+  deleteLikedDrink(input: $input, condition: $condition) {
     id
-    userSub
+    userID
     drinkID
     createdAt
     updatedAt
-    owner
     __typename
   }
 }
 ` as GeneratedMutation<
-  APITypes.DeleteFavoriteMutationVariables,
-  APITypes.DeleteFavoriteMutation
+  APITypes.DeleteLikedDrinkMutationVariables,
+  APITypes.DeleteLikedDrinkMutation
 >;

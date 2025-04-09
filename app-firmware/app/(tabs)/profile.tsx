@@ -15,15 +15,26 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 // Amplify (v6) imports
 import {
+  getCurrentUser,
   fetchUserAttributes,
   updateUserAttributes,
-  getCurrentUser,
 } from 'aws-amplify/auth';
 import { getUrl, uploadData } from 'aws-amplify/storage';
 import * as ImagePicker from 'expo-image-picker';
 
-// (A) Import the Amplify UI hook for sign-out
+// (A) GraphQL API client + queries/mutations
+import { Amplify } from 'aws-amplify';
+import config from '../../src/amplifyconfiguration.json';
+import { generateClient } from 'aws-amplify/api';
+import { listLikedDrinks } from '../../src/graphql/queries';
+import { createLikedDrink, deleteLikedDrink } from '../../src/graphql/mutations';
+
+// (B) Import the Amplify UI hook for sign-out
 import { useAuthenticator } from '@aws-amplify/ui-react-native';
+
+// Configure Amplify for this screen
+Amplify.configure(config);
+const client = generateClient();
 
 // ---------- TYPES ----------
 interface CognitoUserAttribute {
@@ -56,6 +67,23 @@ interface ProfileButton {
   content: string;
 }
 
+// Drink type, matching your S3 JSON structure
+interface Drink {
+  id: number;
+  name: string;
+  category: string;
+  description?: string;
+  image: string;
+  ingredients?: string;
+}
+
+// For storing the "LikedDrink" record info in memory, so we can delete it when unliking
+interface LikedDrinkRecord {
+  id: string;       // The DynamoDB record ID
+  drinkID: number;
+  userID: string;
+}
+
 // ---------- MAIN COMPONENT ----------
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -76,10 +104,26 @@ export default function ProfileScreen() {
   const [popupVisible, setPopupVisible] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
+  // All Drinks from S3
+  const [drinks, setDrinks] = useState<Drink[]>([]);
+
+  // Actual items the user liked (Drink objects). They remain displayed even if toggled off.
+  const [likedDrinksData, setLikedDrinksData] = useState<Drink[]>([]);
+
+  // We'll keep a map { drinkID -> recordID } to track existing LikedDrink records from DynamoDB
+  const [recordMap, setRecordMap] = useState<Record<number, string>>({});
+
+  // We'll keep a local set of "currently liked" IDs in the popup
+  // If a user toggles a heart, we update this set (and do DB create/delete).
+  const [likedIDsInPopup, setLikedIDsInPopup] = useState<Set<number>>(new Set());
+
   // (B) Get the signOut function from useAuthenticator
   const userSelector = (context: any) => [context.user];
   const { signOut } = useAuthenticator(userSelector);
 
+  // --------------------------------------------------------------------
+  // Fetch user data & user attributes
+  // --------------------------------------------------------------------
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -92,7 +136,6 @@ export default function ProfileScreen() {
         // 2) fetch user attributes from Cognito
         const attributesObject: Partial<Record<string, string>> =
           await fetchUserAttributes();
-
         const attributesArray: CognitoUserAttribute[] = Object.entries(
           attributesObject
         ).map(([Name, Value]) => ({ Name, Value: Value ?? '' }));
@@ -123,9 +166,6 @@ export default function ProfileScreen() {
             path: `public/profilePictures/${username}.jpg`,
             options: { validateObjectExistence: false },
           });
-
-          // Only set the profilePicture if we got a non-empty URL.
-          // Otherwise, we leave profilePicture as null.
           if (url) {
             setUser((prevUser) => ({
               ...prevUser,
@@ -148,7 +188,26 @@ export default function ProfileScreen() {
     fetchUserData();
   }, []);
 
-  // The button data for the bottom list
+  // --------------------------------------------------------------------
+  // Fetch all drinks from S3
+  // --------------------------------------------------------------------
+  useEffect(() => {
+    const fetchDrinksFromS3 = async () => {
+      try {
+        const s3res = await getUrl({ key: 'drinkMenu/drinks.json' });
+        const response = await fetch(s3res.url);
+        const data = await response.json();
+        setDrinks(data);
+      } catch (error) {
+        console.error('Error fetching drinks from S3:', error);
+      }
+    };
+    fetchDrinksFromS3();
+  }, []);
+
+  // --------------------------------------------------------------------
+  // Button definitions
+  // --------------------------------------------------------------------
   const buttons: ProfileButton[] = [
     {
       title: 'Edit Profile',
@@ -182,7 +241,9 @@ export default function ProfileScreen() {
     },
   ];
 
-  // Popup open/close
+  // --------------------------------------------------------------------
+  // Opening / closing the popup
+  // --------------------------------------------------------------------
   const openPopup = (data: PopupData) => {
     setPopupData(data);
     setPopupVisible(true);
@@ -192,6 +253,11 @@ export default function ProfileScreen() {
       duration: 100,
       useNativeDriver: false,
     }).start();
+
+    // If we're opening the "Liked Drinks" popup, fetch them
+    if (data.title === 'Liked Drinks') {
+      fetchUserLikedDrinks();
+    }
   };
 
   const closePopup = () => {
@@ -223,7 +289,9 @@ export default function ProfileScreen() {
     })
   ).current;
 
-  // Save changes to Cognito
+  // --------------------------------------------------------------------
+  // Save profile changes to Cognito
+  // --------------------------------------------------------------------
   const handleSaveProfile = async () => {
     try {
       await updateUserAttributes({
@@ -240,7 +308,9 @@ export default function ProfileScreen() {
     }
   };
 
+  // --------------------------------------------------------------------
   // Handle picking & uploading a profile pic
+  // --------------------------------------------------------------------
   const handleProfilePictureUpload = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -271,7 +341,9 @@ export default function ProfileScreen() {
     }
   };
 
-  // Format birthday
+  // --------------------------------------------------------------------
+  // Format birthday input
+  // --------------------------------------------------------------------
   const handleBirthdayInput = (text: string) => {
     let formattedText = text.replace(/[^0-9]/g, '');
     if (formattedText.length > 2 && formattedText.length <= 4) {
@@ -288,10 +360,120 @@ export default function ProfileScreen() {
     setBirthday(formattedText);
   };
 
+  // --------------------------------------------------------------------
+  // FETCH USER'S LIKED DRINKS
+  // --------------------------------------------------------------------
+  const fetchUserLikedDrinks = async () => {
+    try {
+      if (!user.username) return;
+
+      const res = await client.graphql({
+        query: listLikedDrinks,
+        variables: {
+          filter: {
+            userID: { eq: user.username },
+          },
+        },
+      });
+
+      // items = [{ id, userID, drinkID }]
+      const items: LikedDrinkRecord[] = res?.data?.listLikedDrinks?.items ?? [];
+
+      // Gather the IDs the user has liked
+      const likedIDs = items.map((r) => r.drinkID);
+
+      // Build a { drinkID -> recordID } map
+      const newRecordMap: Record<number, string> = {};
+      items.forEach((rec) => {
+        newRecordMap[rec.drinkID] = rec.id;
+      });
+      setRecordMap(newRecordMap);
+
+      // The user’s currently liked set
+      const newLikedSet = new Set(likedIDs);
+      setLikedIDsInPopup(newLikedSet);
+
+      // Filter the master "drinks" array so we have only the user's liked ones
+      const userLikedDrinks = drinks.filter((d) => likedIDs.includes(d.id));
+      setLikedDrinksData(userLikedDrinks);
+    } catch (err) {
+      console.error('Error fetching user liked drinks:', err);
+    }
+  };
+
+  // --------------------------------------------------------------------
+  // Toggle a like/unlike for a single drink in the "Liked Drinks" popup
+  // --------------------------------------------------------------------
+  const toggleDrinkLike = async (drink: Drink) => {
+    if (!user.username) return;
+
+    // Check if currently "liked"
+    const isCurrentlyLiked = likedIDsInPopup.has(drink.id);
+
+    try {
+      if (isCurrentlyLiked) {
+        // Un-liking => delete from DynamoDB
+        const existingRecordId = recordMap[drink.id];
+        if (!existingRecordId) {
+          console.warn('No LikedDrink record found for unliking. Aborting.');
+          return;
+        }
+
+        await client.graphql({
+          query: deleteLikedDrink,
+          variables: { input: { id: existingRecordId } },
+        });
+
+        // Remove from the local set
+        const updatedSet = new Set(likedIDsInPopup);
+        updatedSet.delete(drink.id);
+        setLikedIDsInPopup(updatedSet);
+
+        // Also remove it from recordMap
+        const newMap = { ...recordMap };
+        delete newMap[drink.id];
+        setRecordMap(newMap);
+
+        // Item remains displayed in likedDrinksData, but now with a gray heart
+      } else {
+        // Re-liking => create in DynamoDB
+        const createRes: any = await client.graphql({
+          query: createLikedDrink,
+          variables: {
+            input: {
+              userID: user.username,
+              drinkID: drink.id,
+            },
+          },
+        });
+        const newId = createRes?.data?.createLikedDrink?.id;
+        if (!newId) {
+          console.warn('No new ID returned from createLikedDrink.');
+          return;
+        }
+
+        // Add to the local set
+        const updatedSet = new Set(likedIDsInPopup);
+        updatedSet.add(drink.id);
+        setLikedIDsInPopup(updatedSet);
+
+        // Add to recordMap
+        const newMap = { ...recordMap };
+        newMap[drink.id] = newId;
+        setRecordMap(newMap);
+      }
+    } catch (err) {
+      console.error('Error toggling like state:', err);
+    }
+  };
+
+  // --------------------------------------------------------------------
   // Render the content of the popup
+  // --------------------------------------------------------------------
   const renderPopupContent = () => {
     if (!popupData) return null;
 
+    // --------------------- EDIT PROFILE -------------------
     if (popupData.title === 'Edit Profile') {
       return (
         <View style={styles.popupContent}>
@@ -346,9 +528,61 @@ export default function ProfileScreen() {
       );
     }
 
+    // --------------------- LIKED DRINKS -------------------
+    if (popupData.title === 'Liked Drinks') {
+      // Even after un-liking, we keep them displayed. The heart color reflects isCurrentlyLiked
+      return (
+        <View style={[styles.popupContent, { alignItems: 'flex-start' }]}>
+          {likedDrinksData.length === 0 ? (
+            <Text style={[styles.popupText, { marginTop: 10 }]}>
+              You haven’t liked any drinks yet.
+            </Text>
+          ) : (
+            <ScrollView style={{ marginTop: 10, width: '100%' }}>
+              {likedDrinksData.map((drink) => {
+                const isCurrentlyLiked = likedIDsInPopup.has(drink.id);
+                return (
+                  <View key={drink.id} style={styles.likedDrinkItem}>
+                    {/* Drink Image */}
+                    <Image
+                      source={{ uri: drink.image }}
+                      style={styles.likedDrinkImage}
+                    />
+
+                    <View style={{ marginLeft: 10, flex: 1, marginRight: 20 }}> {/* Adjusted marginRight to move the heart icon left */}
+                      <Text style={styles.likedDrinkName}>{drink.name}</Text>
+                      <Text style={styles.likedDrinkCategory}>
+                        {drink.category}
+                      </Text>
+                    </View>
+
+                    {/* Heart Icon */}
+                    <TouchableOpacity
+                      onPress={() => toggleDrinkLike(drink)}
+                      style={{ marginRight: 20 }} // Adjusted marginLeft to move the heart icon further left
+                    >
+                      <Ionicons
+                        name={isCurrentlyLiked ? 'heart' : 'heart-outline'}
+                        size={24}
+                        color={isCurrentlyLiked ? '#CE975E' : '#4F4F4F'}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          )}
+        </View>
+      );
+    }
+
+    // -------------------- EVERYTHING ELSE -------------------
     return <Text style={styles.popupText}>{popupData.content}</Text>;
   };
 
+  // --------------------------------------------------------------------
+  // RENDER
+  // --------------------------------------------------------------------
   return (
     <View style={styles.container}>
       {/* Top user info */}
@@ -382,12 +616,12 @@ export default function ProfileScreen() {
               key={idx}
               style={styles.button}
               onPress={() => {
-                // (C) If user taps the Sign Out item, call signOut directly.
+                // If user taps Sign Out, call signOut
                 if (button.title === 'Sign Out') {
                   signOut();
                   return;
                 }
-                // Otherwise, show the popup as before
+                // Otherwise, open the popup
                 openPopup({ title: button.title, content: button.content });
               }}
             >
@@ -499,8 +733,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
     backgroundColor: '#141414',
     elevation: 10,
     zIndex: 10,
@@ -571,5 +805,28 @@ const styles = StyleSheet.create({
     color: '#DFDCD9',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Liked Drinks styling
+  likedDrinkItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1F1F1F',
+    borderRadius: 10,
+    marginBottom: 10,
+    padding: 10,
+  },
+  likedDrinkImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+  },
+  likedDrinkName: {
+    color: '#DFDCD9',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  likedDrinkCategory: {
+    color: '#CE975E',
+    fontSize: 14,
   },
 });

@@ -19,12 +19,18 @@ import { Amplify } from 'aws-amplify';
 import { PubSub } from '@aws-amplify/pubsub';
 import config from '../../src/amplifyconfiguration.json';
 
-// NEW IMPORT: getUrl from Storage
+// GRAPHQL & AUTH IMPORTS
+import { generateClient } from 'aws-amplify/api';
+import { createLikedDrink, deleteLikedDrink } from '../../src/graphql/mutations';
+import { listLikedDrinks } from '../../src/graphql/queries';
+import { getCurrentUser } from 'aws-amplify/auth';
+import { fetchAuthSession } from 'aws-amplify/auth';
+import { Hub } from '@aws-amplify/core'; // -- NEW HUB LISTENER CODE --
+
 import { getUrl } from 'aws-amplify/storage';
 
-import { fetchAuthSession } from 'aws-amplify/auth';
-
 Amplify.configure(config);
+const client = generateClient();
 
 const pubsub = new PubSub({
   region: 'us-east-1',
@@ -40,9 +46,9 @@ type Drink = {
   id: number;
   name: string;
   category: string;
-  description?: string; // Still supported but not displayed in expanded card
+  description?: string; // Not displayed but stored
   image: string;
-  ingredients?: string; // Our new field: e.g. "2:2.0:1,8:1.0:1,17:1.0:2"
+  ingredients?: string; // e.g. "2:2.0:1,8:1.0:1,17:1.0:2"
 };
 
 type BaseIngredient = {
@@ -51,31 +57,30 @@ type BaseIngredient = {
   type: string;
 };
 
-// After parsing "2:2.0:1", we store:
 type ParsedIngredient = {
   id: number;
-  name: string;    // e.g. "Tequila"
-  amount: number;  // e.g. 2.0
-  priority: number;// e.g. 1
+  name: string;   
+  amount: number; 
+  priority: number;
 };
 
 interface DrinkItemProps {
   drink: Drink;
   isExpanded: boolean;
-  toggleFavorite: (id: number) => void;
+  isLiked: boolean;
+  toggleFavorite: (id: number) => Promise<void>;
   onExpand: (id: number) => void;
   onCollapse: () => void;
   allIngredients: BaseIngredient[];
   onExpandedLayout?: (layout: { x: number; y: number; width: number; height: number }) => void;
 }
 
-// Helper to parse "2:2.0:1,8:1.0:1,17:1.0:2" => array of {id, name, amount, priority}
+// Helper: parse "2:2.0:1,8:1.0:1,17:1.0:2" → array of { id, name, amount, priority }
 function parseIngredientString(
   ingredientString: string,
   allIngredients: BaseIngredient[]
 ): ParsedIngredient[] {
   if (!ingredientString) return [];
-
   return ingredientString.split(',').map((chunk) => {
     const [idStr, amountStr, priorityStr] = chunk.split(':');
     const id = parseInt(idStr, 10);
@@ -89,10 +94,11 @@ function parseIngredientString(
   });
 }
 
-// A single drink component
+// Single drink component
 function DrinkItem({
   drink,
   isExpanded,
+  isLiked,
   toggleFavorite,
   onExpand,
   onCollapse,
@@ -101,12 +107,10 @@ function DrinkItem({
 }: DrinkItemProps) {
   const [animValue] = useState(new Animated.Value(isExpanded ? 1 : 0));
   const [quantity, setQuantity] = useState(1);
-  const [isLiked, setIsLiked] = useState(false); // Local state for like toggle
 
   const incrementQuantity = () => setQuantity((prev) => (prev < 3 ? prev + 1 : prev));
   const decrementQuantity = () => setQuantity((prev) => (prev > 1 ? prev - 1 : prev));
 
-  // Parse ingredients once at render (or whenever allIngredients changes)
   const parsedIngredients = parseIngredientString(drink.ingredients ?? '', allIngredients);
 
   useEffect(() => {
@@ -121,7 +125,7 @@ function DrinkItem({
     try {
       await pubsub.publish({
         topics: ['liquorbot/publish'],
-        message: { content: drink.ingredients ?? '' }, // Wrap the string in an object
+        message: { content: drink.ingredients ?? '' },
       });
       console.log(`Published command="${drink.ingredients}"`);
     } catch (err) {
@@ -129,13 +133,12 @@ function DrinkItem({
     }
   }
 
-  const handleToggleLike = () => {
-    setIsLiked((prev) => !prev); // Toggle the like state
-    toggleFavorite(drink.id); // Call the parent toggle function
-  };
+  function handleToggleLike() {
+    toggleFavorite(drink.id);
+  }
 
-  // When expanded, show large card
   if (isExpanded) {
+    // Expanded card layout
     return (
       <Animated.View
         onLayout={(e) => onExpandedLayout?.(e.nativeEvent.layout)}
@@ -167,14 +170,14 @@ function DrinkItem({
         <TouchableOpacity
           onPress={(e) => {
             e.stopPropagation();
-            handleToggleLike(); // Use the local toggle handler
+            handleToggleLike();
           }}
           style={styles.expandedFavoriteButton}
         >
           <Ionicons
-            name={isLiked ? 'heart' : 'heart-outline'} // Change icon based on state
+            name={isLiked ? 'heart' : 'heart-outline'}
             size={24}
-            color={isLiked ? '#CE975E' : '#4F4F4F'} // Change color based on state
+            color={isLiked ? '#CE975E' : '#4F4F4F'}
           />
         </TouchableOpacity>
 
@@ -186,15 +189,13 @@ function DrinkItem({
           <Image source={{ uri: drink.image }} style={styles.expandedImage} />
         </View>
 
-        {/* In place of the old "description", show the drink's ingredients */}
         <View style={styles.expandeddetailContainer}>
           {parsedIngredients.length === 0 ? (
-            <Text style={styles.expandeddescriptionText}>
-              No ingredients found.
-            </Text>
+            <Text style={styles.expandeddescriptionText}>No ingredients found.</Text>
           ) : (
             <Text style={styles.expandeddescriptionText}>
-              Contains refreshing {parsedIngredients
+              Contains refreshing{' '}
+              {parsedIngredients
                 .map((item, index) => {
                   if (index === parsedIngredients.length - 1 && index !== 0) {
                     return `and ${item.name}`;
@@ -222,7 +223,7 @@ function DrinkItem({
       </Animated.View>
     );
   } else {
-    // Collapsed item
+    // Collapsed card layout
     return (
       <TouchableOpacity
         key={drink.id}
@@ -236,16 +237,17 @@ function DrinkItem({
         <TouchableOpacity
           onPress={(e) => {
             e.stopPropagation();
-            handleToggleLike(); // Use the local toggle handler
+            handleToggleLike();
           }}
           style={styles.favoriteButton}
         >
           <Ionicons
-            name={isLiked ? 'heart' : 'heart-outline'} // Change icon based on state
+            name={isLiked ? 'heart' : 'heart-outline'}
             size={24}
-            color={isLiked ? '#CE975E' : '#4F4F4F'} // Change color based on state
+            color={isLiked ? '#CE975E' : '#4F4F4F'}
           />
         </TouchableOpacity>
+
         <Image source={{ uri: drink.image }} style={styles.image} />
         <Text style={styles.boxText}>{drink.name}</Text>
         <Text style={styles.categoryText}>{drink.category}</Text>
@@ -262,16 +264,21 @@ export default function MenuScreen() {
   const [allIngredients, setAllIngredients] = useState<BaseIngredient[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Category, expansions, search
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [expandedDrink, setExpandedDrink] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [scrollViewHeight, setScrollViewHeight] = useState(0);
+
+  // For IoT messages
   const [latestMessage, setLatestMessage] = useState('');
 
-  // Create the animated value for the green dot
-  const glowAnimation = useRef(new Animated.Value(1)).current;
+  // Liked drinks
+  const [userID, setUserID] = useState<string | null>(null);
+  const [likedDrinks, setLikedDrinks] = useState<number[]>([]); // store the drink IDs
 
   // Glow animation for the green dot
+  const glowAnimation = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -289,15 +296,11 @@ export default function MenuScreen() {
     ).start();
   }, [glowAnimation]);
 
-  // Fetch drinks.json
+  // Fetch drinks.json & ingredients.json from S3
   useEffect(() => {
     async function fetchDrinksFromS3() {
       try {
-        // 1. S3 key for your drinks
-        const drinksUrl = await getUrl({
-          key: 'drinkMenu/drinks.json',
-          // options: { level: 'guest' }, // If needed
-        });
+        const drinksUrl = await getUrl({ key: 'drinkMenu/drinks.json' });
         const response = await fetch(drinksUrl.url);
         const data = await response.json();
         setDrinks(data);
@@ -306,13 +309,9 @@ export default function MenuScreen() {
       }
     }
 
-    // Also fetch ingredients.json
     async function fetchIngredientsFromS3() {
       try {
-        const ingUrl = await getUrl({
-          key: 'drinkMenu/ingredients.json',
-          // options: { level: 'guest' },
-        });
+        const ingUrl = await getUrl({ key: 'drinkMenu/ingredients.json' });
         const response = await fetch(ingUrl.url);
         const data = await response.json();
         setAllIngredients(data);
@@ -326,7 +325,69 @@ export default function MenuScreen() {
     );
   }, []);
 
-  // If you want to log the identity ID + subscribe to IoT
+  // Fetch user ID on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const user = await getCurrentUser();
+        if (user?.username) {
+          setUserID(user.username);
+        } else {
+          console.warn('No authenticated user found');
+        }
+      } catch (err) {
+        console.error('Error getting current user:', err);
+      }
+    })();
+  }, []);
+
+  // We'll define our "loadLikedDrinks" as a function so we can call it from multiple places
+  async function loadLikedDrinks() {
+    if (!userID) return;
+    try {
+      const res = await client.graphql({
+        query: listLikedDrinks,
+        variables: {
+          filter: {
+            userID: { eq: userID },
+          },
+        },
+      });
+      const items = res.data?.listLikedDrinks?.items || [];
+      // items = [{ id, drinkID, userID }, ...]
+      const justDrinkIDs = items.map((item: any) => item.drinkID);
+      setLikedDrinks(justDrinkIDs);
+    } catch (error) {
+      console.error('Error loading liked drinks:', error);
+    }
+  }
+
+  // Once we have userID, load that user's liked drinks
+  useEffect(() => {
+    if (userID) {
+      loadLikedDrinks();
+    }
+  }, [userID]);
+
+  // -- NEW HUB LISTENER CODE --
+  // Listen for "likeChannel" events so that if Profile changes LikedDrinks,
+  // we reload them in this MenuScreen instantly
+  useEffect(() => {
+    const hubListener = (data: any) => {
+      const { event } = data.payload || {};
+      if (event === 'likeUpdated') {
+        console.log('Received likeUpdated event from Profile. Reloading...');
+        loadLikedDrinks();
+      }
+    };
+
+    const unsubscribe = Hub.listen('likeChannel', hubListener);
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  // Subscribe to IoT messages (sample usage)
   useEffect(() => {
     (async () => {
       try {
@@ -353,22 +414,80 @@ export default function MenuScreen() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Handle toggle favorite
-  function toggleFavorite(drinkId: number) {
-    console.log(`Toggled favorite for drink ID: ${drinkId}`);
+  // Toggle a favorite (create or delete from DynamoDB)
+  async function toggleFavorite(drinkId: number) {
+    if (!userID) {
+      console.warn('No user ID. Cannot toggle favorite.');
+      return;
+    }
+
+    // If already liked, delete it
+    if (likedDrinks.includes(drinkId)) {
+      try {
+        // 1) Find the existing LikedDrink record
+        const fetchRes = await client.graphql({
+          query: listLikedDrinks,
+          variables: {
+            filter: {
+              userID: { eq: userID },
+              drinkID: { eq: drinkId },
+            },
+          },
+        });
+        const existing = fetchRes.data?.listLikedDrinks?.items?.[0];
+
+        // If there's no record in the DB, it might have been unliked from Profile
+        // so forcibly remove from local state to keep UI consistent
+        if (!existing) {
+          console.warn('No existing record found to delete — removing locally.');
+          setLikedDrinks((prev) => prev.filter((id) => id !== drinkId));
+          return;
+        }
+
+        // 2) Otherwise, delete from DB
+        await client.graphql({
+          query: deleteLikedDrink,
+          variables: { input: { id: existing.id } },
+        });
+
+        // 3) Update local state
+        setLikedDrinks((prev) => prev.filter((id) => id !== drinkId));
+      } catch (error) {
+        console.error('Error deleting LikedDrink:', error);
+      }
+    } else {
+      // Otherwise create it
+      try {
+        await client.graphql({
+          query: createLikedDrink,
+          variables: {
+            input: {
+              userID: userID,
+              drinkID: drinkId,
+            },
+          },
+        });
+        setLikedDrinks((prev) => [...prev, drinkId]);
+      } catch (error) {
+        console.error('Error creating LikedDrink:', error);
+      }
+    }
   }
 
-  // A few sample categories
+  // Categories to display up top
   const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey'];
 
-  // Filter drinks based on category + search
+  // Filter drinks by category & search
   const filteredDrinks = drinks.filter((drink) => {
-    const matchesCategory = selectedCategory === 'All' || drink.category === selectedCategory;
-    const matchesSearch = drink.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory =
+      selectedCategory === 'All' || drink.category === selectedCategory;
+    const matchesSearch = drink.name
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
-  // Re-arrange if expanded (move the expanded item up a row if needed)
+  // If expanded, shift the expanded item up a row if it’s on the right side
   const renderedDrinks = [...filteredDrinks];
   if (expandedDrink != null) {
     const expandedIndex = renderedDrinks.findIndex((d) => d.id === expandedDrink);
@@ -475,6 +594,7 @@ export default function MenuScreen() {
               key={drink.id}
               drink={drink}
               isExpanded={expandedDrink === drink.id}
+              isLiked={likedDrinks.includes(drink.id)}
               toggleFavorite={toggleFavorite}
               onExpand={(id: number) => setExpandedDrink(id)}
               onCollapse={() => setExpandedDrink(null)}

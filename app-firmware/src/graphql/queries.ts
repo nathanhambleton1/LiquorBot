@@ -8,69 +8,32 @@ type GeneratedQuery<InputType, OutputType> = string & {
   __generatedQueryOutput: OutputType;
 };
 
-export const getDrink = /* GraphQL */ `query GetDrink($id: ID!) {
-  getDrink(id: $id) {
+export const getLikedDrink = /* GraphQL */ `query GetLikedDrink($id: ID!) {
+  getLikedDrink(id: $id) {
     id
-    name
-    category
-    description
-    createdAt
-    updatedAt
-    __typename
-  }
-}
-` as GeneratedQuery<APITypes.GetDrinkQueryVariables, APITypes.GetDrinkQuery>;
-export const listDrinks = /* GraphQL */ `query ListDrinks(
-  $filter: ModelDrinkFilterInput
-  $limit: Int
-  $nextToken: String
-) {
-  listDrinks(filter: $filter, limit: $limit, nextToken: $nextToken) {
-    items {
-      id
-      name
-      category
-      description
-      createdAt
-      updatedAt
-      __typename
-    }
-    nextToken
-    __typename
-  }
-}
-` as GeneratedQuery<
-  APITypes.ListDrinksQueryVariables,
-  APITypes.ListDrinksQuery
->;
-export const getFavorite = /* GraphQL */ `query GetFavorite($id: ID!) {
-  getFavorite(id: $id) {
-    id
-    userSub
+    userID
     drinkID
     createdAt
     updatedAt
-    owner
     __typename
   }
 }
 ` as GeneratedQuery<
-  APITypes.GetFavoriteQueryVariables,
-  APITypes.GetFavoriteQuery
+  APITypes.GetLikedDrinkQueryVariables,
+  APITypes.GetLikedDrinkQuery
 >;
-export const listFavorites = /* GraphQL */ `query ListFavorites(
-  $filter: ModelFavoriteFilterInput
+export const listLikedDrinks = /* GraphQL */ `query ListLikedDrinks(
+  $filter: ModelLikedDrinkFilterInput
   $limit: Int
   $nextToken: String
 ) {
-  listFavorites(filter: $filter, limit: $limit, nextToken: $nextToken) {
+  listLikedDrinks(filter: $filter, limit: $limit, nextToken: $nextToken) {
     items {
       id
-      userSub
+      userID
       drinkID
       createdAt
       updatedAt
-      owner
       __typename
     }
     nextToken
@@ -78,6 +41,6 @@ export const listFavorites = /* GraphQL */ `query ListFavorites(
   }
 }
 ` as GeneratedQuery<
-  APITypes.ListFavoritesQueryVariables,
-  APITypes.ListFavoritesQuery
+  APITypes.ListLikedDrinksQueryVariables,
+  APITypes.ListLikedDrinksQuery
 >;
