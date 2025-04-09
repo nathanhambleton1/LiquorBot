@@ -17,7 +17,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import {
   fetchUserAttributes,
   updateUserAttributes,
-  getCurrentUser
+  getCurrentUser,
 } from 'aws-amplify/auth';
 import { getUrl, uploadData } from 'aws-amplify/storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -90,10 +90,12 @@ export default function ProfileScreen() {
         const { username } = currentUser;
 
         // 2) fetch user attributes from Cognito
-        const attributesObject: Partial<Record<string, string>> = await fetchUserAttributes();
-        const attributesArray: CognitoUserAttribute[] = Object.entries(attributesObject).map(
-          ([Name, Value]) => ({ Name, Value: Value ?? '' })
-        );
+        const attributesObject: Partial<Record<string, string>> =
+          await fetchUserAttributes();
+
+        const attributesArray: CognitoUserAttribute[] = Object.entries(
+          attributesObject
+        ).map(([Name, Value]) => ({ Name, Value: Value ?? '' }));
 
         // Helper to find attribute by name
         const findAttr = (attrName: string) =>
@@ -121,6 +123,9 @@ export default function ProfileScreen() {
             path: `public/profilePictures/${username}.jpg`,
             options: { validateObjectExistence: false },
           });
+
+          // Only set the profilePicture if we got a non-empty URL.
+          // Otherwise, we leave profilePicture as null.
           if (url) {
             setUser((prevUser) => ({
               ...prevUser,
@@ -145,12 +150,36 @@ export default function ProfileScreen() {
 
   // The button data for the bottom list
   const buttons: ProfileButton[] = [
-    { title: 'Edit Profile', icon: 'create-outline', content: 'Edit your profile details below.' },
-    { title: 'Liked Drinks', icon: 'heart-outline', content: 'View your liked drinks.' },
-    { title: 'Pour History', icon: 'time-outline', content: 'View your pour history.' },
-    { title: 'Settings', icon: 'settings-outline', content: 'Adjust your app settings.' },
-    { title: 'Help', icon: 'help-circle-outline', content: 'Get help and support.' },
-    { title: 'Sign Out', icon: 'log-out-outline', content: 'Sign out of your account.' },
+    {
+      title: 'Edit Profile',
+      icon: 'create-outline',
+      content: 'Edit your profile details below.',
+    },
+    {
+      title: 'Liked Drinks',
+      icon: 'heart-outline',
+      content: 'View your liked drinks.',
+    },
+    {
+      title: 'Pour History',
+      icon: 'time-outline',
+      content: 'View your pour history.',
+    },
+    {
+      title: 'Settings',
+      icon: 'settings-outline',
+      content: 'Adjust your app settings.',
+    },
+    {
+      title: 'Help',
+      icon: 'help-circle-outline',
+      content: 'Get help and support.',
+    },
+    {
+      title: 'Sign Out',
+      icon: 'log-out-outline',
+      content: 'Sign out of your account.',
+    },
   ];
 
   // Popup open/close
@@ -230,10 +259,12 @@ export default function ProfileScreen() {
         await uploadData({ path: s3Path, data: blob });
 
         const { url } = await getUrl({ path: s3Path });
-        setUser((prevUser) => ({
-          ...prevUser,
-          profilePicture: url.toString(),
-        }));
+        if (url) {
+          setUser((prevUser) => ({
+            ...prevUser,
+            profilePicture: url.toString(),
+          }));
+        }
       }
     } catch (error) {
       console.error('Error uploading profile picture:', error);
@@ -246,7 +277,10 @@ export default function ProfileScreen() {
     if (formattedText.length > 2 && formattedText.length <= 4) {
       formattedText = `${formattedText.slice(0, 2)}/${formattedText.slice(2)}`;
     } else if (formattedText.length > 4) {
-      formattedText = `${formattedText.slice(0, 2)}/${formattedText.slice(2, 4)}/${formattedText.slice(4, 8)}`;
+      formattedText = `${formattedText.slice(0, 2)}/${formattedText.slice(
+        2,
+        4
+      )}/${formattedText.slice(4, 8)}`;
     }
     if (formattedText.length > 10) {
       formattedText = formattedText.slice(0, 10);
@@ -317,10 +351,9 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
-
       {/* Top user info */}
       <View style={styles.userInfoContainer}>
-        <TouchableOpacity onPress={handleProfilePictureUpload}>
+        <TouchableOpacity onPress={handleProfilePictureUpload} style={styles.profilePictureContainer}>
           <Image
             source={
               user.profilePicture
@@ -328,7 +361,14 @@ export default function ProfileScreen() {
                 : require('../../assets/images/default-profile.png')
             }
             style={styles.profilePicture}
+            onError={() => {
+              // If the URL is invalid or fails to load, fall back to default
+              setUser((prev) => ({ ...prev, profilePicture: null }));
+            }}
           />
+          <View style={styles.editIconContainer}>
+            <Ionicons name="pencil" size={18} color="#DFDCD9" />
+          </View>
         </TouchableOpacity>
         <Text style={styles.usernameText}>{user.username}</Text>
         <Text style={styles.emailText}>{user.email}</Text>
@@ -344,7 +384,7 @@ export default function ProfileScreen() {
               onPress={() => {
                 // (C) If user taps the Sign Out item, call signOut directly.
                 if (button.title === 'Sign Out') {
-                  signOut(); 
+                  signOut();
                   return;
                 }
                 // Otherwise, show the popup as before
@@ -398,12 +438,23 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 20,
   },
+  profilePictureContainer: {
+    position: 'relative',
+  },
   profilePicture: {
     width: 125,
     height: 125,
     borderRadius: 75,
     marginBottom: 20,
     marginTop: 20,
+  },
+  editIconContainer: {
+    position: 'absolute',
+    bottom: 20,
+    right: 10,
+    backgroundColor: '#1F1F1F',
+    borderRadius: 50,
+    padding: 5,
   },
   usernameText: {
     color: '#DFDCD9',
