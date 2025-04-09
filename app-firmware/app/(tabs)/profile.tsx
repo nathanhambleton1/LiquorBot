@@ -534,9 +534,11 @@ export default function ProfileScreen() {
       return (
         <View style={[styles.popupContent, { alignItems: 'flex-start' }]}>
           {likedDrinksData.length === 0 ? (
-            <Text style={[styles.popupText, { marginTop: 10 }]}>
-              You haven’t liked any drinks yet.
-            </Text>
+            <View>
+              <Text style={styles.popupText}>
+                You haven’t liked any drinks yet.
+              </Text>
+            </View>
           ) : (
             <ScrollView style={{ marginTop: 10, width: '100%' }}>
               {likedDrinksData.map((drink) => {
@@ -549,17 +551,15 @@ export default function ProfileScreen() {
                       style={styles.likedDrinkImage}
                     />
 
-                    <View style={{ marginLeft: 10, flex: 1, marginRight: 20 }}> {/* Adjusted marginRight to move the heart icon left */}
+                    <View style={{ marginLeft: 10, flex: 1, marginRight: 20 }}>
                       <Text style={styles.likedDrinkName}>{drink.name}</Text>
-                      <Text style={styles.likedDrinkCategory}>
-                        {drink.category}
-                      </Text>
+                      <Text style={styles.likedDrinkCategory}>{drink.category}</Text>
                     </View>
 
                     {/* Heart Icon */}
                     <TouchableOpacity
                       onPress={() => toggleDrinkLike(drink)}
-                      style={{ marginRight: 20 }} // Adjusted marginLeft to move the heart icon further left
+                      style={{ marginRight: 20 }} // Adjusted marginRight to move the heart icon further left
                     >
                       <Ionicons
                         name={isCurrentlyLiked ? 'heart' : 'heart-outline'}
