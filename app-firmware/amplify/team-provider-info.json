@@ -19,10 +19,7 @@
         "liquorbotf668a8fa": {}
       },
       "storage": {
-        "liquorbotd7022146": {
-          "bucketName": "liquorbot-app-storage",
-          "region": "us-east-1"
-        }
+        "liquorbotAppStorage": {}
       }
     }
   }

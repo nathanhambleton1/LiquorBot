@@ -40,14 +40,28 @@ if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 
-// Define a type for a drink object
+// -- DRINK & INGREDIENT TYPES --
 type Drink = {
   id: number;
   name: string;
   category: string;
-  description: string;
-  // image can be string (from S3) or require() – you can type as `string` if storing S3 URLs
+  description?: string; // Still supported but not displayed in expanded card
   image: string;
+  ingredients?: string; // Our new field: e.g. "2:2.0:1,8:1.0:1,17:1.0:2"
+};
+
+type BaseIngredient = {
+  id: number;
+  name: string;
+  type: string;
+};
+
+// After parsing "2:2.0:1", we store:
+type ParsedIngredient = {
+  id: number;
+  name: string;    // e.g. "Tequila"
+  amount: number;  // e.g. 2.0
+  priority: number;// e.g. 1
 };
 
 interface DrinkItemProps {
@@ -57,7 +71,28 @@ interface DrinkItemProps {
   onExpand: (id: number) => void;
   onCollapse: () => void;
   favorites: number[];
+  allIngredients: BaseIngredient[];            // Pass in so we can look up names
   onExpandedLayout?: (layout: { x: number; y: number; width: number; height: number }) => void;
+}
+
+// Helper to parse "2:2.0:1,8:1.0:1,17:1.0:2" => array of {id, name, amount, priority}
+function parseIngredientString(
+  ingredientString: string,
+  allIngredients: BaseIngredient[]
+): ParsedIngredient[] {
+  if (!ingredientString) return [];
+
+  return ingredientString.split(',').map((chunk) => {
+    const [idStr, amountStr, priorityStr] = chunk.split(':');
+    const id = parseInt(idStr, 10);
+    const amount = parseFloat(amountStr);
+    const priority = parseInt(priorityStr, 10);
+
+    const ingObj = allIngredients.find((ing) => ing.id === id);
+    const name = ingObj ? ingObj.name : `Ingredient #${id} (not found)`;
+
+    return { id, name, amount, priority };
+  });
 }
 
 // A single drink component
@@ -68,17 +103,17 @@ function DrinkItem({
   onExpand,
   onCollapse,
   favorites,
+  allIngredients,
   onExpandedLayout,
 }: DrinkItemProps) {
   const [animValue] = useState(new Animated.Value(isExpanded ? 1 : 0));
   const [quantity, setQuantity] = useState(1);
 
-  const incrementQuantity = () => {
-    setQuantity((prev) => (prev < 3 ? prev + 1 : prev));
-  };
-  const decrementQuantity = () => {
-    setQuantity((prev) => (prev > 1 ? prev - 1 : prev));
-  };
+  const incrementQuantity = () => setQuantity((prev) => (prev < 3 ? prev + 1 : prev));
+  const decrementQuantity = () => setQuantity((prev) => (prev > 1 ? prev - 1 : prev));
+
+  // Parse ingredients once at render (or whenever allIngredients changes)
+  const parsedIngredients = parseIngredientString(drink.ingredients ?? '', allIngredients);
 
   useEffect(() => {
     Animated.timing(animValue, {
@@ -101,7 +136,7 @@ function DrinkItem({
     }
   }
 
-  // For the expanded layout
+  // When expanded, show large card
   if (isExpanded) {
     return (
       <Animated.View
@@ -150,12 +185,27 @@ function DrinkItem({
             <Text style={styles.expandedboxText}>{drink.name}</Text>
             <Text style={styles.expandedcategoryText}>{drink.category}</Text>
           </View>
-          {/* If `image` is a URL string, use: <Image source={{ uri: drink.image }} ... /> */}
           <Image source={{ uri: drink.image }} style={styles.expandedImage} />
         </View>
 
+        {/* In place of the old "description", show the drink's ingredients */}
         <View style={styles.expandeddetailContainer}>
-          <Text style={styles.expandeddescriptionText}>{drink.description}</Text>
+          {parsedIngredients.length === 0 ? (
+            <Text style={styles.expandeddescriptionText}>
+              No ingredients found.
+            </Text>
+          ) : (
+            <Text style={styles.expandeddescriptionText}>
+              Contains refreshing {parsedIngredients
+                .map((item, index) => {
+                  if (index === parsedIngredients.length - 1 && index !== 0) {
+                    return `and ${item.name}`;
+                  }
+                  return item.name;
+                })
+                .join(', ')}.
+            </Text>
+          )}
         </View>
 
         <View style={styles.quantityContainer}>
@@ -208,9 +258,10 @@ function DrinkItem({
 
 export default function MenuScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
-  
-  // NEW: We store the drinks from S3 in state
+
+  // Drinks & Ingredients from S3
   const [drinks, setDrinks] = useState<Drink[]>([]);
+  const [allIngredients, setAllIngredients] = useState<BaseIngredient[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -241,35 +292,44 @@ export default function MenuScreen() {
     ).start();
   }, [glowAnimation]);
 
-  // Fetch the drinks from S3 once on mount
+  // Fetch drinks.json
   useEffect(() => {
     async function fetchDrinksFromS3() {
       try {
-        // 1. Get a signed URL for the S3 file
-        //    By default this tries the 'public/' path with guest access
+        // 1. S3 key for your drinks
         const drinksUrl = await getUrl({
-          key: 'drinkMenu/drinks.json' // path in S3 (under 'public/drinkMenu/drinks.json')
-          // If you need to specify explicitly:
-          // options: { level: 'guest' }
+          key: 'drinkMenu/drinks.json',
+          // options: { level: 'guest' }, // If needed
         });
-
-        // 2. Fetch the JSON from that URL
         const response = await fetch(drinksUrl.url);
         const data = await response.json();
-
-        // 3. Set our state
         setDrinks(data);
       } catch (error) {
         console.error('Error fetching drinks from S3:', error);
-      } finally {
-        setLoading(false);
       }
     }
 
-    fetchDrinksFromS3();
+    // Also fetch ingredients.json
+    async function fetchIngredientsFromS3() {
+      try {
+        const ingUrl = await getUrl({
+          key: 'drinkMenu/ingredients.json',
+          // options: { level: 'guest' },
+        });
+        const response = await fetch(ingUrl.url);
+        const data = await response.json();
+        setAllIngredients(data);
+      } catch (error) {
+        console.error('Error fetching ingredients from S3:', error);
+      }
+    }
+
+    Promise.all([fetchDrinksFromS3(), fetchIngredientsFromS3()]).finally(() =>
+      setLoading(false)
+    );
   }, []);
 
-  // If you want to log the identity ID
+  // If you want to log the identity ID + subscribe to IoT
   useEffect(() => {
     (async () => {
       try {
@@ -280,7 +340,6 @@ export default function MenuScreen() {
       }
     })();
 
-    // IoT subscription
     const subscription = pubsub.subscribe({ topics: ['messages'] }).subscribe({
       next: (data) => {
         console.log('Received message from IoT:', data);
@@ -341,7 +400,7 @@ export default function MenuScreen() {
     }
   }
 
-  // Categories you had
+  // A few sample categories
   const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey'];
 
   // Filter drinks based on category + search
@@ -351,7 +410,7 @@ export default function MenuScreen() {
     return matchesCategory && matchesSearch;
   });
 
-  // We rearrange if expanded
+  // Re-arrange if expanded (move the expanded item up a row if needed)
   const renderedDrinks = [...filteredDrinks];
   if (expandedDrink != null) {
     const expandedIndex = renderedDrinks.findIndex((d) => d.id === expandedDrink);
@@ -367,7 +426,6 @@ export default function MenuScreen() {
     }
   };
 
-  // If you want a spinner or fallback
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center' }}>
@@ -378,7 +436,7 @@ export default function MenuScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header with Drinks title and LiquorBot connection info */}
+      {/* Header */}
       <View style={styles.headerContainer}>
         <Text style={styles.headerText}>Drinks</Text>
         <View style={styles.connectionRow}>
@@ -463,6 +521,7 @@ export default function MenuScreen() {
               onExpand={(id: number) => setExpandedDrink(id)}
               onCollapse={() => setExpandedDrink(null)}
               favorites={favorites}
+              allIngredients={allIngredients} // Pass so we can look up names
               onExpandedLayout={handleExpandedLayout}
             />
           ))}
@@ -479,6 +538,7 @@ export default function MenuScreen() {
   );
 }
 
+// -------------------------------- STYLES --------------------------------
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
@@ -646,6 +706,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'left',
     alignSelf: 'flex-start',
+    marginBottom: 5,
   },
   expandedContent: {
     flexDirection: 'row',
@@ -660,7 +721,7 @@ const styles = StyleSheet.create({
   },
   expandeddetailContainer: {
     flex: 1,
-    marginTop: 50,
+    marginTop: 40,
     marginRight: 10,
   },
   boxText: {
