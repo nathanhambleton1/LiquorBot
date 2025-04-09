@@ -27,9 +27,13 @@ import { Amplify } from 'aws-amplify';
 import config from '../../src/amplifyconfiguration.json';
 import { generateClient } from 'aws-amplify/api';
 import { listLikedDrinks } from '../../src/graphql/queries';
+import { deleteLikedDrink } from '../../src/graphql/mutations';  // <-- added import
 
 // (B) Import the Amplify UI hook for sign-out
 import { useAuthenticator } from '@aws-amplify/ui-react-native';
+
+// Import Hub for event listening
+import { Hub } from '@aws-amplify/core';
 
 // Configure Amplify for this screen
 Amplify.configure(config);
@@ -202,6 +206,20 @@ export default function ProfileScreen() {
       }
     };
     fetchDrinksFromS3();
+  }, []);
+
+  // --------------------------------------------------------------------
+  // Hub listener for liked drinks updates
+  // --------------------------------------------------------------------
+  useEffect(() => {
+    const hubListener = (data: any) => {
+      const { event } = data.payload || {};
+      if (event === 'likeUpdated') {
+        fetchUserLikedDrinks();
+      }
+    };
+    const unsubscribe = Hub.listen('likeChannel', hubListener);
+    return () => unsubscribe();
   }, []);
 
   // --------------------------------------------------------------------
@@ -403,8 +421,24 @@ export default function ProfileScreen() {
   // --------------------------------------------------------------------
   // Remove liked drink
   // --------------------------------------------------------------------
-  const removeLikedDrink = (drinkId: number) => {
-    setLikedDrinksData((prev) => prev.filter((drink) => drink.id !== drinkId));
+  const removeLikedDrink = async (drinkId: number) => {
+    const recordId = recordMap[drinkId];
+    if (!recordId) {
+      console.warn("Record not found for removal");
+      return;
+    }
+    try {
+      await client.graphql({
+        query: deleteLikedDrink,
+        variables: { input: { id: recordId } },
+      });
+      // Refresh the liked drinks list from DB
+      fetchUserLikedDrinks();
+      // Dispatch event so Menu page updates.
+      Hub.dispatch('likeChannel', { event: 'likeUpdated', data: {} });
+    } catch (err) {
+      console.error("Error deleting liked drink:", err);
+    }
   };
 
   // --------------------------------------------------------------------

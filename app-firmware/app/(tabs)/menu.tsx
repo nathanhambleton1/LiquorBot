@@ -347,16 +347,17 @@ export default function MenuScreen() {
     try {
       const res = await client.graphql({
         query: listLikedDrinks,
-        variables: {
-          filter: {
-            userID: { eq: userID },
-          },
-        },
+        variables: { filter: { userID: { eq: userID } } },
+        authMode: 'userPool',
       });
+      
       const items = res.data?.listLikedDrinks?.items || [];
-      // items = [{ id, drinkID, userID }, ...]
       const justDrinkIDs = items.map((item: any) => item.drinkID);
+      
+      // Force state update
+      setLikedDrinks([]);
       setLikedDrinks(justDrinkIDs);
+      
     } catch (error) {
       console.error('Error loading liked drinks:', error);
     }
@@ -376,15 +377,15 @@ export default function MenuScreen() {
     const hubListener = (data: any) => {
       const { event } = data.payload || {};
       if (event === 'likeUpdated') {
-        console.log('Received likeUpdated event from Profile. Reloading...');
+        console.log('Received likeUpdated event. Reloading likes...');
         loadLikedDrinks();
+        
+        // Force re-render of drink items
+        setLikedDrinks(prev => [...prev]);
       }
     };
-
     const unsubscribe = Hub.listen('likeChannel', hubListener);
-    return () => {
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
   // Subscribe to IoT messages (sample usage)
@@ -420,7 +421,7 @@ export default function MenuScreen() {
       console.warn('No user ID. Cannot toggle favorite.');
       return;
     }
-
+  
     // If already liked, delete it
     if (likedDrinks.includes(drinkId)) {
       try {
@@ -435,28 +436,33 @@ export default function MenuScreen() {
           },
         });
         const existing = fetchRes.data?.listLikedDrinks?.items?.[0];
-
-        // If there's no record in the DB, it might have been unliked from Profile
-        // so forcibly remove from local state to keep UI consistent
+  
         if (!existing) {
           console.warn('No existing record found to delete — removing locally.');
           setLikedDrinks((prev) => prev.filter((id) => id !== drinkId));
           return;
         }
-
-        // 2) Otherwise, delete from DB
+  
+        // 2) Delete from DB - ADD authMode HERE
         await client.graphql({
           query: deleteLikedDrink,
           variables: { input: { id: existing.id } },
+          authMode: 'userPool', // <-- Add this line
         });
-
+  
         // 3) Update local state
         setLikedDrinks((prev) => prev.filter((id) => id !== drinkId));
+        
+        // Dispatch Hub event
+        Hub.dispatch('likeChannel', {
+          event: 'likeUpdated',
+          message: 'Drink unliked from menu',
+        });
       } catch (error) {
         console.error('Error deleting LikedDrink:', error);
       }
     } else {
-      // Otherwise create it
+      // Otherwise create it - ADD authMode HERE
       try {
         await client.graphql({
           query: createLikedDrink,
@@ -466,8 +472,15 @@ export default function MenuScreen() {
               drinkID: drinkId,
             },
           },
+          authMode: 'userPool', // <-- Add this line
         });
         setLikedDrinks((prev) => [...prev, drinkId]);
+        
+        // Dispatch Hub event
+        Hub.dispatch('likeChannel', {
+          event: 'likeUpdated',
+          message: 'Drink liked from menu',
+        });
       } catch (error) {
         console.error('Error creating LikedDrink:', error);
       }
