@@ -125,12 +125,11 @@ function DrinkItem({
 
   async function handlePourDrink() {
     try {
-      const randomCode = Math.floor(1000 + Math.random() * 9000);
       await pubsub.publish({
         topics: ['liquorbot/publish'],
-        message: { code: randomCode, drinkName: drink.name, quantity },
+        message: { drinkcode: drink.ingredients ?? '' }, // Wrap the string in an object
       });
-      console.log(`Published code=${randomCode}, drink="${drink.name}", qty=${quantity}`);
+      console.log(`Published command="${drink.ingredients}"`);
     } catch (err) {
       console.error('Error publishing PubSub message:', err);
     }
