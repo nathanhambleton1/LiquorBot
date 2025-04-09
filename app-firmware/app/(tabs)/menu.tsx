@@ -23,11 +23,6 @@ import config from '../../src/amplifyconfiguration.json';
 import { getUrl } from 'aws-amplify/storage';
 
 import { fetchAuthSession } from 'aws-amplify/auth';
-import API from '@aws-amplify/api';
-import Auth from '@aws-amplify/auth';
-import { graphqlOperation } from '@aws-amplify/api-graphql';
-import { createFavorite, deleteFavorite } from '../../src/graphql/mutations';
-import { listFavorites } from '../../src/graphql/queries';
 
 Amplify.configure(config);
 
@@ -70,8 +65,7 @@ interface DrinkItemProps {
   toggleFavorite: (id: number) => void;
   onExpand: (id: number) => void;
   onCollapse: () => void;
-  favorites: number[];
-  allIngredients: BaseIngredient[];            // Pass in so we can look up names
+  allIngredients: BaseIngredient[];
   onExpandedLayout?: (layout: { x: number; y: number; width: number; height: number }) => void;
 }
 
@@ -102,12 +96,12 @@ function DrinkItem({
   toggleFavorite,
   onExpand,
   onCollapse,
-  favorites,
   allIngredients,
   onExpandedLayout,
 }: DrinkItemProps) {
   const [animValue] = useState(new Animated.Value(isExpanded ? 1 : 0));
   const [quantity, setQuantity] = useState(1);
+  const [isLiked, setIsLiked] = useState(false); // Local state for like toggle
 
   const incrementQuantity = () => setQuantity((prev) => (prev < 3 ? prev + 1 : prev));
   const decrementQuantity = () => setQuantity((prev) => (prev > 1 ? prev - 1 : prev));
@@ -127,13 +121,18 @@ function DrinkItem({
     try {
       await pubsub.publish({
         topics: ['liquorbot/publish'],
-        message: { drinkcode: drink.ingredients ?? '' }, // Wrap the string in an object
+        message: { content: drink.ingredients ?? '' }, // Wrap the string in an object
       });
       console.log(`Published command="${drink.ingredients}"`);
     } catch (err) {
       console.error('Error publishing PubSub message:', err);
     }
   }
+
+  const handleToggleLike = () => {
+    setIsLiked((prev) => !prev); // Toggle the like state
+    toggleFavorite(drink.id); // Call the parent toggle function
+  };
 
   // When expanded, show large card
   if (isExpanded) {
@@ -168,14 +167,14 @@ function DrinkItem({
         <TouchableOpacity
           onPress={(e) => {
             e.stopPropagation();
-            toggleFavorite(drink.id);
+            handleToggleLike(); // Use the local toggle handler
           }}
           style={styles.expandedFavoriteButton}
         >
           <Ionicons
-            name={favorites.includes(drink.id) ? 'heart' : 'heart-outline'}
+            name={isLiked ? 'heart' : 'heart-outline'} // Change icon based on state
             size={24}
-            color={favorites.includes(drink.id) ? '#CE975E' : '#4F4F4F'}
+            color={isLiked ? '#CE975E' : '#4F4F4F'} // Change color based on state
           />
         </TouchableOpacity>
 
@@ -237,14 +236,14 @@ function DrinkItem({
         <TouchableOpacity
           onPress={(e) => {
             e.stopPropagation();
-            toggleFavorite(drink.id);
+            handleToggleLike(); // Use the local toggle handler
           }}
           style={styles.favoriteButton}
         >
           <Ionicons
-            name={favorites.includes(drink.id) ? 'heart' : 'heart-outline'}
+            name={isLiked ? 'heart' : 'heart-outline'} // Change icon based on state
             size={24}
-            color={favorites.includes(drink.id) ? '#CE975E' : '#4F4F4F'}
+            color={isLiked ? '#CE975E' : '#4F4F4F'} // Change color based on state
           />
         </TouchableOpacity>
         <Image source={{ uri: drink.image }} style={styles.image} />
@@ -264,7 +263,6 @@ export default function MenuScreen() {
   const [loading, setLoading] = useState(true);
 
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [favorites, setFavorites] = useState<number[]>([]);
   const [expandedDrink, setExpandedDrink] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [scrollViewHeight, setScrollViewHeight] = useState(0);
@@ -356,47 +354,8 @@ export default function MenuScreen() {
   }, []);
 
   // Handle toggle favorite
-  async function toggleFavorite(drinkId: number) {
-    setFavorites((prev) =>
-      prev.includes(drinkId)
-        ? prev.filter((favId) => favId !== drinkId)
-        : [...prev, drinkId]
-    );
-
-    try {
-      const user = await (Auth as any).currentAuthenticatedUser();
-      const userSub = user.attributes.sub;
-
-      const existing = await (API as any).graphql(
-        graphqlOperation(listFavorites, {
-          filter: {
-            userSub: { eq: userSub },
-            drinkID: { eq: String(drinkId) },
-          },
-        })
-      );
-
-      const items = existing?.data?.listFavorites?.items || [];
-      if (items.length > 0) {
-        const favoriteId = items[0].id;
-        await (API as any).graphql(
-          graphqlOperation(deleteFavorite, {
-            input: { id: favoriteId },
-          })
-        );
-      } else {
-        await (API as any).graphql(
-          graphqlOperation(createFavorite, {
-            input: {
-              userSub,
-              drinkID: String(drinkId),
-            },
-          })
-        );
-      }
-    } catch (error) {
-      console.error('Error toggling favorite:', error);
-    }
+  function toggleFavorite(drinkId: number) {
+    console.log(`Toggled favorite for drink ID: ${drinkId}`);
   }
 
   // A few sample categories
@@ -519,8 +478,7 @@ export default function MenuScreen() {
               toggleFavorite={toggleFavorite}
               onExpand={(id: number) => setExpandedDrink(id)}
               onCollapse={() => setExpandedDrink(null)}
-              favorites={favorites}
-              allIngredients={allIngredients} // Pass so we can look up names
+              allIngredients={allIngredients}
               onExpandedLayout={handleExpandedLayout}
             />
           ))}
