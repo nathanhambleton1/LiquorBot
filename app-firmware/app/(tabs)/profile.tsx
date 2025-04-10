@@ -417,24 +417,30 @@ export default function ProfileScreen() {
       return (
         <View style={styles.popupContent}>
           {/* Profile Picture with Edit Button */}
-          <View style={styles.userInfoContainer}>
-            <TouchableOpacity onPress={handleProfilePictureUpload} style={styles.profilePictureContainer}>
+          <View style={styles.popupProfilePictureContainer}>
+            <TouchableOpacity onPress={handleProfilePictureUpload} style={styles.popupProfilePictureWrapper}>
               <Image
                 source={
                   user.profilePicture
                     ? { uri: user.profilePicture }
                     : require('../../assets/images/default-profile.png')
                 }
-                style={styles.profilePicture}
+                style={styles.popupProfilePicture}
                 onError={() => {
                   // If the URL is invalid or fails to load, fall back to default
                   setUser((prev) => ({ ...prev, profilePicture: null }));
                 }}
               />
-              <View style={styles.editIconContainer}>
-                <Ionicons name="pencil" size={18} color="#DFDCD9" />
+              {/* Grayed-out overlay with camera/edit icon */}
+              <View style={styles.popupProfilePictureOverlay}>
+                <Ionicons name="camera" size={15} color="#DFDCD9" />
               </View>
             </TouchableOpacity>
+            {/* Username and Email Display */}
+            <View style={styles.popupUserInfo}>
+              <Text style={styles.popupUsernameText}>{user.username}</Text>
+              <Text style={styles.popupEmailText}>{user.email}</Text>
+            </View>
           </View>
 
           {/* First Name */}
@@ -465,7 +471,7 @@ export default function ProfileScreen() {
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Birthday</Text>
             <Text style={styles.readOnlyText}>
-              {birthday || 'Not provided'}
+              {birthday ? birthday.replace(/-/g, '/') : 'Not provided'}
             </Text>
             <Text style={styles.supportText}>
               If this is incorrect, please contact support.
@@ -476,13 +482,23 @@ export default function ProfileScreen() {
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Bio</Text>
             <TextInput
-              style={[
-                styles.input,
-                styles.bioInput,
-              ]}
+              style={[styles.input, styles.bioInput]}
               value={bio}
-              onChangeText={(text) => setBio(text.slice(0, 100))} // Limit input to 100 characters
+              onChangeText={(text) => {
+                const lines = text.split('\n');
+                if (lines.length <= 3) {
+                  setBio(text);
+                }
+              }}
+              onKeyPress={({ nativeEvent }) => {
+                if (nativeEvent.key === 'Enter' && bio.split('\n').length >= 3) {
+                  // Ignore "Enter" key press by returning early
+                  return;
+                }
+              }}
               multiline
+              placeholder="Write a bio..."
+              placeholderTextColor="#666"
             />
             {/* Character Counter */}
             <Text style={styles.charCounter}>{bio.length}/100</Text>
@@ -550,7 +566,7 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       {/* Top user info */}
       <View style={styles.userInfoContainer}>
-        <TouchableOpacity onPress={handleProfilePictureUpload} style={styles.profilePictureContainer}>
+        <View style={styles.profilePictureContainer}>
           <Image
             source={
               user.profilePicture
@@ -563,10 +579,7 @@ export default function ProfileScreen() {
               setUser((prev) => ({ ...prev, profilePicture: null }));
             }}
           />
-          <View style={styles.editIconContainer}>
-            <Ionicons name="pencil" size={18} color="#DFDCD9" />
-          </View>
-        </TouchableOpacity>
+        </View>
         <Text style={styles.usernameText}>{user.username}</Text>
         <Text style={styles.emailText}>{user.email}</Text>
       </View>
@@ -745,8 +758,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   bioInput: {
-    height: 85, // Adjust height for more visible text
+    height: 85, // Adjust height for visible text
     textAlignVertical: 'top',
+    lineHeight: 20, // Adjust line height for consistent spacing
   },
   charCounter: {
     textAlign: 'right',
@@ -825,5 +839,46 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 5,
     marginLeft: 5,
+  },
+  popupProfilePictureContainer: {
+    flexDirection: 'row', // Align profile picture and user info horizontally
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  popupProfilePictureWrapper: {
+    position: 'relative',
+    width: 100, // Matches the profile picture width
+    height: 100, // Matches the profile picture height
+    marginLeft: 20, // Add some left margin
+    borderRadius: 50, // Ensure the wrapper is circular
+    overflow: 'hidden', // Clip any content outside the circle
+  },
+  popupProfilePicture: {
+    width: '100%', // Dynamically adjusts to wrapper size
+    height: '100%', // Dynamically adjusts to wrapper size
+    borderRadius: 40, // Ensure the image is circular
+  },
+  popupProfilePictureOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '30%', // Proportional height to follow profile picture size
+    backgroundColor: 'rgba(0, 0, 0, 0.8)', // Grayed-out overlay
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  popupUserInfo: {
+    marginLeft: 30, // Space between profile picture and user info
+  },
+  popupUsernameText: {
+    color: '#DFDCD9', // White color
+    fontSize: 20, // Larger font size for username
+    fontWeight: 'bold',
+  },
+  popupEmailText: {
+    color: '#4f4f4f', // Darker gray color for email
+    fontSize: 14, // Smaller font size for email
+    marginTop: 5,
   },
 });

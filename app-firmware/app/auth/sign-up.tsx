@@ -42,11 +42,10 @@ export default function SignUp() {
     setBirthday(formattedText);
   };
 
-  // -- (B) Convert "MM/DD/YYYY" => "YYYY-MM-DD" for Cognito
-  const convertToISODate = (mdy: string) => {
+  // -- (B) Convert "MM/DD/YYYY" => "MM-DD-YYYY" for Cognito
+  const convertToServerDate = (mdy: string) => {
     if (mdy.length !== 10) return ''; // If user hasn't fully typed it
-    const [mm, dd, yyyy] = mdy.split('/');
-    return `${yyyy}-${mm}-${dd}`;
+    return mdy.replace(/\//g, '-'); // Replace slashes with dashes
   };
 
   // -- (C) Register new user
@@ -55,11 +54,11 @@ export default function SignUp() {
       setErrorMessage('');
       setInfoMessage('');
 
-      // Convert birthday to "YYYY-MM-DD"
-      const isoBirthday = convertToISODate(birthday);
+      // Convert birthday to "MM-DD-YYYY"
+      const serverBirthday = convertToServerDate(birthday);
 
       // Validate if the user is at least 21 years old
-      if (!isAtLeast21(isoBirthday)) {
+      if (!isAtLeast21(serverBirthday)) {
         setErrorMessage('You must be at least 21 years old to create an account.');
         return;
       }
@@ -70,7 +69,7 @@ export default function SignUp() {
         options: {
           userAttributes: {
             email,
-            birthdate: isoBirthday, // pass to Cognito
+            birthdate: serverBirthday, // pass to Cognito
           },
         },
       });
@@ -87,10 +86,10 @@ export default function SignUp() {
   };
 
   // Helper function to check if the user is at least 21 years old
-  const isAtLeast21 = (isoBirthday: string): boolean => {
-    if (!isoBirthday) return false;
+  const isAtLeast21 = (serverBirthday: string): boolean => {
+    if (!serverBirthday) return false;
 
-    const [year, month, day] = isoBirthday.split('-').map(Number);
+    const [month, day, year] = serverBirthday.split('-').map(Number);
     const birthday = new Date(year, month - 1, day);
     const today = new Date();
 
@@ -159,7 +158,7 @@ export default function SignUp() {
             onChangeText={handleBirthdayInput}
             style={[
               styles.input,
-              !isAtLeast21(convertToISODate(birthday)) && birthday.length === 10
+              !isAtLeast21(convertToServerDate(birthday)) && birthday.length === 10
                 ? styles.inputError
                 : null,
             ]}
@@ -169,7 +168,7 @@ export default function SignUp() {
             maxLength={10}
           />
           {/* Real-time error message for underage users */}
-          {!isAtLeast21(convertToISODate(birthday)) && birthday.length === 10 && (
+          {!isAtLeast21(convertToServerDate(birthday)) && birthday.length === 10 && (
             <Text style={styles.error}>You must be at least 21 years old to create an account.</Text>
           )}
 

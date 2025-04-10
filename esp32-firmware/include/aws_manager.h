@@ -27,5 +27,6 @@ void setupAWS();
 void processAWSMessages();
 void sendData(const String& topic, const String& message);
 void receiveData(char* topic, byte* payload, unsigned int length);
+void sendHeartbeat();
 
 #endif // AWS_MANAGER_H

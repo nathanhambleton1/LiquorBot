@@ -35,9 +35,19 @@ void setup() {
     initLED();
 }
 
+unsigned long lastHeartbeatTime = 0; // Track the last heartbeat time
+const unsigned long heartbeatInterval = 10000; // 10 seconds
+
 void loop() {
-    if(WiFi.status() == WL_CONNECTED) {
+    if (WiFi.status() == WL_CONNECTED) {
         processAWSMessages();
+    }
+
+    // Send heartbeat message every 10 seconds
+    unsigned long currentTime = millis();
+    if (currentTime - lastHeartbeatTime >= heartbeatInterval) {
+        sendHeartbeat();
+        lastHeartbeatTime = currentTime;
     }
 
     delay(100);

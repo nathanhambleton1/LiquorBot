@@ -76,3 +76,9 @@ void sendData(const String& topic, const String& message) {
         Serial.println("Cannot publish. MQTT not connected.");
     }
 }
+
+void sendHeartbeat() {
+    const String heartbeatTopic = "liquorbot/heartbeat";
+    const String heartbeatMessage = "****Heartbeat***";
+    sendData(heartbeatTopic, heartbeatMessage);
+}
