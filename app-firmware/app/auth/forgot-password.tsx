@@ -128,8 +128,8 @@ const styles = StyleSheet.create({
   },
   backArrow: {
     position: 'absolute',
-    top: 24,
-    left: 16,
+    top: 80,
+    left: 20,
     zIndex: 10,
   },
   backArrowText: {

@@ -98,6 +98,8 @@ export default function ProfileScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [birthday, setBirthday] = useState('');
+  // NEW: Short Bio
+  const [bio, setBio] = useState('');
 
   // Popup states
   const [popupData, setPopupData] = useState<PopupData | null>(null);
@@ -114,7 +116,6 @@ export default function ProfileScreen() {
   const [recordMap, setRecordMap] = useState<Record<number, string>>({});
 
   // We'll keep a local set of "currently liked" IDs in the popup
-  // If a user toggles a heart, we update this set (and do DB create/delete).
   const [likedIDsInPopup, setLikedIDsInPopup] = useState<Set<number>>(new Set());
 
   // (B) Get the signOut function from useAuthenticator
@@ -149,6 +150,8 @@ export default function ProfileScreen() {
         const firstNameValue = findAttr('given_name');
         const lastNameValue = findAttr('family_name');
         const birthdayValue = findAttr('birthdate');
+        // NEW: short bio
+        const bioValue = findAttr('custom:bio');
 
         setUser({
           username: username || 'Guest',
@@ -159,6 +162,7 @@ export default function ProfileScreen() {
         setFirstName(firstNameValue);
         setLastName(lastNameValue);
         setBirthday(birthdayValue);
+        setBio(bioValue); // store the custom:bio attribute
 
         // 4) fetch profile pic from S3
         try {
@@ -299,6 +303,7 @@ export default function ProfileScreen() {
           given_name: firstName,
           family_name: lastName,
           birthdate: birthday,
+          'custom:bio': bio, // saving the short bio to Cognito
         },
       });
       console.log('User attributes updated in Cognito.');
@@ -411,6 +416,27 @@ export default function ProfileScreen() {
     if (popupData.title === 'Edit Profile') {
       return (
         <View style={styles.popupContent}>
+          {/* Profile Picture with Edit Button */}
+          <View style={styles.userInfoContainer}>
+            <TouchableOpacity onPress={handleProfilePictureUpload} style={styles.profilePictureContainer}>
+              <Image
+                source={
+                  user.profilePicture
+                    ? { uri: user.profilePicture }
+                    : require('../../assets/images/default-profile.png')
+                }
+                style={styles.profilePicture}
+                onError={() => {
+                  // If the URL is invalid or fails to load, fall back to default
+                  setUser((prev) => ({ ...prev, profilePicture: null }));
+                }}
+              />
+              <View style={styles.editIconContainer}>
+                <Ionicons name="pencil" size={18} color="#DFDCD9" />
+              </View>
+            </TouchableOpacity>
+          </View>
+
           {/* First Name */}
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>First Name</Text>
@@ -435,18 +461,31 @@ export default function ProfileScreen() {
             />
           </View>
 
-          {/* Birthday */}
+          {/* Birthday (Read-only) */}
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Birthday</Text>
+            <Text style={styles.readOnlyText}>
+              {birthday || 'Not provided'}
+            </Text>
+            <Text style={styles.supportText}>
+              If this is incorrect, please contact support.
+            </Text>
+          </View>
+
+          {/* NEW: Short Bio */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Bio</Text>
             <TextInput
-              style={styles.input}
-              placeholder="MM/DD/YYYY"
-              placeholderTextColor="#666"
-              value={birthday}
-              onChangeText={handleBirthdayInput}
-              keyboardType="numeric"
-              maxLength={10}
+              style={[
+                styles.input,
+                styles.bioInput,
+              ]}
+              value={bio}
+              onChangeText={(text) => setBio(text.slice(0, 100))} // Limit input to 100 characters
+              multiline
             />
+            {/* Character Counter */}
+            <Text style={styles.charCounter}>{bio.length}/100</Text>
           </View>
 
           {/* Save/Cancel Buttons */}
@@ -705,6 +744,26 @@ const styles = StyleSheet.create({
     color: '#DFDCD9',
     fontSize: 16,
   },
+  bioInput: {
+    height: 85, // Adjust height for more visible text
+    textAlignVertical: 'top',
+  },
+  charCounter: {
+    textAlign: 'right',
+    color: '#888', // Light gray color
+    fontSize: 12,
+    marginTop: 5,
+    marginRight: 5,
+  },
+  inputError: {
+    borderColor: 'red',
+    borderWidth: 1,
+  },
+  error: {
+    color: 'red',
+    fontSize: 12,
+    marginTop: 5,
+  },
   saveCancelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -752,5 +811,19 @@ const styles = StyleSheet.create({
   likedDrinkCategory: {
     color: '#CE975E',
     fontSize: 14,
+  },
+  readOnlyText: {
+    backgroundColor: '#1F1F1F',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    color: '#4f4f4f', // Gray text color to indicate read-only
+    fontSize: 16,
+  },
+  supportText: {
+    color: '#4f4f4f', // Light gray text
+    fontSize: 12,
+    marginTop: 5,
+    marginLeft: 5,
   },
 });
