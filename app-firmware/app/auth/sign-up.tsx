@@ -58,6 +58,12 @@ export default function SignUp() {
       // Convert birthday to "YYYY-MM-DD"
       const isoBirthday = convertToISODate(birthday);
 
+      // Validate if the user is at least 21 years old
+      if (!isAtLeast21(isoBirthday)) {
+        setErrorMessage('You must be at least 21 years old to create an account.');
+        return;
+      }
+
       const { isSignUpComplete, nextStep } = await signUp({
         username,
         password,
@@ -78,6 +84,22 @@ export default function SignUp() {
     } catch (err: any) {
       setErrorMessage(err?.message || 'Something went wrong during sign-up');
     }
+  };
+
+  // Helper function to check if the user is at least 21 years old
+  const isAtLeast21 = (isoBirthday: string): boolean => {
+    if (!isoBirthday) return false;
+
+    const [year, month, day] = isoBirthday.split('-').map(Number);
+    const birthday = new Date(year, month - 1, day);
+    const today = new Date();
+
+    const age = today.getFullYear() - birthday.getFullYear();
+    const isBirthdayPassedThisYear =
+      today.getMonth() > birthday.getMonth() ||
+      (today.getMonth() === birthday.getMonth() && today.getDate() >= birthday.getDate());
+
+    return age > 21 || (age === 21 && isBirthdayPassedThisYear);
   };
 
   // -- (D) Confirm sign-up with code
@@ -135,12 +157,21 @@ export default function SignUp() {
           <TextInput
             value={birthday}
             onChangeText={handleBirthdayInput}
-            style={styles.input}
+            style={[
+              styles.input,
+              !isAtLeast21(convertToISODate(birthday)) && birthday.length === 10
+                ? styles.inputError
+                : null,
+            ]}
             keyboardType="numeric"
             placeholder="MM/DD/YYYY"
             placeholderTextColor="#666"
             maxLength={10}
           />
+          {/* Real-time error message for underage users */}
+          {!isAtLeast21(convertToISODate(birthday)) && birthday.length === 10 && (
+            <Text style={styles.error}>You must be at least 21 years old to create an account.</Text>
+          )}
 
           {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
           {!!infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
@@ -214,6 +245,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     fontSize: 16,
     color: '#DFDCD9',
+  },
+  inputError: {
+    borderColor: 'red',
+    borderWidth: 1,
   },
   button: {
     backgroundColor: '#CE975E',
