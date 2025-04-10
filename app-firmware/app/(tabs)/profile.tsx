@@ -32,9 +32,6 @@ import { deleteLikedDrink } from '../../src/graphql/mutations';  // <-- added im
 // (B) Import the Amplify UI hook for sign-out
 import { useAuthenticator } from '@aws-amplify/ui-react-native';
 
-// Import Hub for event listening
-import { Hub } from '@aws-amplify/core';
-
 // Configure Amplify for this screen
 Amplify.configure(config);
 const client = generateClient();
@@ -206,20 +203,6 @@ export default function ProfileScreen() {
       }
     };
     fetchDrinksFromS3();
-  }, []);
-
-  // --------------------------------------------------------------------
-  // Hub listener for liked drinks updates
-  // --------------------------------------------------------------------
-  useEffect(() => {
-    const hubListener = (data: any) => {
-      const { event } = data.payload || {};
-      if (event === 'likeUpdated') {
-        fetchUserLikedDrinks();
-      }
-    };
-    const unsubscribe = Hub.listen('likeChannel', hubListener);
-    return () => unsubscribe();
   }, []);
 
   // --------------------------------------------------------------------
@@ -419,29 +402,6 @@ export default function ProfileScreen() {
   };
 
   // --------------------------------------------------------------------
-  // Remove liked drink
-  // --------------------------------------------------------------------
-  const removeLikedDrink = async (drinkId: number) => {
-    const recordId = recordMap[drinkId];
-    if (!recordId) {
-      console.warn("Record not found for removal");
-      return;
-    }
-    try {
-      await client.graphql({
-        query: deleteLikedDrink,
-        variables: { input: { id: recordId } },
-      });
-      // Refresh the liked drinks list from DB
-      fetchUserLikedDrinks();
-      // Dispatch event so Menu page updates.
-      Hub.dispatch('likeChannel', { event: 'likeUpdated', data: {} });
-    } catch (err) {
-      console.error("Error deleting liked drink:", err);
-    }
-  };
-
-  // --------------------------------------------------------------------
   // Render the content of the popup
   // --------------------------------------------------------------------
   const renderPopupContent = () => {
@@ -532,15 +492,6 @@ export default function ProfileScreen() {
                     color="#CE975E"
                     style={{ marginRight: 10 }}
                   />
-                  {/* Grey X Icon */}
-                  <TouchableOpacity onPress={() => removeLikedDrink(drink.id)}>
-                    <Ionicons
-                      name="close"
-                      size={24}
-                      color="#4F4F4F"
-                      style={{ marginRight: 10 }}
-                    />
-                  </TouchableOpacity>
                 </View>
               ))}
             </ScrollView>

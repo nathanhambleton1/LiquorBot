@@ -25,7 +25,6 @@ import { createLikedDrink, deleteLikedDrink } from '../../src/graphql/mutations'
 import { listLikedDrinks } from '../../src/graphql/queries';
 import { getCurrentUser } from 'aws-amplify/auth';
 import { fetchAuthSession } from 'aws-amplify/auth';
-import { Hub } from '@aws-amplify/core'; // -- NEW HUB LISTENER CODE --
 
 import { getUrl } from 'aws-amplify/storage';
 
@@ -370,24 +369,6 @@ export default function MenuScreen() {
     }
   }, [userID]);
 
-  // -- NEW HUB LISTENER CODE --
-  // Listen for "likeChannel" events so that if Profile changes LikedDrinks,
-  // we reload them in this MenuScreen instantly
-  useEffect(() => {
-    const hubListener = (data: any) => {
-      const { event } = data.payload || {};
-      if (event === 'likeUpdated') {
-        console.log('Received likeUpdated event. Reloading likes...');
-        loadLikedDrinks();
-        
-        // Force re-render of drink items
-        setLikedDrinks(prev => [...prev]);
-      }
-    };
-    const unsubscribe = Hub.listen('likeChannel', hubListener);
-    return () => unsubscribe();
-  }, []);
-
   // Subscribe to IoT messages (sample usage)
   useEffect(() => {
     (async () => {
@@ -452,12 +433,6 @@ export default function MenuScreen() {
   
         // 3) Update local state
         setLikedDrinks((prev) => prev.filter((id) => id !== drinkId));
-        
-        // Dispatch Hub event
-        Hub.dispatch('likeChannel', {
-          event: 'likeUpdated',
-          message: 'Drink unliked from menu',
-        });
       } catch (error) {
         console.error('Error deleting LikedDrink:', error);
       }
@@ -475,12 +450,6 @@ export default function MenuScreen() {
           authMode: 'userPool', // <-- Add this line
         });
         setLikedDrinks((prev) => [...prev, drinkId]);
-        
-        // Dispatch Hub event
-        Hub.dispatch('likeChannel', {
-          event: 'likeUpdated',
-          message: 'Drink liked from menu',
-        });
       } catch (error) {
         console.error('Error creating LikedDrink:', error);
       }

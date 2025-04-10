@@ -1,12 +1,11 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { StyleSheet, ImageBackground, Text, View, Animated, TouchableOpacity, Modal, Pressable } from 'react-native';
+import React, { useRef, useEffect } from 'react';
+import { StyleSheet, ImageBackground, Text, View, Animated, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons'; // Import Ionicons for the arrow
 
 export default function Index() {
   const router = useRouter();
   const glowAnimation = useRef(new Animated.Value(1)).current;
-  const [modalVisible, setModalVisible] = useState(false); // State for modal visibility
 
   useEffect(() => {
     Animated.loop(
@@ -33,29 +32,10 @@ export default function Index() {
     >
       {/* WiFi Icon in the top-right corner */}
       <View style={styles.wifiIconContainer}>
-        <TouchableOpacity onPress={() => setModalVisible(true)}>
+        <TouchableOpacity onPress={() => router.push('/device-settings')}>
           <Ionicons name="hardware-chip" size={30} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
-
-      {/* Modal for device information */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Device Information</Text>
-            <Text style={styles.modalText}>Connected to LiquorBot #001</Text>
-            <Text style={styles.modalText}>Status: Online</Text>
-            <Pressable style={styles.closeButton} onPress={() => setModalVisible(false)}>
-              <Text style={styles.closeButtonText}>Close</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
 
       <View style={styles.overlay}>
         <Text style={styles.title}>LiquorBot</Text>
@@ -150,39 +130,5 @@ const styles = StyleSheet.create({
     top: 115, // Adjust the top position
     right: 50, // Adjust the right position
     zIndex: 10, // Ensure it appears above other elements
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent background
-  },
-  modalContent: {
-    width: '80%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    padding: 20,
-    alignItems: 'center',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  modalText: {
-    fontSize: 16,
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  closeButton: {
-    marginTop: 10,
-    backgroundColor: '#CE975E',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 5,
-  },
-  closeButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
   },
 });
