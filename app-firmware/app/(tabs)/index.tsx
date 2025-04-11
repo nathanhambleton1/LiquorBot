@@ -1,11 +1,17 @@
 import React, { useRef, useEffect } from 'react';
 import { StyleSheet, ImageBackground, Text, View, Animated, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import Ionicons from '@expo/vector-icons/Ionicons'; // Import Ionicons for the arrow
+import Ionicons from '@expo/vector-icons/Ionicons';
+
+// 1) Import the LiquorBot context hook:
+import { useLiquorBot } from '../components/liquorbot-provider';
 
 export default function Index() {
   const router = useRouter();
   const glowAnimation = useRef(new Animated.Value(1)).current;
+
+  // 2) Grab the "isConnected" boolean from the context:
+  const { isConnected } = useLiquorBot();
 
   useEffect(() => {
     Animated.loop(
@@ -39,20 +45,27 @@ export default function Index() {
 
       <View style={styles.overlay}>
         <Text style={styles.title}>LiquorBot</Text>
+
+        {/* 3) Use isConnected to decide color & text */}
         <View style={styles.connectionRow}>
           <Animated.View
             style={[
-              styles.greenDot,
+              styles.dot,
               {
-                transform: [{ scale: glowAnimation }], // Apply the animation
+                // If disconnected, we can switch color to red or gray:
+                backgroundColor: isConnected ? '#63d44a' : '#B81A1A',
+                transform: [{ scale: glowAnimation }],
+                shadowColor: isConnected ? '#00FF00' : '#B81A1A',
                 shadowOpacity: glowAnimation.interpolate({
                   inputRange: [1, 1.2],
-                  outputRange: [0.3, 0.8], // Glow intensity
+                  outputRange: [0.3, 0.8],
                 }),
               },
             ]}
           />
-          <Text style={styles.connectionText}>Connected to LiquorBot #001</Text>
+          <Text style={styles.connectionText}>
+            {isConnected ? 'Connected to LiquorBot #001' : 'LiquorBot #001 Disconnected'}
+          </Text>
         </View>
       </View>
 
@@ -89,21 +102,20 @@ const styles = StyleSheet.create({
     alignItems: 'center', // Align items vertically
     marginTop: 10, // Add some spacing below the title
   },
-  greenDot: {
-    width: 8, // Size of the green dot
+  dot: {
+    width: 8,
     height: 8,
-    borderRadius: 5, // Make it circular
-    backgroundColor: '#63d44a', // Green color
-    marginRight: 8, // Add spacing between the dot and the text
-    shadowColor: '#00FF00', // Green glow color
-    shadowOffset: { width: 0, height: 0 }, // Center the shadow
-    shadowRadius: 5, // Larger radius for a soft glow
-    shadowOpacity: 0.6, // Glow intensity
-    elevation: 5, // Add elevation for Android shadow support
+    borderRadius: 5,
+    marginRight: 8,
+    // shadow* styles come from your old greenDot style
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 5,
+    shadowOpacity: 0.6,
+    elevation: 5,
   },
   connectionText: {
-    fontSize: 18, // Smaller font size
-    color: '#4F4F4F', // Darker text color
+    fontSize: 18,
+    color: '#4F4F4F',
   },
   menuButton: {
     position: 'absolute',
@@ -117,18 +129,18 @@ const styles = StyleSheet.create({
     alignItems: 'center', // Align items vertically
   },
   menuButtonText: {
-    color: '#141414', // Dark text color
+    color: '#141414',
     fontSize: 20,
     fontWeight: 'bold',
-    marginRight: 8, // Add spacing between the text and the arrow
+    marginRight: 8, 
   },
   arrowIcon: {
-    marginLeft: 5, // Add spacing between the arrow and the text
+    marginLeft: 5,
   },
   wifiIconContainer: {
     position: 'absolute',
-    top: 115, // Adjust the top position
-    right: 50, // Adjust the right position
-    zIndex: 10, // Ensure it appears above other elements
+    top: 115,
+    right: 50,
+    zIndex: 10,
   },
 });

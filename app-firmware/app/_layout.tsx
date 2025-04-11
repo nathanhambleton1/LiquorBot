@@ -3,31 +3,36 @@ import { Stack } from 'expo-router';
 import { Amplify } from 'aws-amplify';
 import config from '../src/amplifyconfiguration.json';
 
-// 1) Import from Amplify UI
+// Auth wrapper
 import { Authenticator } from '@aws-amplify/ui-react-native';
 
-// Optionally, if you use PubSub:
+// PubSub setup
 import { PubSub } from '@aws-amplify/pubsub';
 export const pubsub = new PubSub({
   region: 'us-east-1',
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt'
 });
 
+// Amplify setup
 Amplify.configure(config);
+
+// 👇 ADD THIS: import the LiquorBotProvider
+import { LiquorBotProvider } from './components/liquorbot-provider';
 
 export default function RootLayout() {
   return (
-    // 2) Wrap your layout with Authenticator.Provider
     <Authenticator.Provider>
-      <Stack
-        screenOptions={{
-          headerShown: false, // Ensure no headers are shown globally
-        }}
-      >
-        {/* Define your app's main routes */}
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="auth" />
-      </Stack>
+      {/* 👇 WRAP everything inside LiquorBotProvider */}
+      <LiquorBotProvider>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+          }}
+        >
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="auth" />
+        </Stack>
+      </LiquorBotProvider>
     </Authenticator.Provider>
   );
 }

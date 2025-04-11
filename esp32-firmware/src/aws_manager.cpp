@@ -1,51 +1,45 @@
-/*
- * -----------------------------------------------------------------------------
- *  Project: Liquor Bot
- *  File: aws_manager.cpp
- *  Description: Handles AWS IoT communication for the cocktail-making robot.
- *               This module manages MQTT connectivity, message processing, 
- *               and secure communication with AWS IoT.
- * 
- *  Author: Nathan Hambleton
- * 
- * Example Drink Command 1:
- * 1:2.0:1,2:1.5:1,3:1.0:2,4:0.5:2,5:1.0:3
- * 
-        Slot #	Amount (oz)	Priority
-          1	      2.0 oz	   1
-          2	      1.5 oz	   1
-          3	      1.0 oz	   2
-          4	      0.5 oz	   2
-          5	      1.0 oz	   3
-
-1:0.5:1,2:0.5:2,3:0.5:3,4:0.5:4,5:0.5:5,6:0.5:6,7:0.5:7,8:0.5:8,9:0.5:9,10:0.5:10,11:0.5:11,12:0.5:12,13:0.5:13,14:0.5:14,15:0.5:15,16:0.5:16
-
- * -----------------------------------------------------------------------------
- */
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include "aws_manager.h"
 #include "certs.h"
 #include "drink_controller.h"
+#include <ArduinoJson.h>
 
-WiFiClientSecure secureClient;    // Secure Wi-Fi client for encrypted communication
-PubSubClient mqttClient(secureClient); // MQTT client
+/**
+ * Declare WiFiClientSecure and PubSubClient globally.
+ */
+WiFiClientSecure secureClient;
+PubSubClient mqttClient(secureClient);
 
+/**
+ * Set up AWS IoT.
+ * - Configure certificates.
+ * - Connect to AWS IoT.
+ * - Subscribe to both command topic (AWS_RECEIVE_TOPIC) and
+ *   the 'liquorbot/heartbeat' topic so we can respond to CHECK requests.
+ */
 void setupAWS() {
     // Configure AWS IoT certificates and keys
     secureClient.setCACert(AWS_ROOT_CA);
     secureClient.setCertificate(DEVICE_CERT);
     secureClient.setPrivateKey(PRIVATE_KEY);
 
+    // Set MQTT server and callback for incoming data
     mqttClient.setServer(AWS_IOT_ENDPOINT, 8883);
     mqttClient.setCallback(receiveData);
 
-    // Connect to AWS IoT
+    // Connect (retries until success)
     while (!mqttClient.connected()) {
         Serial.println("Connecting to AWS IoT...");
-        if (mqttClient.connect("LiquorBot-001")) { // Use the client ID
+        if (mqttClient.connect("LiquorBot-001")) { // Our client ID
             Serial.println("Connected to AWS IoT!");
-            mqttClient.subscribe(AWS_RECEIVE_TOPIC); // Subscribe to command topic
+            
+            // 1) Subscribe to the command topic for drink instructions
+            mqttClient.subscribe(AWS_RECEIVE_TOPIC);
+
+            // 2) Also subscribe to 'liquorbot/heartbeat' so we can respond to "CHECK"
+            mqttClient.subscribe("liquorbot/heartbeat");
+            
         } else {
             Serial.print("AWS IoT connection failed, rc=");
             Serial.println(mqttClient.state());
@@ -54,6 +48,10 @@ void setupAWS() {
     }
 }
 
+/**
+ * Called frequently from loop() to maintain MQTT connection
+ * and handle inbound messages (via mqttClient.loop()).
+ */
 void processAWSMessages() {
     if (!mqttClient.connected()) {
         setupAWS(); // Reconnect if disconnected
@@ -61,13 +59,59 @@ void processAWSMessages() {
     mqttClient.loop(); // Handle incoming messages
 }
 
+/**
+ * The callback for all subscribed topics (both 'heartbeat' and command).
+ * We'll branch logic based on which 'topic' we got and what 'command' is.
+ */
 void receiveData(char* topic, byte* payload, unsigned int length) {
-    String command = String((char*)payload).substring(0, length);
-    Serial.println("Received from [" + String(topic) + "]: " + command);
-    auto parsedCommand = parseDrinkCommand(command);
-    dispenseDrink(parsedCommand);
+    String message = String((char*)payload).substring(0, length);
+    String topicStr = String(topic);
+
+    Serial.println("---------------------------------------------------");
+    Serial.println("Incoming MQTT message");
+    Serial.println("Topic: " + topicStr);
+    Serial.println("Payload: " + message);
+    Serial.println("---------------------------------------------------");
+
+    // 1) If we got the heartbeat topic
+    if (topicStr.equals("liquorbot/heartbeat")) {
+
+        // 1) Allocate a small JSON buffer
+        StaticJsonDocument<128> doc; 
+        DeserializationError err = deserializeJson(doc, message);
+
+        if (!err) {
+            // 2) Check if doc["content"] == "CHECK"
+            const char* content = doc["content"];
+            if (content && String(content).equals("CHECK")) {
+                // The app is asking, "Are you alive?"
+                // Respond with "OK" so the app knows we're connected
+                sendData("liquorbot/heartbeat", "{\"content\": \"OK\"}");
+                Serial.println("Responded to CHECK with OK");
+            } else {
+                // Possibly app's normal heartbeat or something else
+                Serial.println("Heartbeat message not recognized. No 'content' == 'CHECK'.");
+            }
+        } else {
+            // If we can't parse the JSON, or it wasn't JSON
+            Serial.println("Received non-JSON or invalid JSON in heartbeat topic, ignoring.");
+        }
+    }
+    // 2) Otherwise, if it's our command topic for drink instructions
+    else if (topicStr.equals(AWS_RECEIVE_TOPIC)) {
+        // Assume the message is a drink command, parse & dispense
+        auto parsedCommand = parseDrinkCommand(message);
+        dispenseDrink(parsedCommand);
+    }
+    // 3) Otherwise, we got something on some unexpected topic
+    else {
+        Serial.println("Received message on an unrecognized topic, ignoring.");
+    }
 }
 
+/**
+ * Publish a message to any topic.
+ */
 void sendData(const String& topic, const String& message) {
     if (mqttClient.connected()) {
         mqttClient.publish(topic.c_str(), message.c_str());
@@ -77,8 +121,12 @@ void sendData(const String& topic, const String& message) {
     }
 }
 
+/**
+ * Send a heartbeat JSON message. Called every 10s by the main loop.
+ */
 void sendHeartbeat() {
     const String heartbeatTopic = "liquorbot/heartbeat";
-    const String heartbeatMessage = "****Heartbeat***";
+    // Using valid JSON so the app won't parse-error
+    const String heartbeatMessage = "{\"msg\": \"heartbeat\"}";
     sendData(heartbeatTopic, heartbeatMessage);
 }

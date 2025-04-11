@@ -15,18 +15,21 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
+// Amplify & PubSub
 import { Amplify } from 'aws-amplify';
 import { PubSub } from '@aws-amplify/pubsub';
 import config from '../../src/amplifyconfiguration.json';
 
-// GRAPHQL & AUTH IMPORTS
+// GraphQL & Auth
 import { generateClient } from 'aws-amplify/api';
 import { createLikedDrink, deleteLikedDrink } from '../../src/graphql/mutations';
 import { listLikedDrinks } from '../../src/graphql/queries';
 import { getCurrentUser } from 'aws-amplify/auth';
 import { fetchAuthSession } from 'aws-amplify/auth';
-
 import { getUrl } from 'aws-amplify/storage';
+
+// IMPORTANT: Use the LiquorBotProvider context
+import { useLiquorBot } from '../components/liquorbot-provider'; // Adjust import path as needed
 
 Amplify.configure(config);
 const client = generateClient();
@@ -45,9 +48,9 @@ type Drink = {
   id: number;
   name: string;
   category: string;
-  description?: string; // Not displayed but stored
+  description?: string;
   image: string;
-  ingredients?: string; // e.g. "2:2.0:1,8:1.0:1,17:1.0:2"
+  ingredients?: string;
 };
 
 type BaseIngredient = {
@@ -58,8 +61,8 @@ type BaseIngredient = {
 
 type ParsedIngredient = {
   id: number;
-  name: string;   
-  amount: number; 
+  name: string;
+  amount: number;
   priority: number;
 };
 
@@ -112,6 +115,9 @@ function DrinkItem({
 
   const parsedIngredients = parseIngredientString(drink.ingredients ?? '', allIngredients);
 
+  // Access isConnected + forceDisconnect from the provider
+  const { isConnected, forceDisconnect } = useLiquorBot();
+
   useEffect(() => {
     Animated.timing(animValue, {
       toValue: isExpanded ? 1 : 0,
@@ -120,15 +126,69 @@ function DrinkItem({
     }).start();
   }, [isExpanded]);
 
+  // 1) Attempt a heartbeat check first
+  // 2) If we get "OK", send the actual drink code
+  // 3) If no "OK", set disconnected
   async function handlePourDrink() {
+    try {
+      if (!isConnected) {
+        console.warn('LiquorBot is not connected. Aborting pour request.');
+        return;
+      }
+
+      let responded = false;
+
+      // Subscribe briefly to hear the next message from 'liquorbot/heartbeat'
+      const sub = pubsub.subscribe({ topics: ['liquorbot/heartbeat'] }).subscribe({
+        next: (resp: any) => {
+          console.log('Heartbeat check response:', resp);
+          if (resp?.content === 'OK') {
+            responded = true;
+            sub.unsubscribe();
+            console.log('LiquorBot responded OK, sending drink code now...');
+            publishDrinkCommand();
+          }
+        },
+        error: (err: unknown) => {
+          console.error('Subscription error (heartbeat check):', err);
+          sub.unsubscribe();
+          forceDisconnect();
+        },
+        complete: () => {
+          console.log('Short-lived heartbeat check subscription complete.');
+        },
+      });
+
+      // Publish the check
+      await pubsub.publish({
+        topics: ['liquorbot/heartbeat'],
+        message: { content: 'CHECK' }, // The ESP must respond with "OK" to the same topic
+      });
+
+      // If no response after 2s, mark disconnected
+      setTimeout(() => {
+        if (!responded) {
+          console.error('No OK response from LiquorBot within 2s. Marking disconnected');
+          sub.unsubscribe();
+          forceDisconnect();
+        }
+      }, 2000);
+
+    } catch (err) {
+      console.error('Error sending heartbeat check:', err);
+    }
+  }
+
+  // This actually publishes the drink code
+  async function publishDrinkCommand() {
     try {
       await pubsub.publish({
         topics: ['liquorbot/publish'],
         message: { content: drink.ingredients ?? '' },
       });
       console.log(`Published command="${drink.ingredients}"`);
-    } catch (err) {
-      console.error('Error publishing PubSub message:', err);
+    } catch (error) {
+      console.error('Error publishing PubSub message:', error);
     }
   }
 
@@ -258,7 +318,10 @@ function DrinkItem({
 export default function MenuScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Drinks & Ingredients from S3
+  // Access isConnected from the provider (for the status dot)
+  const { isConnected } = useLiquorBot();
+
+  // Drinks & Ingredients
   const [drinks, setDrinks] = useState<Drink[]>([]);
   const [allIngredients, setAllIngredients] = useState<BaseIngredient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -274,9 +337,9 @@ export default function MenuScreen() {
 
   // Liked drinks
   const [userID, setUserID] = useState<string | null>(null);
-  const [likedDrinks, setLikedDrinks] = useState<number[]>([]); // store the drink IDs
+  const [likedDrinks, setLikedDrinks] = useState<number[]>([]);
 
-  // Glow animation for the green dot
+  // Glow animation for the dot
   const glowAnimation = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     Animated.loop(
@@ -319,9 +382,9 @@ export default function MenuScreen() {
       }
     }
 
-    Promise.all([fetchDrinksFromS3(), fetchIngredientsFromS3()]).finally(() =>
-      setLoading(false)
-    );
+    Promise.all([fetchDrinksFromS3(), fetchIngredientsFromS3()]).finally(() => {
+      setLoading(false);
+    });
   }, []);
 
   // Fetch user ID on mount
@@ -340,7 +403,7 @@ export default function MenuScreen() {
     })();
   }, []);
 
-  // We'll define our "loadLikedDrinks" as a function so we can call it from multiple places
+  // Load liked drinks (user's favorites)
   async function loadLikedDrinks() {
     if (!userID) return;
     try {
@@ -349,27 +412,24 @@ export default function MenuScreen() {
         variables: { filter: { userID: { eq: userID } } },
         authMode: 'userPool',
       });
-      
+
       const items = res.data?.listLikedDrinks?.items || [];
       const justDrinkIDs = items.map((item: any) => item.drinkID);
-      
-      // Force state update
+
       setLikedDrinks([]);
       setLikedDrinks(justDrinkIDs);
-      
     } catch (error) {
       console.error('Error loading liked drinks:', error);
     }
   }
 
-  // Once we have userID, load that user's liked drinks
   useEffect(() => {
     if (userID) {
       loadLikedDrinks();
     }
   }, [userID]);
 
-  // Subscribe to IoT messages (sample usage)
+  // Subscribe to IoT messages
   useEffect(() => {
     (async () => {
       try {
@@ -402,7 +462,7 @@ export default function MenuScreen() {
       console.warn('No user ID. Cannot toggle favorite.');
       return;
     }
-  
+
     // If already liked, delete it
     if (likedDrinks.includes(drinkId)) {
       try {
@@ -417,27 +477,27 @@ export default function MenuScreen() {
           },
         });
         const existing = fetchRes.data?.listLikedDrinks?.items?.[0];
-  
+
         if (!existing) {
           console.warn('No existing record found to delete — removing locally.');
           setLikedDrinks((prev) => prev.filter((id) => id !== drinkId));
           return;
         }
-  
-        // 2) Delete from DB - ADD authMode HERE
+
+        // 2) Delete from DB
         await client.graphql({
           query: deleteLikedDrink,
           variables: { input: { id: existing.id } },
-          authMode: 'userPool', // <-- Add this line
+          authMode: 'userPool',
         });
-  
+
         // 3) Update local state
         setLikedDrinks((prev) => prev.filter((id) => id !== drinkId));
       } catch (error) {
         console.error('Error deleting LikedDrink:', error);
       }
     } else {
-      // Otherwise create it - ADD authMode HERE
+      // Otherwise create it
       try {
         await client.graphql({
           query: createLikedDrink,
@@ -447,7 +507,7 @@ export default function MenuScreen() {
               drinkID: drinkId,
             },
           },
-          authMode: 'userPool', // <-- Add this line
+          authMode: 'userPool',
         });
         setLikedDrinks((prev) => [...prev, drinkId]);
       } catch (error) {
@@ -498,12 +558,17 @@ export default function MenuScreen() {
       {/* Header */}
       <View style={styles.headerContainer}>
         <Text style={styles.headerText}>Drinks</Text>
+
+        {/* Dynamic connection status */}
         <View style={styles.connectionRow}>
           <Animated.View
             style={[
               styles.greenDot,
               {
+                // If disconnected => red, else green
+                backgroundColor: isConnected ? '#63d44a' : '#B81A1A',
                 transform: [{ scale: glowAnimation }],
+                shadowColor: isConnected ? '#00FF00' : '#B81A1A',
                 shadowOpacity: glowAnimation.interpolate({
                   inputRange: [1, 1.2],
                   outputRange: [0.3, 0.8],
@@ -511,7 +576,9 @@ export default function MenuScreen() {
               },
             ]}
           />
-          <Text style={styles.subHeaderText}>LiquorBot #001</Text>
+          <Text style={styles.subHeaderText}>
+            {isConnected ? 'LiquorBot #001' : 'LiquorBot #001'}
+          </Text>
         </View>
 
         {/* Edit Icon in the top-right corner */}
@@ -631,9 +698,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 5,
-    backgroundColor: '#63d44a',
     marginRight: 8,
-    shadowColor: '#00FF00',
     shadowOffset: { width: 0, height: 0 },
     shadowRadius: 5,
     shadowOpacity: 0.6,
