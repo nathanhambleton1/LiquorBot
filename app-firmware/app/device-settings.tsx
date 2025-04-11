@@ -120,7 +120,7 @@ export default function DeviceSettings() {
         <View style={styles.slotsContainer}>
           <Text style={styles.slotsHeader}>Configure Slots</Text>
           {slots.map((slot, index) => (
-            <View key={index} style={styles.slotBox}>
+            <View key={index} style={styles.slotRow}>
               <Text style={styles.slotLabel}>Slot {index + 1}</Text>
               <TouchableOpacity
                 style={styles.pickerButton}
@@ -129,7 +129,12 @@ export default function DeviceSettings() {
                   setModalVisible(true);
                 }}
               >
-                <Text style={styles.pickerButtonText}>
+                <Text
+                  style={[
+                    styles.pickerButtonText,
+                    slot && styles.selectedPickerButtonText, // Apply gold color if slot has a value
+                  ]}
+                >
                   {slot || 'Select Ingredient'}
                 </Text>
               </TouchableOpacity>
@@ -148,6 +153,17 @@ export default function DeviceSettings() {
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalContainer}>
+          {/* Close Button */}
+          <TouchableOpacity
+            style={styles.modalCloseButton}
+            onPress={() => setModalVisible(false)}
+          >
+            <Ionicons name="close" size={30} color="#DFDCD9" />
+          </TouchableOpacity>
+
+          {/* Header Text */}
+          <Text style={styles.modalHeaderText}>Select Ingredient</Text>
+
           {/* Horizontal category selector */}
           <View style={styles.horizontalPickerContainer}>
             <ScrollView
@@ -300,23 +316,30 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 20,
   },
-  slotBox: {
-    marginBottom: 15,
+  slotRow: {
+    flexDirection: 'row', // Arrange items in a row
+    alignItems: 'center', // Align items vertically
+    marginBottom: 15, // Space between rows
   },
   slotLabel: {
     color: '#DFDCD9',
     fontSize: 16,
-    marginBottom: 5,
+    marginRight: 10, // Space between label and button
+    width: 80, // Fixed width for alignment
   },
   pickerButton: {
+    flex: 1, // Take up remaining space
     backgroundColor: '#141414',
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 15,
   },
   pickerButtonText: {
-    color: '#DFDCD9',
+    color: '#4f4f4f', // Darker placeholder text color
     fontSize: 16,
+  },
+  selectedPickerButtonText: {
+    color: '#dfdcd9', // Gold color for selected ingredient
   },
   modalContainer: {
     flex: 1,
@@ -327,13 +350,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomLeftRadius: 10,
     borderBottomRightRadius: 10,
-    paddingVertical: 5,
+    paddingVertical: 5, // Reduced vertical padding
   },
   horizontalPicker: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   categoryButton: {
+    marginTop: 40,
     paddingVertical: 10,
     paddingHorizontal: 5,
     marginHorizontal: 15,
@@ -380,5 +404,19 @@ const styles = StyleSheet.create({
   ingredientText: {
     color: '#DFDCD9',
     fontSize: 16,
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 30,
+    left: 20,
+    zIndex: 10, // Ensure it appears above other elements
+  },
+  modalHeaderText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#DFDCD9',
+    textAlign: 'center',
+    marginTop: 10, // Reduced space below the close button
+    marginBottom: -20, // Reduced space above the sort buttons
   },
 });
