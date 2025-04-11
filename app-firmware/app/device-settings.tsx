@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -8,99 +8,115 @@ import {
   Modal,
   TextInput,
   FlatList,
+  Platform,
 } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons'; // Import Ionicons for the X icon
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
+
+// 1) Import the LiquorBot hook
+import { useLiquorBot } from './components/liquorbot-provider';
+
+// 2) Import getUrl for fetching from S3
+import { getUrl } from 'aws-amplify/storage';
+
+interface Ingredient {
+  id: number;
+  name: string;
+  type: 'Alcohol' | 'Mixer' | 'Sour' | 'Sweet' | 'Misc';
+  description: string;
+}
 
 export default function DeviceSettings() {
   const router = useRouter();
-  const [slots, setSlots] = useState(Array(15).fill('')); // 15 slots initialized to empty
-  const [connected, setConnected] = useState(true); // Connection status
-  const [modalVisible, setModalVisible] = useState(false); // Modal visibility
-  const [selectedSlot, setSelectedSlot] = useState<number | null>(null); // Track which slot is being edited
-  const [searchQuery, setSearchQuery] = useState(''); // Search query for ingredients
-  const [selectedCategory, setSelectedCategory] = useState('All'); // Selected category for filtering
+  const { isConnected } = useLiquorBot();
 
-  const ingredients = [
-    'Vodka',
-    'Rum',
-    'Tequila',
-    'Whiskey',
-    'Gin',
-    'Triple Sec',
-    'Lime Juice',
-    'Grenadine',
-    'Orange Juice',
-    'Cranberry Juice',
-    'Soda Water',
-    'Tonic Water',
-    'Cola',
-    'Lemonade',
-    'Simple Syrup',
-  ].sort(); // Alphabetically sorted ingredient list
+  const [slots, setSlots] = useState(Array(15).fill('')); // 15 slots
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
 
-  const categories = ['All', 'Liquor', 'Sour', 'Sweet']; // Example categories
+  // We'll store the fetched ingredients here
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [loading, setLoading] = useState(false);
 
+  // Fetch the S3 JSON once, just like in menu.tsx
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const ingUrl = await getUrl({ key: 'drinkMenu/ingredients.json' });
+        const response = await fetch(ingUrl.url);
+        const data = await response.json();
+
+        // Sort them by name if desired
+        data.sort((a: Ingredient, b: Ingredient) =>
+          a.name.localeCompare(b.name)
+        );
+
+        setIngredients(data);
+      } catch (error) {
+        console.error('Error fetching ingredients from S3:', error);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  // The categories we want
+  const categories = ['All', 'Alcohol', 'Mixer', 'Sour', 'Sweet', 'Misc'];
+
+  // Filter logic: if "All", show everything; otherwise match item.type
+  const filteredIngredients = ingredients
+    .filter((item) =>
+      item.name.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .filter((item) => {
+      if (selectedCategory === 'All') return true;
+      return item.type === selectedCategory;
+    });
+
+  // When a user selects an ingredient, update that slot
   const handleSlotChange = (value: string, index: number) => {
     const updatedSlots = [...slots];
     updatedSlots[index] = value;
     setSlots(updatedSlots);
   };
 
-  const filteredIngredients = ingredients
-    .filter((ingredient) =>
-      ingredient.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    .filter((ingredient) => {
-      if (selectedCategory === 'All') return true;
-      if (selectedCategory === 'Liquor') return ['Vodka', 'Rum', 'Tequila', 'Whiskey', 'Gin', 'Triple Sec'].includes(ingredient);
-      if (selectedCategory === 'Sour') return ['Lime Juice'].includes(ingredient);
-      if (selectedCategory === 'Sweet') return ['Grenadine', 'Orange Juice', 'Cranberry Juice', 'Simple Syrup', 'Cola', 'Lemonade'].includes(ingredient);
-      return false;
-    });
-
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {/* X Icon Button */}
-        <TouchableOpacity style={styles.closeButton} onPress={() => router.push('/')}>
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={() => router.push('/')}
+        >
           <Ionicons name="close" size={30} color="#DFDCD9" />
         </TouchableOpacity>
 
-        {/* Header Text */}
         <Text style={styles.headerText}>Device Settings</Text>
 
-        {/* Connection Status */}
         <View style={styles.connectionBox}>
           <Ionicons
             name="bluetooth-outline"
             size={24}
-            color="#DFDCD9" // Light grey color
+            color="#DFDCD9"
             style={styles.bluetoothIcon}
           />
           <Text style={styles.liquorBotText}>LiquorBot #001</Text>
+
           <View style={styles.connectionStatusRow}>
             <View
               style={[
                 styles.statusDot,
-                { backgroundColor: connected ? '#63d44a' : '#d44a4a' }, // Green for connected, red for disconnected
+                { backgroundColor: isConnected ? '#63d44a' : '#d44a4a' },
               ]}
             />
             <Text style={styles.connectionStatusText}>
-              {connected ? 'Connected' : 'Disconnected'}
+              {isConnected ? 'Connected' : 'Disconnected'}
             </Text>
           </View>
-          <TouchableOpacity
-            style={styles.connectionButton}
-            onPress={() => setConnected(!connected)}
-          >
-            <Text style={styles.connectionButtonText}>
-              {connected ? 'Disconnect' : 'Connect Again'}
-            </Text>
-          </TouchableOpacity>
         </View>
 
-        {/* Slots Configuration */}
         <View style={styles.slotsContainer}>
           <Text style={styles.slotsHeader}>Configure Slots</Text>
           {slots.map((slot, index) => (
@@ -127,10 +143,12 @@ export default function DeviceSettings() {
         visible={modalVisible}
         animationType="slide"
         transparent={false}
+        // iOS-specific style that allows for swipe-down on iOS 13+
+        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalContainer}>
-          {/* Categories */}
+          {/* Horizontal category selector */}
           <View style={styles.horizontalPickerContainer}>
             <ScrollView
               horizontal
@@ -147,21 +165,29 @@ export default function DeviceSettings() {
                     <Text
                       style={[
                         styles.categoryButtonText,
-                        selectedCategory === category && styles.selectedCategoryText,
+                        selectedCategory === category &&
+                          styles.selectedCategoryText,
                       ]}
                     >
                       {category}
                     </Text>
-                    {selectedCategory === category && <View style={styles.underline} />}
+                    {selectedCategory === category && (
+                      <View style={styles.underline} />
+                    )}
                   </View>
                 </TouchableOpacity>
               ))}
             </ScrollView>
           </View>
 
-          {/* Search Bar */}
+          {/* Search bar */}
           <View style={styles.searchBarContainer}>
-            <Ionicons name="search" size={20} color="#4F4F4F" style={styles.searchIcon} />
+            <Ionicons
+              name="search"
+              size={20}
+              color="#4F4F4F"
+              style={styles.searchIcon}
+            />
             <TextInput
               style={styles.searchBar}
               placeholder="Search Ingredients"
@@ -171,25 +197,31 @@ export default function DeviceSettings() {
             />
           </View>
 
-          {/* Ingredient List */}
-          <FlatList
-            data={filteredIngredients}
-            keyExtractor={(item, index) => index.toString()}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.ingredientItem}
-                onPress={() => {
-                  if (selectedSlot !== null) {
-                    handleSlotChange(item, selectedSlot);
-                  }
-                  setModalVisible(false);
-                  setSearchQuery(''); // Reset search query
-                }}
-              >
-                <Text style={styles.ingredientText}>{item}</Text>
-              </TouchableOpacity>
-            )}
-          />
+          {/* Ingredient list */}
+          {loading ? (
+            <Text style={{ color: '#DFDCD9', textAlign: 'center', margin: 10 }}>
+              Loading ingredients...
+            </Text>
+          ) : (
+            <FlatList
+              data={filteredIngredients}
+              keyExtractor={(item) => String(item.id)}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.ingredientItem}
+                  onPress={() => {
+                    if (selectedSlot !== null) {
+                      handleSlotChange(item.name, selectedSlot);
+                    }
+                    setModalVisible(false);
+                    setSearchQuery('');
+                  }}
+                >
+                  <Text style={styles.ingredientText}>{item.name}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          )}
         </View>
       </Modal>
     </View>
@@ -199,20 +231,20 @@ export default function DeviceSettings() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#141414', // Black background
+    backgroundColor: '#141414',
   },
   closeButton: {
     position: 'absolute',
-    top: 80, // Adjust top position
-    left: 25, // Adjust left position
+    top: 80,
+    left: 25,
   },
   headerText: {
     position: 'absolute',
-    top: 80, // Adjust top position
-    alignSelf: 'center', // Center the text horizontally
-    fontSize: 24, // Large font size
-    color: '#FFFFFF', // White text color
-    fontWeight: 'bold', // Bold text
+    top: 80,
+    alignSelf: 'center',
+    fontSize: 24,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
   scrollContainer: {
     paddingTop: 150,
@@ -227,10 +259,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   liquorBotText: {
-    fontSize: 24, // Larger font size
-    color: '#DFDCD9', // White text color
+    fontSize: 24,
+    color: '#DFDCD9',
     fontWeight: 'bold',
-    textAlign: 'left', // Align to the left
+    textAlign: 'left',
     width: '100%',
   },
   connectionStatusRow: {
@@ -239,35 +271,23 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   statusDot: {
-    width: 6, // Smaller width
-    height: 6, // Smaller height
-    borderRadius: 3, // Adjusted for smaller size
-    marginRight: 5, // Reduced margin
-    marginTop: 5, // Reduced margin
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 5,
+    marginTop: 5,
   },
   connectionStatusText: {
-    fontSize: 14, // Smaller font size
-    color: '#4F4F4F', // Darker text color
-    textAlign: 'left', // Align to the left
+    fontSize: 14,
+    color: '#4F4F4F',
+    textAlign: 'left',
     width: '100%',
-    marginTop: 5, // Add spacing below the main text
-  },
-  connectionButton: {
-    backgroundColor: '#CE975E',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 5,
-    marginTop: 20, // Added margin to move the button down
-  },
-  connectionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
+    marginTop: 5,
   },
   bluetoothIcon: {
     position: 'absolute',
-    top: 20, // Adjust top position
-    right: 20, // Adjust right position
+    top: 20,
+    right: 20,
   },
   slotsContainer: {
     backgroundColor: '#1F1F1F',
@@ -315,8 +335,8 @@ const styles = StyleSheet.create({
   },
   categoryButton: {
     paddingVertical: 10,
-    paddingHorizontal: 15,
-    marginHorizontal: 5,
+    paddingHorizontal: 5,
+    marginHorizontal: 15,
   },
   categoryButtonContent: {
     alignItems: 'center',
@@ -332,7 +352,7 @@ const styles = StyleSheet.create({
   },
   categoryButtonText: {
     color: '#4F4F4F',
-    fontSize: 16,
+    fontSize: 14,
   },
   searchBarContainer: {
     flexDirection: 'row',
@@ -340,7 +360,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#1F1F1F',
     borderRadius: 10,
     paddingHorizontal: 15,
-    marginBottom: 15, // Adjusted margin for better spacing
+    marginBottom: 15,
+    marginTop: 10,
   },
   searchIcon: {
     marginRight: 10,
