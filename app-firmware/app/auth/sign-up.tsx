@@ -3,12 +3,14 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { signUp, confirmSignUp } from 'aws-amplify/auth';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function SignUp() {
   const router = useRouter();
 
-  // We’ll alternate between "REGISTER" and "CONFIRM"
-  const [step, setStep] = useState<'REGISTER' | 'CONFIRM'>('REGISTER');
+  // We’ll alternate between "REGISTER", "ROLE_SELECTION" and "CONFIRM"
+  const [step, setStep] = useState<'REGISTER' | 'ROLE_SELECTION' | 'CONFIRM'>('REGISTER');
+  const [selectedRole, setSelectedRole] = useState('');
 
   // Sign-up fields
   const [username, setUsername] = useState('');
@@ -22,6 +24,7 @@ export default function SignUp() {
   // Feedback messages
   const [errorMessage, setErrorMessage] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
+  const [confirmationSuccess, setConfirmationSuccess] = useState(false);
 
   // -- (A) Helper to format user input as MM/DD/YYYY --
   const handleBirthdayInput = (text: string) => {
@@ -63,13 +66,28 @@ export default function SignUp() {
         return;
       }
 
+      // If everything is valid, go to role selection
+      setStep('ROLE_SELECTION');
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Something went wrong during sign-up');
+    }
+  };
+
+  // New function to handle sign-up after selecting the role
+  const onSubmitRolePress = async () => {
+    try {
+      setErrorMessage('');
+      setInfoMessage('');
+
+      // Actually call signUp here with custom role attribute
       const { isSignUpComplete, nextStep } = await signUp({
         username,
         password,
         options: {
           userAttributes: {
             email,
-            birthdate: serverBirthday, // pass to Cognito
+            birthdate: convertToServerDate(birthday),
+            'custom:role': selectedRole,
           },
         },
       });
@@ -110,8 +128,8 @@ export default function SignUp() {
         username,
         confirmationCode,
       });
-      setInfoMessage('Your account has been confirmed! Please sign in.');
-      setTimeout(() => router.replace('/auth/sign-in'), 1500);
+      setConfirmationSuccess(true);
+      setInfoMessage('Your account has been confirmed!');
     } catch (err: any) {
       setErrorMessage(err?.message || 'Something went wrong confirming sign-up');
     }
@@ -173,7 +191,9 @@ export default function SignUp() {
           )}
 
           {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
-          {!!infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
+          {!!infoMessage && !confirmationSuccess && (
+            <Text style={[styles.info, styles.smallInfoMessage]}>{infoMessage}</Text>
+          )}
 
           <TouchableOpacity style={styles.button} onPress={onSignUpPress}>
             <Text style={styles.buttonText}>Register</Text>
@@ -181,35 +201,122 @@ export default function SignUp() {
         </>
       )}
 
-      {step === 'CONFIRM' && (
-        <>
-          {/* Confirmation Code Field */}
-          <Text style={styles.label}>Confirmation Code</Text>
-          <TextInput
-            value={confirmationCode}
-            onChangeText={setConfirmationCode}
-            style={styles.input}
-            keyboardType="number-pad"
-          />
+      {step === 'ROLE_SELECTION' && (
+        <View>
+          <Text style={styles.title}>Select Your Role</Text>
+          {/* Role options */}
+          <TouchableOpacity
+            style={[
+              styles.roleOption,
+              selectedRole === 'EventAttendee' && styles.selectedRoleOption,
+            ]}
+            onPress={() => setSelectedRole('EventAttendee')}
+          >
+            <Ionicons name="people" size={32} color="#CE975E" />
+            <View style={styles.roleTextContainer}>
+              <Text style={styles.roleText}>Event Attendee</Text>
+              <Text style={styles.roleDescription}>
+                Join events and enjoy LiquorBot services.
+              </Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.roleOption,
+              selectedRole === 'LiquorBotOwner' && styles.selectedRoleOption,
+            ]}
+            onPress={() => setSelectedRole('LiquorBotOwner')}
+          >
+            <Ionicons name="home" size={32} color="#CE975E" />
+            <View style={styles.roleTextContainer}>
+              <Text style={styles.roleText}>LiquorBot Owner</Text>
+              <Text style={styles.roleDescription}>
+                Manage your personal LiquorBot at home.
+              </Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.roleOption,
+              selectedRole === 'EventCoordinator' && styles.selectedRoleOption,
+            ]}
+            onPress={() => setSelectedRole('EventCoordinator')}
+          >
+            <Ionicons name="briefcase" size={32} color="#CE975E" />
+            <View style={styles.roleTextContainer}>
+              <Text style={styles.roleText}>Event Coordinator</Text>
+              <Text style={styles.roleDescription}>
+                Organize events and manage services.
+              </Text>
+            </View>
+          </TouchableOpacity>
 
           {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
-          {!!infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
+          {!!infoMessage && !confirmationSuccess && (
+            <Text style={[styles.info, styles.smallInfoMessage]}>{infoMessage}</Text>
+          )}
 
-          <TouchableOpacity style={styles.button} onPress={onConfirmSignUpPress}>
-            <Text style={styles.buttonText}>Confirm Sign Up</Text>
+          <TouchableOpacity style={styles.button} onPress={onSubmitRolePress}>
+            <Text style={styles.buttonText}>Next</Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {step === 'CONFIRM' && (
+        <>
+          {!confirmationSuccess ? (
+            <>
+              {/* Confirmation Code Field */}
+              <Text style={styles.label}>Confirmation Code</Text>
+              <TextInput
+                value={confirmationCode}
+                onChangeText={setConfirmationCode}
+                style={styles.input}
+                keyboardType="number-pad"
+              />
+
+              {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+              {!!infoMessage && !confirmationSuccess && (
+                <Text style={[styles.info, styles.smallInfoMessage]}>{infoMessage}</Text>
+              )}
+
+              <TouchableOpacity style={styles.button} onPress={onConfirmSignUpPress}>
+                <Text style={styles.buttonText}>Confirm Sign Up</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Ionicons
+                name="checkmark-circle"
+                size={48}
+                color="#44e627"
+                style={{ alignSelf: 'center', marginTop: 32, marginBottom: 16 }}
+              />
+              {!!infoMessage && confirmationSuccess && (
+                <Text style={[styles.info, styles.confirmationMessage]}>{infoMessage}</Text>
+              )}
+              <TouchableOpacity
+                style={styles.button}
+                onPress={() => router.replace('/auth/sign-in')}
+              >
+                <Text style={styles.buttonText}>Sign In</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </>
       )}
 
       {/* Back to Sign In */}
-      <View style={styles.signUpContainer}>
-        <Text style={styles.signUpText}>
-          Already have an account?{' '}
-          <Text style={styles.signUpLink} onPress={() => router.replace('/auth/sign-in')}>
-            Sign In
+      {!confirmationSuccess && (
+        <View style={styles.signUpContainer}>
+          <Text style={styles.signUpText}>
+            Already have an account?{' '}
+            <Text style={styles.signUpLink} onPress={() => router.replace('/auth/sign-in')}>
+              Sign In
+            </Text>
           </Text>
-        </Text>
-      </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -270,6 +377,19 @@ const styles = StyleSheet.create({
     color: '#CE975E',
     marginTop: 8,
   },
+  confirmationMessage: {
+    fontSize: 20, // Larger font size
+    color: '#FFFFFF', // White color
+    textAlign: 'center', // Centered text
+    marginBottom: 16, // Space below the message
+  },
+  smallInfoMessage: {
+    fontSize: 14, // Smaller font size
+    color: '#DFDCD9', // Keep the same color
+    textAlign: 'center', // Centered text
+    marginTop: 16, // Add padding to the top
+    marginBottom: 8, // Adjust spacing
+  },
   signUpContainer: {
     marginTop: 60,
     alignItems: 'center',
@@ -281,5 +401,32 @@ const styles = StyleSheet.create({
   signUpLink: {
     color: '#CE975E',
     fontWeight: 'bold',
+  },
+  roleOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#141414', // Light gray background
+    padding: 16,
+    borderRadius: 8,
+    marginVertical: 8,
+    borderWidth: 2, // Add a consistent border width
+    borderColor: 'transparent', // Default to transparent
+  },
+  selectedRoleOption: {
+    borderColor: '#CE975E', // Highlight selected option with gold
+  },
+  roleTextContainer: {
+    marginLeft: 14, // Space between icon and text
+    flex: 1, // Allow text to take up remaining space
+  },
+  roleText: {
+    fontSize: 18,
+    color: '#DFDCD9', // Light text
+  },
+  roleDescription: {
+    fontSize: 14,
+    color: '#4F4F4F', // Darker text for description
+    marginTop: 4, // Space between title and description
+    textAlign: 'left',
   },
 });

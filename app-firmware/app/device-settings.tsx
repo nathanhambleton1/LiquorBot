@@ -10,11 +10,13 @@ import {
   FlatList,
   Platform,
   ActivityIndicator,
+  PermissionsAndroid,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useLiquorBot } from './components/liquorbot-provider';
 import { getUrl } from 'aws-amplify/storage';
+import { BleManager } from 'react-native-ble-plx';
 
 interface Ingredient {
   id: number;
@@ -30,7 +32,7 @@ interface BluetoothDevice {
 
 export default function DeviceSettings() {
   const router = useRouter();
-  const { isConnected, connectToDevice } = useLiquorBot();
+  const { isConnected } = useLiquorBot();
   const [slots, setSlots] = useState(Array(15).fill(''));
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
@@ -44,6 +46,9 @@ export default function DeviceSettings() {
   const [discoveryModalVisible, setDiscoveryModalVisible] = useState(false);
   const [discoveredDevices, setDiscoveredDevices] = useState<BluetoothDevice[]>([]);
   const [isScanning, setIsScanning] = useState(false);
+  const DEVICE_SERVICE_UUID = "1fb68313-bd17-4fd8-b615-554ddfd462d6";
+
+  const manager = new BleManager();
 
   useEffect(() => {
     (async () => {
@@ -62,19 +67,52 @@ export default function DeviceSettings() {
     })();
   }, []);
 
-  const simulateDeviceDiscovery = () => {
-    setIsScanning(true);
-    setTimeout(() => {
-      setDiscoveredDevices([
-        { id: '1', name: 'Liquorbot-001' },
-        { id: '2', name: 'Liquorbot-002' },
+  const requestBluetoothPermissions = async () => {
+    if (Platform.OS === 'android') {
+      const granted = await PermissionsAndroid.requestMultiple([
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       ]);
+
+      return (
+        granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED &&
+        granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED &&
+        granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED
+      );
+    }
+    return true; // iOS permissions are handled differently
+  };
+
+  const scanForDevices = async () => {
+    const hasPermissions = await requestBluetoothPermissions();
+    if (!hasPermissions) {
+      console.log('Bluetooth permissions denied');
+      return;
+    }
+
+    setIsScanning(true);
+    setDiscoveredDevices([]);
+
+    manager.startDeviceScan(null, null, (error, device) => {
+      if (error) {
+        console.log('Scan error:', error);
+        manager.stopDeviceScan();
+        setIsScanning(false);
+        return;
+      }
+      if (device?.name?.toLowerCase().includes('liquorbot')) {
+        setDiscoveredDevices((prev) => [...prev, { id: device.id, name: device.name! }]);
+      }
+    });
+
+    setTimeout(() => {
+      manager.stopDeviceScan();
       setIsScanning(false);
-    }, 2000);
+    }, 5000);
   };
 
   const handleConnectDevice = (deviceId: string) => {
-    connectToDevice(deviceId);
     setDiscoveryModalVisible(false);
   };
 
@@ -103,7 +141,6 @@ export default function DeviceSettings() {
         <TouchableOpacity
           style={[styles.bluetoothIconContainer]}
           onPress={() => {
-            console.log('Bluetooth icon pressed');
             setBluetoothModalVisible(true);
           }}
           activeOpacity={0.7}
@@ -163,7 +200,7 @@ export default function DeviceSettings() {
               onPress={() => {
                 setBluetoothModalVisible(false);
                 setDiscoveryModalVisible(true);
-                simulateDeviceDiscovery();
+                scanForDevices();
               }}
             >
               <Text style={styles.bluetoothModalButtonText}>Setup</Text>

@@ -55,7 +55,7 @@ class WiFiCredentialsCallback : public NimBLECharacteristicCallbacks {
 };
 
 void setupBluetoothWiFiAWS() {
-    NimBLEDevice::init("LiquorBot");
+    NimBLEDevice::init("liquorbot");
 
     // Get the BLE MAC address and print it
     Serial.print("BLE Device Address: ");
@@ -86,6 +86,7 @@ void setupBluetoothWiFiAWS() {
     // Start BLE advertising
     NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
     advertising->addServiceUUID(wifiService->getUUID());
+    advertising->setName("liquorbot");  // Explicitly set name in advertising
     advertising->start();
 
     Serial.println("BLE Advertising started. Waiting for Wi-Fi credentials...");
