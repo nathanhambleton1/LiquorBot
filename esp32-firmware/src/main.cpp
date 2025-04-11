@@ -26,13 +26,15 @@ void setup() {
     Serial.println("Initializing Serial COM...");
 
     // Initialize BLE and Wi-Fi setup
-    //setupBluetoothWiFiAWS();
+    setupBluetoothWiFiAWS();
 
+    /*
     setWiFiCredentials("WhiteSky-TheWilde", "qg3v2zyr");
     connectToWiFi();
     setupAWS();
     initDrinkController();
     initLED();
+    */
 }
 
 unsigned long lastHeartbeatTime = 0; // Track the last heartbeat time

@@ -9,14 +9,11 @@ import {
   TextInput,
   FlatList,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-
-// 1) Import the LiquorBot hook
 import { useLiquorBot } from './components/liquorbot-provider';
-
-// 2) Import getUrl for fetching from S3
 import { getUrl } from 'aws-amplify/storage';
 
 interface Ingredient {
@@ -26,21 +23,28 @@ interface Ingredient {
   description: string;
 }
 
+interface BluetoothDevice {
+  id: string;
+  name: string;
+}
+
 export default function DeviceSettings() {
   const router = useRouter();
-  const { isConnected } = useLiquorBot();
-
-  const [slots, setSlots] = useState(Array(15).fill('')); // 15 slots
+  const { isConnected, connectToDevice } = useLiquorBot();
+  const [slots, setSlots] = useState(Array(15).fill(''));
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-
-  // We'll store the fetched ingredients here
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Fetch the S3 JSON once, just like in menu.tsx
+  // Bluetooth states
+  const [bluetoothModalVisible, setBluetoothModalVisible] = useState(false);
+  const [discoveryModalVisible, setDiscoveryModalVisible] = useState(false);
+  const [discoveredDevices, setDiscoveredDevices] = useState<BluetoothDevice[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
+
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -48,12 +52,7 @@ export default function DeviceSettings() {
         const ingUrl = await getUrl({ key: 'drinkMenu/ingredients.json' });
         const response = await fetch(ingUrl.url);
         const data = await response.json();
-
-        // Sort them by name if desired
-        data.sort((a: Ingredient, b: Ingredient) =>
-          a.name.localeCompare(b.name)
-        );
-
+        data.sort((a: Ingredient, b: Ingredient) => a.name.localeCompare(b.name));
         setIngredients(data);
       } catch (error) {
         console.error('Error fetching ingredients from S3:', error);
@@ -63,20 +62,28 @@ export default function DeviceSettings() {
     })();
   }, []);
 
-  // The categories we want
+  const simulateDeviceDiscovery = () => {
+    setIsScanning(true);
+    setTimeout(() => {
+      setDiscoveredDevices([
+        { id: '1', name: 'Liquorbot-001' },
+        { id: '2', name: 'Liquorbot-002' },
+      ]);
+      setIsScanning(false);
+    }, 2000);
+  };
+
+  const handleConnectDevice = (deviceId: string) => {
+    connectToDevice(deviceId);
+    setDiscoveryModalVisible(false);
+  };
+
   const categories = ['All', 'Alcohol', 'Mixer', 'Sour', 'Sweet', 'Misc'];
 
-  // Filter logic: if "All", show everything; otherwise match item.type
   const filteredIngredients = ingredients
-    .filter((item) =>
-      item.name.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    .filter((item) => {
-      if (selectedCategory === 'All') return true;
-      return item.type === selectedCategory;
-    });
+    .filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .filter((item) => selectedCategory === 'All' || item.type === selectedCategory);
 
-  // When a user selects an ingredient, update that slot
   const handleSlotChange = (value: string, index: number) => {
     const updatedSlots = [...slots];
     updatedSlots[index] = value;
@@ -86,24 +93,24 @@ export default function DeviceSettings() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <TouchableOpacity
-          style={styles.closeButton}
-          onPress={() => router.push('/')}
-        >
+        <TouchableOpacity style={styles.closeButton} onPress={() => router.push('/')}>
           <Ionicons name="close" size={30} color="#DFDCD9" />
         </TouchableOpacity>
 
         <Text style={styles.headerText}>Device Settings</Text>
 
         <View style={styles.connectionBox}>
-          <Ionicons
-            name="bluetooth-outline"
-            size={24}
-            color="#DFDCD9"
-            style={styles.bluetoothIcon}
-          />
+        <TouchableOpacity
+          style={[styles.bluetoothIconContainer]}
+          onPress={() => {
+            console.log('Bluetooth icon pressed');
+            setBluetoothModalVisible(true);
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="bluetooth-outline" size={24} color="#DFDCD9" />
+        </TouchableOpacity>
           <Text style={styles.liquorBotText}>LiquorBot #001</Text>
-
           <View style={styles.connectionStatusRow}>
             <View
               style={[
@@ -129,12 +136,7 @@ export default function DeviceSettings() {
                   setModalVisible(true);
                 }}
               >
-                <Text
-                  style={[
-                    styles.pickerButtonText,
-                    slot && styles.selectedPickerButtonText, // Apply gold color if slot has a value
-                  ]}
-                >
+                <Text style={[styles.pickerButtonText, slot && styles.selectedPickerButtonText]}>
                   {slot || 'Select Ingredient'}
                 </Text>
               </TouchableOpacity>
@@ -142,6 +144,81 @@ export default function DeviceSettings() {
           ))}
         </View>
       </ScrollView>
+
+      {/* Bluetooth Connection Modal */}
+      <Modal
+        visible={bluetoothModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setBluetoothModalVisible(false)}
+      >
+        <View style={styles.bluetoothModalContainer}>
+          <View style={styles.bluetoothModalContent}>
+            <Text style={styles.bluetoothModalTitle}>Connect New Device</Text>
+            <Text style={styles.bluetoothModalSubtitle}>
+              You can only have one device connected at a time.
+            </Text>
+            <TouchableOpacity
+              style={styles.bluetoothModalButton}
+              onPress={() => {
+                setBluetoothModalVisible(false);
+                setDiscoveryModalVisible(true);
+                simulateDeviceDiscovery();
+              }}
+            >
+              <Text style={styles.bluetoothModalButtonText}>Setup</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.bluetoothModalCancelButton}
+              onPress={() => setBluetoothModalVisible(false)}
+            >
+              <Text style={styles.bluetoothModalCancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Device Discovery Modal */}
+      <Modal
+        visible={discoveryModalVisible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setDiscoveryModalVisible(false)}
+      >
+        <View style={styles.discoveryModalContainer}>
+          <TouchableOpacity
+            style={styles.modalCloseButton}
+            onPress={() => setDiscoveryModalVisible(false)}
+          >
+            <Ionicons name="close" size={30} color="#DFDCD9" />
+          </TouchableOpacity>
+          <Text style={styles.discoveryModalTitle}>Available Devices</Text>
+          
+          {isScanning ? (
+            <View style={styles.scanningContainer}>
+              <ActivityIndicator size="small" color="#CE975E" />
+              <Text style={styles.scanningText}>Scanning for devices...</Text>
+            </View>
+          ) : (
+            <Text style={styles.scanningText}>Tap a device to connect</Text>
+          )}
+
+          <FlatList
+            data={discoveredDevices.filter(device => device.name.startsWith('Liquorbot'))}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.deviceItem}
+                onPress={() => handleConnectDevice(item.id)}
+              >
+                <Text style={styles.deviceName}>{item.name}</Text>
+                <Ionicons name="bluetooth" size={20} color="#DFDCD9" />
+              </TouchableOpacity>
+            )}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.deviceList}
+          />
+        </View>
+      </Modal>
 
       {/* Full-Screen Modal for Ingredient Selection */}
       <Modal
@@ -273,6 +350,7 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 20,
     alignItems: 'center',
+    minHeight: 100, // Ensure container is tall enough
   },
   liquorBotText: {
     fontSize: 24,
@@ -300,10 +378,13 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: 5,
   },
-  bluetoothIcon: {
+  bluetoothIconContainer: {
     position: 'absolute',
     top: 20,
     right: 20,
+    zIndex: 999,
+    padding: 10, // Increased touch area
+    backgroundColor: 'transparent', // Ensure it's visible during testing
   },
   slotsContainer: {
     backgroundColor: '#1F1F1F',
@@ -418,5 +499,98 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 10, // Reduced space below the close button
     marginBottom: -20, // Reduced space above the sort buttons
+  },
+  bluetoothModalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  bluetoothModalContent: {
+    backgroundColor: '#1F1F1F',
+    borderRadius: 10,
+    padding: 20,
+    width: '80%',
+    alignItems: 'center',
+  },
+  bluetoothModalTitle: {
+    color: '#DFDCD9',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  bluetoothModalSubtitle: {
+    color: '#4F4F4F',
+    fontSize: 12,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  bluetoothModalButton: {
+    backgroundColor: '#CE975E',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  bluetoothModalButtonText: {
+    color: '#141414',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  bluetoothModalCancelButton: {
+    backgroundColor: '#141414',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    width: '100%',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#4F4F4F',
+  },
+  bluetoothModalCancelButtonText: {
+    color: '#DFDCD9',
+    fontSize: 16,
+  },
+  discoveryModalContainer: {
+    flex: 1,
+    backgroundColor: '#141414',
+    padding: 20,
+  },
+  discoveryModalTitle: {
+    fontSize: 24,
+    color: '#DFDCD9',
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 50,
+    marginBottom: 20,
+  },
+  scanningContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  scanningText: {
+    color: '#4F4F4F',
+    textAlign: 'center',
+    marginLeft: 10,
+  },
+  deviceItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#1F1F1F',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 10,
+  },
+  deviceName: {
+    color: '#DFDCD9',
+    fontSize: 16,
+  },
+  deviceList: {
+    paddingBottom: 20,
   },
 });
