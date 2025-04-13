@@ -1,3 +1,12 @@
+// -----------------------------------------------------------------------------
+// File: forgot-password.tsx
+// Description: Handles the password reset process for the LiquorBot app. 
+//              Includes functionality for requesting a reset code and 
+//              confirming the password reset. Integrates with AWS Amplify 
+//              for authentication.
+// Author: Nathan Hambleton
+// Created:  March 1, 2025
+// -----------------------------------------------------------------------------
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';

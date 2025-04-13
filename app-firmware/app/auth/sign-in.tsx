@@ -1,8 +1,17 @@
-// app/auth/sign-in.tsx
+// -----------------------------------------------------------------------------
+// File: sign-in.tsx
+// Description: Handles the sign-in process for the LiquorBot app. Includes 
+//              functionality for user authentication and navigation to the 
+//              main app upon successful login. Integrates with AWS Amplify 
+//              for authentication.
+// Author: Nathan Hambleton
+// Created:  March 1, 2025
+// -----------------------------------------------------------------------------
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { signIn, getCurrentUser } from 'aws-amplify/auth';
+import { MaterialIcons } from '@expo/vector-icons';
 
 export default function SignIn() {
   const router = useRouter();
@@ -11,8 +20,8 @@ export default function SignIn() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
-  // 1) On screen load, check if a user is already signed in
   useEffect(() => {
     checkUserSession();
   }, []);
@@ -21,18 +30,15 @@ export default function SignIn() {
     try {
       const currentUser = await getCurrentUser();
       if (currentUser) {
-        // If user is already authenticated, redirect to main tabs
         router.replace('/(tabs)');
         return;
       }
     } catch (err) {
-      // Means no user is logged in, just show sign-in form
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 2) If user isn't logged in, allow them to sign in
   const onSignInPress = async () => {
     setError('');
     try {
@@ -44,7 +50,6 @@ export default function SignIn() {
   };
 
   if (isLoading) {
-    // Show a loading spinner or placeholder while checking session
     return (
       <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
         <ActivityIndicator size="large" color="#CE975E" />
@@ -65,12 +70,17 @@ export default function SignIn() {
       />
 
       <Text style={styles.label}>Password</Text>
-      <TextInput
-        onChangeText={setPassword}
-        value={password}
-        style={styles.input}
-        secureTextEntry
-      />
+      <View style={{ position: 'relative' }}>
+        <TextInput
+          onChangeText={setPassword}
+          value={password}
+          style={styles.input}
+          secureTextEntry={!isPasswordVisible}
+        />
+        <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)} style={styles.eyeIcon}>
+          <MaterialIcons name={isPasswordVisible ? 'visibility' : 'visibility-off'} size={24} color="#4f4f4f" />
+        </TouchableOpacity>
+      </View>
 
       <TouchableOpacity
         onPress={() => router.push('./forgot-password')}
@@ -126,6 +136,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     fontSize: 16,
     color: '#DFDCD9',
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 16,
+    top: '50%',
+    transform: [{ translateY: -12 }],
   },
   button: {
     backgroundColor: '#CE975E',

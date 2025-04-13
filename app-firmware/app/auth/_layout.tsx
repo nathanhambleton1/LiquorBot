@@ -1,4 +1,11 @@
-// app/auth/_layout.tsx
+// -----------------------------------------------------------------------------
+// File: _layout.tsx
+// Description: Defines the layout for authentication screens in the LiquorBot 
+//              app. Includes routing for sign-in and sign-up screens with 
+//              customized screen options.
+// Author: Nathan Hambleton
+// Created:  March 1, 2025
+// -----------------------------------------------------------------------------
 import React from 'react';
 import { Stack } from 'expo-router';
 

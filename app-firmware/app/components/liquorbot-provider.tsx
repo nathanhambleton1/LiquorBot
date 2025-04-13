@@ -1,4 +1,11 @@
-// /app/components/liquorbot-provider.tsx
+// -----------------------------------------------------------------------------
+// File: liquorbot-provider.tsx
+// Description: Provides a React context for managing LiquorBot's connection 
+//              status and handling IoT PubSub subscriptions. Integrates with 
+//              AWS Amplify for PubSub communication.
+// Author: Nathan Hambleton
+// Created:  March 1, 2025
+// -----------------------------------------------------------------------------
 import React, {
   createContext,
   useState,

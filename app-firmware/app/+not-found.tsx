@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------------
+// File: +not-found.tsx
+// Description: Displays a custom 404 error screen for the LiquorBot app. 
+//              Provides a link to navigate back to the home screen.
+// Author: Nathan Hambleton
+// Created:  March 1, 2025
+// -----------------------------------------------------------------------------
 import { Link, Stack } from 'expo-router';
 import { StyleSheet } from 'react-native';
 

@@ -1,3 +1,12 @@
+// -----------------------------------------------------------------------------
+// File: menu.tsx
+// Description: Displays the drink menu for the LiquorBot app, including drink 
+//              details, categories, search functionality, and IoT integration 
+//              for pouring drinks. Integrates with AWS Amplify, PubSub, and 
+//              LiquorBot context for dynamic functionality.
+// Author: Nathan Hambleton
+// Created:  March 1, 2025
+// -----------------------------------------------------------------------------
 import { useState, useEffect, useRef } from 'react';
 import {
   Text,

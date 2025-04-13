@@ -1,4 +1,11 @@
-// app/tabs/_layout.tsx
+// -----------------------------------------------------------------------------
+// File: _layout.tsx
+// Description: Defines the tab layout for the LiquorBot app, including routing 
+//              and authentication checks. Utilizes Expo Router and AWS Amplify 
+//              for navigation and authentication, respectively.
+// Author: Nathan Hambleton
+// Created:  March 1, 2025
+// -----------------------------------------------------------------------------
 import React from 'react';
 import { Tabs, Redirect } from 'expo-router';
 import { useAuthenticator } from '@aws-amplify/ui-react-native';

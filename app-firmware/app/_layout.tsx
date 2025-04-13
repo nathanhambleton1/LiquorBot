@@ -1,3 +1,11 @@
+// -----------------------------------------------------------------------------
+// File: _layout.tsx
+// Description: Root layout for the LiquorBot app. Configures AWS Amplify, 
+//              PubSub, and wraps the app with authentication and LiquorBot 
+//              context providers.
+// Author: Nathan Hambleton
+// Created:  March 1, 2025
+// -----------------------------------------------------------------------------
 import React from 'react';
 import { Stack } from 'expo-router';
 import { Amplify } from 'aws-amplify';

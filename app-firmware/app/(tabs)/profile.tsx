@@ -1,3 +1,12 @@
+// -----------------------------------------------------------------------------
+// File: profile.tsx
+// Description: User profile screen for the LiquorBot app. Includes functionality 
+//              for viewing and editing user details, managing liked drinks, and 
+//              updating profile pictures. Integrates with AWS Amplify for 
+//              authentication, storage, and GraphQL API.
+// Author: Nathan Hambleton
+// Created:  March 1, 2025
+// -----------------------------------------------------------------------------
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Animated,
@@ -27,7 +36,6 @@ import { Amplify } from 'aws-amplify';
 import config from '../../src/amplifyconfiguration.json';
 import { generateClient } from 'aws-amplify/api';
 import { listLikedDrinks } from '../../src/graphql/queries';
-import { deleteLikedDrink } from '../../src/graphql/mutations';  // <-- added import
 
 // (B) Import the Amplify UI hook for sign-out
 import { useAuthenticator } from '@aws-amplify/ui-react-native';

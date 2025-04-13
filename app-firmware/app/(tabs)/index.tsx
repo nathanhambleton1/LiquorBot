@@ -1,3 +1,12 @@
+// -----------------------------------------------------------------------------
+// File: index.tsx
+// Description: Main home screen for the LiquorBot app. Displays connection 
+//              status, navigation options, and a dynamic glow animation for 
+//              visual feedback. Integrates with LiquorBot context for device 
+//              connectivity and routing.
+// Author: Nathan Hambleton
+// Created:  March 1, 2025
+// -----------------------------------------------------------------------------
 import React, { useRef, useEffect } from 'react';
 import { StyleSheet, ImageBackground, Text, View, Animated, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';

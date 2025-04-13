@@ -1,4 +1,11 @@
-// app/components/TopView.tsx
+// -----------------------------------------------------------------------------
+// File: TopView.tsx
+// Description: A reusable top view component for the LiquorBot app. Displays 
+//              user information, a title, and a sign-out button. Integrates 
+//              with AWS Amplify for authentication.
+// Author: Nathan Hambleton
+// Created:  March 1, 2025
+// -----------------------------------------------------------------------------
 import React from 'react';
 import { Pressable, View, Text, StyleSheet } from 'react-native';
 import { useAuthenticator } from '@aws-amplify/ui-react-native';

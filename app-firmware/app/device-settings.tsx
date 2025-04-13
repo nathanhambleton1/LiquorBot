@@ -1,3 +1,12 @@
+// -----------------------------------------------------------------------------
+// File: device-settings.tsx
+// Description: Provides a user interface for configuring LiquorBot device 
+//              settings, including slot assignments and Bluetooth connectivity. 
+//              Integrates with AWS Amplify for ingredient data and uses BLE 
+//              for device discovery and connection.
+// Author: Nathan Hambleton
+// Created:  March 1, 2025
+// -----------------------------------------------------------------------------
 import React, { useState, useEffect } from 'react';
 import {
   View,

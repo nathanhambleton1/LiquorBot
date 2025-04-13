@@ -1,8 +1,15 @@
-// app/auth/sign-up.tsx
+// -----------------------------------------------------------------------------
+// File: sign-up.tsx
+// Description: Handles the user registration process for the LiquorBot app. 
+//              Includes functionality for account creation, role selection, 
+//              and confirmation. Integrates with AWS Amplify for authentication.
+// Author: Nathan Hambleton
+// Created:  March 1, 2025
+// -----------------------------------------------------------------------------
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { signUp, confirmSignUp } from 'aws-amplify/auth';
+import { signUp, confirmSignUp, signIn } from 'aws-amplify/auth';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function SignUp() {
@@ -17,6 +24,7 @@ export default function SignUp() {
   const [password, setPassword] = useState('');
   const [email, setEmail] = useState('');
   const [birthday, setBirthday] = useState(''); // NEW: store "MM/DD/YYYY" format
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false); // NEW: state for toggling password visibility
 
   // Confirmation code
   const [confirmationCode, setConfirmationCode] = useState('');
@@ -128,6 +136,7 @@ export default function SignUp() {
         username,
         confirmationCode,
       });
+      await signIn({ username, password });
       setConfirmationSuccess(true);
       setInfoMessage('Your account has been confirmed!');
     } catch (err: any) {
@@ -152,12 +161,17 @@ export default function SignUp() {
 
           {/* Password Field */}
           <Text style={styles.label}>Password</Text>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            style={styles.input}
-            secureTextEntry
-          />
+          <View style={{ position: 'relative' }}>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              style={styles.input}
+              secureTextEntry={!isPasswordVisible}
+            />
+            <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)} style={styles.eyeIcon}>
+              <Ionicons name={isPasswordVisible ? 'eye' : 'eye-off'} size={24} color="#4F4F4F" />
+            </TouchableOpacity>
+          </View>
 
           {/* Email Field */}
           <Text style={styles.label}>Email</Text>
@@ -428,5 +442,11 @@ const styles = StyleSheet.create({
     color: '#4F4F4F', // Darker text for description
     marginTop: 4, // Space between title and description
     textAlign: 'left',
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 16,
+    top: '50%',
+    transform: [{ translateY: -12 }],
   },
 });
