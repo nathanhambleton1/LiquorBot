@@ -49,6 +49,7 @@ export default function DeviceSettings() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showConnectPrompt, setShowConnectPrompt] = useState(false); // New state for the text bubble
 
   // Bluetooth states
   const [bluetoothModalVisible, setBluetoothModalVisible] = useState(false);
@@ -137,6 +138,16 @@ export default function DeviceSettings() {
     setSlots(updatedSlots);
   };
 
+  const handleSlotPress = (index: number) => {
+    if (!isConnected) {
+      setShowConnectPrompt(true);
+      setTimeout(() => setShowConnectPrompt(false), 2000); // Hide after 2 seconds
+      return;
+    }
+    setSelectedSlot(index);
+    setModalVisible(true);
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
@@ -172,15 +183,20 @@ export default function DeviceSettings() {
 
         <View style={styles.slotsContainer}>
           <Text style={styles.slotsHeader}>Configure Slots</Text>
+          {!isConnected && (
+            <Text style={styles.connectDeviceMessage}>
+              Please connect a device to start configuring.
+            </Text>
+          )}
           {slots.map((slot, index) => (
             <View key={index} style={styles.slotRow}>
               <Text style={styles.slotLabel}>Slot {index + 1}</Text>
               <TouchableOpacity
-                style={styles.pickerButton}
-                onPress={() => {
-                  setSelectedSlot(index);
-                  setModalVisible(true);
-                }}
+                style={[
+                  styles.pickerButton,
+                  !isConnected && styles.pickerButtonDisconnected, // Add red border if not connected
+                ]}
+                onPress={() => handleSlotPress(index)}
               >
                 <Text style={[styles.pickerButtonText, slot && styles.selectedPickerButtonText]}>
                   {slot || 'Select Ingredient'}
@@ -189,6 +205,13 @@ export default function DeviceSettings() {
             </View>
           ))}
         </View>
+
+        {/* Text bubble for connection prompt */}
+        {showConnectPrompt && (
+          <View style={styles.connectPrompt}>
+            <Text style={styles.connectPromptText}>Please connect a device first</Text>
+          </View>
+        )}
       </ScrollView>
 
       {/* Bluetooth Connection Modal */}
@@ -443,6 +466,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 20,
   },
+  connectDeviceMessage: {
+    color: '#d44a4a', // Red text color
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 25, // Space between the message and the slot rows
+  },
   slotRow: {
     flexDirection: 'row', // Arrange items in a row
     alignItems: 'center', // Align items vertically
@@ -460,6 +489,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 15,
+    borderWidth: 1, // Add a default border width
+    borderColor: 'transparent', // Default border color
+  },
+  pickerButtonDisconnected: {
+    borderColor: '#d44a4a', // Red border when disconnected
   },
   pickerButtonText: {
     color: '#4f4f4f', // Darker placeholder text color
@@ -638,5 +672,21 @@ const styles = StyleSheet.create({
   },
   deviceList: {
     paddingBottom: 20,
+  },
+  connectPrompt: {
+    position: 'absolute',
+    bottom: 20,
+    alignSelf: 'center',
+    backgroundColor: '#1F1F1F',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#CE975E',
+  },
+  connectPromptText: {
+    color: '#DFDCD9',
+    fontSize: 14,
+    textAlign: 'center',
   },
 });

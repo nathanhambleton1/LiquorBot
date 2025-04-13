@@ -56,12 +56,12 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
 
     // Check connection status every 5 seconds
     const intervalId = setInterval(() => {
-      if (Date.now() - lastHeartbeat < 15000) {
+      if (Date.now() - lastHeartbeat < 12000) {
         setIsConnected(true);
       } else {
         setIsConnected(false);
       }
-    }, 5000);
+    }, 1000);
 
     return () => {
       subscription.unsubscribe();
