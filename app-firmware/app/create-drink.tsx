@@ -1,12 +1,13 @@
 // -----------------------------------------------------------------------------
 // File: create-drink.tsx
 // Description: Custom‑drink creator with dynamic ingredient rows, delete buttons,
-//              and per‑ingredient volume controls (±0.25 oz or direct edit).
+//              per‑ingredient volume controls, and smart name‑collision hinting
+//              against drinks.json already stored on S3.
 // Author: Nathan Hambleton
 // Updated: April 16 2025
 // -----------------------------------------------------------------------------
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -37,34 +38,43 @@ interface Ingredient {
 }
 
 interface RecipeRow {
-  id: number;      // ingredient ID (0 == empty)
-  volume: number;  // in ounces
+  id: number;
+  volume: number; // oz
 }
 
-// ---------- MAIN COMPONENT ----------
+interface DrinkMeta {
+  id: number;
+  name: string;
+}
+
+// ---------- MAIN ----------
 export default function CreateDrinkScreen() {
   const router = useRouter();
 
   // Drink name
   const [drinkName, setDrinkName] = useState('');
 
+  // Existing drinks from drinks.json
+  const [allDrinks, setAllDrinks] = useState<DrinkMeta[]>([]);
+  const [loadingDrinks, setLoadingDrinks] = useState(true);
+
   // Ingredient catalogue
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [loadingIngredients, setLoadingIngredients] = useState(false);
 
-  // Recipe rows
-  const [rows, setRows] = useState<RecipeRow[]>([{ id: 0, volume: 1.50 }]);
+  // Form rows
+  const [rows, setRows] = useState<RecipeRow[]>([{ id: 0, volume: 1.5 }]);
 
   // Picker modal
   const [pickerVisible, setPickerVisible] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-
   const categories = ['All', 'Alcohol', 'Mixer', 'Sour', 'Sweet', 'Misc'];
 
-  // ---------- FETCH INGREDIENTS ----------
+  // ---------- FETCH DATA ----------
   useEffect(() => {
+    // Ingredients first
     (async () => {
       setLoadingIngredients(true);
       try {
@@ -78,13 +88,34 @@ export default function CreateDrinkScreen() {
         setLoadingIngredients(false);
       }
     })();
+
+    // Drinks meta (name check)
+    (async () => {
+      setLoadingDrinks(true);
+      try {
+        const { url } = await getUrl({ key: 'drinkMenu/drinks.json' });
+        const list: DrinkMeta[] = await (await fetch(url)).json();
+        setAllDrinks(list);
+      } catch (err) {
+        console.error('Error loading drinks list:', err);
+      } finally {
+        setLoadingDrinks(false);
+      }
+    })();
   }, []);
+
+  // ---------- NAME‑CONFLICT CHECK ----------
+  const matchingDrink = useMemo(() => {
+    if (drinkName.trim() === '') return null;
+    const lc = drinkName.trim().toLowerCase();
+    return allDrinks.find((d) => d.name.toLowerCase() === lc) ?? null;
+  }, [drinkName, allDrinks]);
 
   // ---------- HELPERS ----------
   const ingName = (id: number) =>
     id ? ingredients.find((i) => i.id === id)?.name ?? '' : '';
 
-  const filtered = ingredients
+  const filteredIngredients = ingredients
     .filter((i) => i.name.toLowerCase().includes(searchQuery.toLowerCase()))
     .filter((i) => selectedCategory === 'All' || i.type === selectedCategory);
 
@@ -98,43 +129,31 @@ export default function CreateDrinkScreen() {
     if (editingIndex === null) return;
     const next = [...rows];
     next[editingIndex].id = ingredientId;
-
-    // Auto‑append empty row if we just filled the last one
-    if (editingIndex === rows.length - 1) next.push({ id: 0, volume: 1.50 });
+    if (editingIndex === rows.length - 1) next.push({ id: 0, volume: 1.5 });
     setRows(next);
-
-    // reset picker UI
     setPickerVisible(false);
     setSearchQuery('');
   };
 
   const removeRow = (idx: number) => {
     const next = rows.filter((_, i) => i !== idx);
-    setRows(next.length === 0 ? [{ id: 0, volume: 1.50 }] : next);
+    setRows(next.length ? next : [{ id: 0, volume: 1.5 }]);
   };
 
-  const changeVol = (idx: number, delta: number) => {
-    setRows((prev) =>
-      prev.map((row, i) =>
+  const adjustVol = (idx: number, delta: number) =>
+    setRows((p) =>
+      p.map((r, i) =>
         i === idx
-          ? {
-              ...row,
-              volume: Math.max(
-                0,
-                Number((row.volume + delta).toFixed(2)).valueOf(),
-              ),
-            }
-          : row,
+          ? { ...r, volume: Math.max(0, Number((r.volume + delta).toFixed(2))) }
+          : r,
       ),
     );
-  };
 
   const setVolDirect = (idx: number, txt: string) => {
     const num = parseFloat(txt);
-    if (isNaN(num)) return;
-    setRows((prev) =>
-      prev.map((row, i) => (i === idx ? { ...row, volume: num } : row)),
-    );
+    if (!isNaN(num)) {
+      setRows((p) => p.map((r, i) => (i === idx ? { ...r, volume: num } : r)));
+    }
   };
 
   // ---------- SAVE ----------
@@ -155,32 +174,38 @@ export default function CreateDrinkScreen() {
         <Ionicons name="close" size={30} color="#DFDCD9" />
       </TouchableOpacity>
 
-      <Text style={styles.headerText}>Custom Drink</Text>
+      <Text style={styles.headerText}>Custom Drink</Text>
 
       <ScrollView
         contentContainerStyle={styles.contentContainer}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Name */}
+        {/* DRINK NAME */}
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Drink Name</Text>
+          <Text style={styles.label}>Drink Name</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g., Tropical Sunrise"
+            placeholder="e.g., Vodka Cranberry"
             placeholderTextColor="#4F4F4F"
             value={drinkName}
             onChangeText={setDrinkName}
           />
+          {matchingDrink && (
+            <Text style={styles.nameHint}>
+              Heads up — “{matchingDrink.name}” already exists in the menu. Feel
+              free to check it out or continue creating your own version.
+            </Text>
+          )}
         </View>
 
-        {/* Ingredients */}
+        {/* INGREDIENT ROWS */}
         <View style={styles.ingredientsSection}>
           <Text style={styles.label}>Ingredients</Text>
 
           {rows.map((row, idx) => (
             <View key={idx} style={styles.rowContainer}>
-              {/* Ingredient selection box */}
+              {/* Select box */}
               <View style={styles.ingredientRow}>
                 <TouchableOpacity
                   style={styles.ingredientBox}
@@ -192,7 +217,7 @@ export default function CreateDrinkScreen() {
                       row.id !== 0 && styles.ingredientBoxTextSelected,
                     ]}
                   >
-                    {ingName(row.id) || 'Select Ingredient'}
+                    {ingName(row.id) || 'Select Ingredient'}
                   </Text>
                   <Ionicons
                     name={row.id === 0 ? 'add' : 'pencil'}
@@ -201,25 +226,17 @@ export default function CreateDrinkScreen() {
                     style={{ marginLeft: 8 }}
                   />
                 </TouchableOpacity>
-
-                {/* Delete icon */}
-                <TouchableOpacity
-                  onPress={() => removeRow(idx)}
-                  style={styles.deleteBtn}
-                >
+                {/* Delete */}
+                <TouchableOpacity onPress={() => removeRow(idx)} style={styles.deleteBtn}>
                   <Ionicons name="close" size={22} color="#d44a4a" />
                 </TouchableOpacity>
               </View>
 
-              {/* Volume controls */}
+              {/* Volume */}
               <View style={styles.volumeRow}>
-                <TouchableOpacity
-                  onPress={() => changeVol(idx, -0.25)}
-                  style={styles.volBtn}
-                >
+                <TouchableOpacity onPress={() => adjustVol(idx, -0.25)} style={styles.volBtn}>
                   <Ionicons name="remove" size={18} color="#DFDCD9" />
                 </TouchableOpacity>
-
                 <TextInput
                   style={styles.volumeInput}
                   keyboardType="decimal-pad"
@@ -227,27 +244,20 @@ export default function CreateDrinkScreen() {
                   onChangeText={(txt) => setVolDirect(idx, txt)}
                   maxLength={5}
                 />
-
-                <TouchableOpacity
-                  onPress={() => changeVol(idx, 0.25)}
-                  style={styles.volBtn}
-                >
+                <TouchableOpacity onPress={() => adjustVol(idx, 0.25)} style={styles.volBtn}>
                   <Ionicons name="add" size={18} color="#DFDCD9" />
                 </TouchableOpacity>
-
-                {/* Volume unit label */}
                 <Text style={styles.volumeUnit}>oz</Text>
               </View>
             </View>
           ))}
 
-          {/* Manual add link */}
-          <TouchableOpacity onPress={() => setRows((p) => [...p, { id: 0, volume: 1.50 }])}>
+          <TouchableOpacity onPress={() => setRows((p) => [...p, { id: 0, volume: 1.5 }])}>
             <Text style={styles.addIngredientText}>+ Add another ingredient</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Save */}
+        {/* SAVE */}
         <TouchableOpacity
           style={[styles.saveButton, drinkName.trim() === '' && { opacity: 0.4 }]}
           disabled={drinkName.trim() === ''}
@@ -257,7 +267,7 @@ export default function CreateDrinkScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Picker modal */}
+      {/* INGREDIENT PICKER MODAL */}
       <Modal
         visible={pickerVisible}
         animationType="slide"
@@ -316,12 +326,12 @@ export default function CreateDrinkScreen() {
             />
           </View>
 
-          {/* List */}
+          {/* Ingredient list */}
           {loadingIngredients ? (
             <Text style={styles.loadingText}>Loading ingredients…</Text>
           ) : (
             <FlatList
-              data={filtered}
+              data={filteredIngredients}
               keyExtractor={(item) => String(item.id)}
               renderItem={({ item }) => (
                 <TouchableOpacity
@@ -343,12 +353,13 @@ export default function CreateDrinkScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#141414', paddingTop: 80, paddingHorizontal: 20 },
   closeButton: { position: 'absolute', top: 75, left: 20, zIndex: 999, padding: 10 },
-  headerText: { fontSize: 28, color: '#DFDCD9', fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
+  headerText: { fontSize: 28, color: '#DFDCD9', fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
   contentContainer: { paddingVertical: 20 },
   formGroup: { marginBottom: 20 },
   label: { color: '#DFDCD9', marginBottom: 5, fontSize: 16 },
   input: { backgroundColor: '#1F1F1F', color: '#DFDCD9', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16 },
-  // ---- rows ----
+  nameHint: { color: '#4F4F4F', fontSize: 12, marginTop: 5 },
+  // rows
   ingredientsSection: { marginBottom: 30 },
   rowContainer: { marginBottom: 20 },
   ingredientRow: { flexDirection: 'row', alignItems: 'center' },
@@ -356,15 +367,14 @@ const styles = StyleSheet.create({
   ingredientBoxText: { color: '#4F4F4F', fontSize: 16, flex: 1 },
   ingredientBoxTextSelected: { color: '#DFDCD9' },
   deleteBtn: { marginLeft: 10, padding: 6 },
-  // volume
   volumeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
   volBtn: { backgroundColor: '#1F1F1F', padding: 8, borderRadius: 8 },
   volumeInput: { backgroundColor: '#1F1F1F', marginHorizontal: 10, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, color: '#DFDCD9', fontSize: 16, minWidth: 60, textAlign: 'center' },
-  volumeUnit: { color: '#4F4F4F', fontSize: 16, marginLeft: 10, marginTop: 10 },
+  volumeUnit: { color: '#4F4F4F', fontSize: 16, marginLeft: 6, marginTop: 10 },
   addIngredientText: { color: '#4F4F4F', fontSize: 14, marginTop: 5 },
   saveButton: { backgroundColor: '#CE975E', borderRadius: 10, paddingVertical: 15, alignItems: 'center', marginTop: 10 },
   saveButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
-  // ---- modal ----
+  // modal
   modalContainer: { flex: 1, backgroundColor: '#141414', padding: 20 },
   modalCloseButton: { position: 'absolute', top: 30, left: 20, zIndex: 10 },
   modalHeaderText: { fontSize: 20, fontWeight: 'bold', color: '#DFDCD9', textAlign: 'center', marginTop: 10, marginBottom: -20 },
