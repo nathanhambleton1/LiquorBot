@@ -23,6 +23,7 @@ import {
   TextInput,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useRouter } from 'expo-router'; // Add router hook
 
 // Amplify & PubSub
 import { Amplify } from 'aws-amplify';
@@ -326,6 +327,7 @@ function DrinkItem({
 
 export default function MenuScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
+  const router = useRouter(); // Add router hook
 
   // Access isConnected from the provider (for the status dot)
   const { isConnected } = useLiquorBot();
@@ -593,7 +595,7 @@ export default function MenuScreen() {
         {/* Edit Icon in the top-right corner */}
         <TouchableOpacity
           style={styles.editIconContainer}
-          onPress={() => console.log('Edit icon pressed')}
+          onPress={() => router.push('/create-drink')} // Navigate to create-drink.tsx
         >
           <Ionicons name="create-outline" size={30} color="#CE975E" />
         </TouchableOpacity>

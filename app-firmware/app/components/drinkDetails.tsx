@@ -1,10 +1,10 @@
 // -----------------------------------------------------------------------------
-// File: sign-up.tsx
-// Description: Handles the user registration process for the LiquorBot app. 
-//              Includes functionality for account creation, role selection, 
-//              and confirmation. Integrates with AWS Amplify for authentication.
+// File: drinkDetails.tsx
+// Description: Displays detailed information about a specific drink, including
+//              its name, category, description, and image. Handles navigation
+//              back to the menu and gracefully manages missing or invalid data.
 // Author: Nathan Hambleton
-// Created:  March 1, 2025
+// Created: April 1, 2025
 // -----------------------------------------------------------------------------
 import React from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
