@@ -36,7 +36,7 @@ void setup() {
 }
 
 unsigned long lastHeartbeatTime = 0; // Track the last heartbeat time
-const unsigned long heartbeatInterval = 10000; // 10 seconds
+const unsigned long heartbeatInterval = 5000; // 10 seconds
 
 void loop() {
     if (WiFi.status() == WL_CONNECTED) {
@@ -49,6 +49,4 @@ void loop() {
         sendHeartbeat();
         lastHeartbeatTime = currentTime;
     }
-
-    delay(100);
 }

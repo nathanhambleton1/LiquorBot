@@ -48,15 +48,14 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
     const subscription = pubsub.subscribe({ topics: 'liquorbot/heartbeat' }).subscribe({
       next: (data) => {
         setLastHeartbeat(Date.now());
-        console.log('Received heartbeat', data);
       },
       error: (error) => console.error('Subscription error:', error),
       complete: () => console.log('Subscription completed.'),
     });
 
-    // Check connection status every 5 seconds
+    // Check connection status every 1 second
     const intervalId = setInterval(() => {
-      if (Date.now() - lastHeartbeat < 12000) {
+      if (Date.now() - lastHeartbeat < 7000) {
         setIsConnected(true);
       } else {
         setIsConnected(false);

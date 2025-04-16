@@ -1,11 +1,11 @@
 // -----------------------------------------------------------------------------
 // File: device-settings.tsx
 // Description: Provides a user interface for configuring LiquorBot device 
-//              settings, including slot assignments and Bluetooth connectivity. 
-//              Integrates with AWS Amplify for ingredient data and uses BLE 
-//              for device discovery and connection.
-// Author: Nathan Hambleton
-// Created:  March 1, 2025
+//              settings, including slot assignments and connectivity. 
+//              Integrates with AWS Amplify for ingredient data and uses 
+//              PubSub (MQTT) to set/retrieve slot configuration on the ESP32.
+// Author: Nathan Hambleton (modified for slot-config MQTT by ChatGPT)
+// Created: March 1, 2025
 // -----------------------------------------------------------------------------
 import React, { useState, useEffect } from 'react';
 import {
@@ -27,6 +27,20 @@ import { useLiquorBot } from './components/liquorbot-provider';
 import { getUrl } from 'aws-amplify/storage';
 import { BleManager } from 'react-native-ble-plx';
 
+// --- Amplify & PubSub ---
+import { Amplify } from 'aws-amplify';
+import config from '../src/amplifyconfiguration.json';
+import { PubSub } from '@aws-amplify/pubsub';
+
+// Initialize Amplify & PubSub
+Amplify.configure(config);
+const pubsub = new PubSub({
+  region: 'us-east-1',
+  endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
+});
+
+const SLOT_CONFIG_TOPIC = 'liquorbot/liquorbot001/slot-config';
+
 interface Ingredient {
   id: number;
   name: string;
@@ -42,31 +56,47 @@ interface BluetoothDevice {
 export default function DeviceSettings() {
   const router = useRouter();
   const { isConnected } = useLiquorBot();
-  const [slots, setSlots] = useState(Array(15).fill(''));
+  
+  /**
+   * We'll store 15 slots by ingredient ID. If 0 => no assignment.
+   */
+  const [slots, setSlots] = useState<number[]>(Array(15).fill(0));
+
+  // For ingredient selection modal
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+
+  // For searching/filtering ingredients
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+
+  // Master ingredient list from S3
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showConnectPrompt, setShowConnectPrompt] = useState(false); // New state for the text bubble
+
+  // "Please connect a device first" bubble
+  const [showConnectPrompt, setShowConnectPrompt] = useState(false);
 
   // Bluetooth states
   const [bluetoothModalVisible, setBluetoothModalVisible] = useState(false);
   const [discoveryModalVisible, setDiscoveryModalVisible] = useState(false);
   const [discoveredDevices, setDiscoveredDevices] = useState<BluetoothDevice[]>([]);
   const [isScanning, setIsScanning] = useState(false);
-  const DEVICE_SERVICE_UUID = "1fb68313-bd17-4fd8-b615-554ddfd462d6";
 
+  const DEVICE_SERVICE_UUID = '1fb68313-bd17-4fd8-b615-554ddfd462d6';
   const manager = new BleManager();
 
+  // ---------------- FETCH INGREDIENTS FROM S3 ----------------
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
+        // Load the ingredients.json from S3
         const ingUrl = await getUrl({ key: 'drinkMenu/ingredients.json' });
         const response = await fetch(ingUrl.url);
         const data = await response.json();
+
+        // Sort them alphabetically by name
         data.sort((a: Ingredient, b: Ingredient) => a.name.localeCompare(b.name));
         setIngredients(data);
       } catch (error) {
@@ -77,6 +107,93 @@ export default function DeviceSettings() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (ingredients.length > 0 && isConnected) {
+      fetchCurrentConfig();
+    }
+  }, [ingredients, isConnected]);
+
+  // ---------------- MQTT SUBSCRIBE & CONFIG HANDLERS ----------------
+  useEffect(() => {
+    // Subscribe to slot-config topic
+    const subscription = pubsub.subscribe({ topics: [SLOT_CONFIG_TOPIC] }).subscribe({
+      next: (data) => {
+        const msg = ((data as any)?.value ?? data) as any;
+      
+        if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
+          // coerce any string IDs to numbers just in case
+          setSlots(msg.slots.map((id: any) => Number(id) || 0));
+          return;
+        }
+      
+        if (msg.action === 'SET_SLOT' && typeof msg.slot === 'number') {
+          setSlots((prev) => {
+            const next = [...prev];
+            next[msg.slot - 1] = Number(msg.ingredientId) || 0;
+            return next;
+          });
+        }
+      },
+      error: (error) => {
+        console.error('Slot-config subscription error:', error);
+      },
+      complete: () => {},
+    });
+
+    // Once we are connected, we ask the ESP for the latest config
+    if (isConnected) {
+      fetchCurrentConfig();
+    }
+
+    // Cleanup
+    return () => {
+      subscription.unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected]);
+
+  /**
+   * Publish a message to the slot-config topic
+   */
+  const publishSlotMessage = async (payload: any) => {
+    try {
+      await pubsub.publish({
+        topics: [SLOT_CONFIG_TOPIC],
+        message: payload,
+      });
+    } catch (error) {
+      console.error('Error publishing slot-config message:', error);
+    }
+  };
+
+  // Ask the ESP for its current slot config
+  const fetchCurrentConfig = () => {
+    if (!isConnected) return;
+    publishSlotMessage({ action: 'GET_CONFIG' });
+  };
+
+  // Clears all slots on both app & device
+  const handleClearAll = () => {
+    if (!isConnected) {
+      setShowConnectPrompt(true);
+      setTimeout(() => setShowConnectPrompt(false), 2000);
+      return;
+    }
+    publishSlotMessage({ action: 'CLEAR_CONFIG' });
+    setSlots(Array(15).fill(0)); // local reset
+  };
+
+  // For setting a single slot
+  const handleSetSlot = (slotIndex: number, ingredientId: number) => {
+    const message = {
+      action: 'SET_SLOT',
+      slot: slotIndex + 1, // 1-based index in the ESP
+      ingredientId,
+    };
+    publishSlotMessage(message);
+  };
+
+  // ---------------- BLUETOOTH HELPER METHODS (OPTIONAL) ----------------
   const requestBluetoothPermissions = async () => {
     if (Platform.OS === 'android') {
       const granted = await PermissionsAndroid.requestMultiple([
@@ -84,29 +201,25 @@ export default function DeviceSettings() {
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       ]);
-
       return (
         granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED &&
         granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED &&
         granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED
       );
     }
-    return true; // iOS permissions are handled differently
+    return true; // iOS or web
   };
 
   const scanForDevices = async () => {
     const hasPermissions = await requestBluetoothPermissions();
     if (!hasPermissions) {
-      console.log('Bluetooth permissions denied');
       return;
     }
-
     setIsScanning(true);
     setDiscoveredDevices([]);
 
     manager.startDeviceScan(null, null, (error, device) => {
       if (error) {
-        console.log('Scan error:', error);
         manager.stopDeviceScan();
         setIsScanning(false);
         return;
@@ -124,49 +237,75 @@ export default function DeviceSettings() {
 
   const handleConnectDevice = (deviceId: string) => {
     setDiscoveryModalVisible(false);
+    // your BLE connect flow here...
   };
 
+  // ---------------- INGREDIENT FILTERING / MAPPING ----------------
   const categories = ['All', 'Alcohol', 'Mixer', 'Sour', 'Sweet', 'Misc'];
 
   const filteredIngredients = ingredients
     .filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
     .filter((item) => selectedCategory === 'All' || item.type === selectedCategory);
 
-  const handleSlotChange = (value: string, index: number) => {
-    const updatedSlots = [...slots];
-    updatedSlots[index] = value;
-    setSlots(updatedSlots);
+  /**
+   * Return the ingredient name for a given ID.
+   * If not found, we return a fallback message.
+   */
+  const getIngredientNameById = (id: number | string): string => {
+    if (!id || ingredients.length === 0) return '';      // suppress while loading
+    const numId = Number(id);
+    const found = ingredients.find((ing) => ing.id === numId);
+    return found ? found.name : '';                      // no “Unknown” flash
   };
 
+  // User taps a slot => open the selection modal
   const handleSlotPress = (index: number) => {
     if (!isConnected) {
       setShowConnectPrompt(true);
-      setTimeout(() => setShowConnectPrompt(false), 2000); // Hide after 2 seconds
+      setTimeout(() => setShowConnectPrompt(false), 2000);
       return;
     }
     setSelectedSlot(index);
     setModalVisible(true);
   };
 
+  // When user picks an ingredient from the modal
+  const assignIngredientToSlot = (ingredientId: number) => {
+    if (selectedSlot !== null) {
+      // Update local state
+      const newSlots = [...slots];
+      newSlots[selectedSlot] = ingredientId;
+      setSlots(newSlots);
+
+      // Publish to ESP
+      handleSetSlot(selectedSlot, ingredientId);
+
+      // Close modal & clear search
+      setModalVisible(false);
+      setSearchQuery('');
+    }
+  };
+
+  // ---------------- RENDER ----------------
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
+        {/* Close button => go back */}
         <TouchableOpacity style={styles.closeButton} onPress={() => router.push('/')}>
           <Ionicons name="close" size={30} color="#DFDCD9" />
         </TouchableOpacity>
 
         <Text style={styles.headerText}>Device Settings</Text>
 
+        {/* Connection status box */}
         <View style={styles.connectionBox}>
-        <TouchableOpacity
-          style={[styles.bluetoothIconContainer]}
-          onPress={() => {
-            setBluetoothModalVisible(true);
-          }}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="bluetooth-outline" size={24} color="#DFDCD9" />
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.bluetoothIconContainer}
+            onPress={() => setBluetoothModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="bluetooth-outline" size={24} color="#DFDCD9" />
+          </TouchableOpacity>
           <Text style={styles.liquorBotText}>LiquorBot #001</Text>
           <View style={styles.connectionStatusRow}>
             <View
@@ -181,32 +320,69 @@ export default function DeviceSettings() {
           </View>
         </View>
 
+        {/* Slots configuration box */}
         <View style={styles.slotsContainer}>
-          <Text style={styles.slotsHeader}>Configure Slots</Text>
+          <View style={styles.slotsHeaderContainer}>
+            <Text style={styles.slotsHeader}>Configure Slots</Text>
+            <TouchableOpacity onPress={handleClearAll} disabled={!isConnected}>
+              <Text
+                style={[
+                  styles.clearAllButtonText,
+                  !isConnected && { opacity: 0.5 },
+                ]}
+              >
+                Clear All
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {!isConnected && (
             <Text style={styles.connectDeviceMessage}>
               Please connect a device to start configuring.
             </Text>
           )}
-          {slots.map((slot, index) => (
-            <View key={index} style={styles.slotRow}>
-              <Text style={styles.slotLabel}>Slot {index + 1}</Text>
-              <TouchableOpacity
-                style={[
-                  styles.pickerButton,
-                  !isConnected && styles.pickerButtonDisconnected, // Add red border if not connected
-                ]}
-                onPress={() => handleSlotPress(index)}
-              >
-                <Text style={[styles.pickerButtonText, slot && styles.selectedPickerButtonText]}>
-                  {slot || 'Select Ingredient'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ))}
+
+          {slots.map((ingredientId, index) => {
+            const ingredientName = getIngredientNameById(ingredientId);
+            return (
+              <View key={index} style={styles.slotRow}>
+                <Text style={styles.slotLabel}>Slot {index + 1}</Text>
+                <View style={styles.pickerButtonContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.pickerButton,
+                      !isConnected && styles.pickerButtonDisconnected,
+                    ]}
+                    onPress={() => handleSlotPress(index)}
+                  >
+                    <Text
+                      style={[
+                        styles.pickerButtonText,
+                        ingredientName !== '' && styles.selectedPickerButtonText,
+                      ]}
+                    >
+                      {ingredientName || 'Select Ingredient'}
+                    </Text>
+                  </TouchableOpacity>
+                  {ingredientName !== '' && (
+                    <TouchableOpacity
+                      style={[
+                        styles.clearSlotOverlay,
+                        !isConnected && styles.clearSlotOverlayDisabled,
+                      ]}
+                      onPress={() => isConnected && handleSetSlot(index, 0)}
+                      disabled={!isConnected}
+                    >
+                      <Text style={styles.clearSlotOverlayText}>X</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            );
+          })}
         </View>
 
-        {/* Text bubble for connection prompt */}
+        {/* "Please connect a device first" bubble */}
         {showConnectPrompt && (
           <View style={styles.connectPrompt}>
             <Text style={styles.connectPromptText}>Please connect a device first</Text>
@@ -262,7 +438,7 @@ export default function DeviceSettings() {
             <Ionicons name="close" size={30} color="#DFDCD9" />
           </TouchableOpacity>
           <Text style={styles.discoveryModalTitle}>Available Devices</Text>
-          
+
           {isScanning ? (
             <View style={styles.scanningContainer}>
               <ActivityIndicator size="small" color="#CE975E" />
@@ -273,7 +449,9 @@ export default function DeviceSettings() {
           )}
 
           <FlatList
-            data={discoveredDevices.filter(device => device.name.startsWith('Liquorbot'))}
+            data={discoveredDevices.filter((device) =>
+              device.name.startsWith('Liquorbot')
+            )}
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.deviceItem}
@@ -289,12 +467,11 @@ export default function DeviceSettings() {
         </View>
       </Modal>
 
-      {/* Full-Screen Modal for Ingredient Selection */}
+      {/* Ingredient Selection Modal */}
       <Modal
         visible={modalVisible}
         animationType="slide"
         transparent={false}
-        // iOS-specific style that allows for swipe-down on iOS 13+
         presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
         onRequestClose={() => setModalVisible(false)}
       >
@@ -307,10 +484,10 @@ export default function DeviceSettings() {
             <Ionicons name="close" size={30} color="#DFDCD9" />
           </TouchableOpacity>
 
-          {/* Header Text */}
+          {/* Header */}
           <Text style={styles.modalHeaderText}>Select Ingredient</Text>
 
-          {/* Horizontal category selector */}
+          {/* Category selector */}
           <View style={styles.horizontalPickerContainer}>
             <ScrollView
               horizontal
@@ -327,15 +504,12 @@ export default function DeviceSettings() {
                     <Text
                       style={[
                         styles.categoryButtonText,
-                        selectedCategory === category &&
-                          styles.selectedCategoryText,
+                        selectedCategory === category && styles.selectedCategoryText,
                       ]}
                     >
                       {category}
                     </Text>
-                    {selectedCategory === category && (
-                      <View style={styles.underline} />
-                    )}
+                    {selectedCategory === category && <View style={styles.underline} />}
                   </View>
                 </TouchableOpacity>
               ))}
@@ -344,12 +518,7 @@ export default function DeviceSettings() {
 
           {/* Search bar */}
           <View style={styles.searchBarContainer}>
-            <Ionicons
-              name="search"
-              size={20}
-              color="#4F4F4F"
-              style={styles.searchIcon}
-            />
+            <Ionicons name="search" size={20} color="#4F4F4F" style={styles.searchIcon} />
             <TextInput
               style={styles.searchBar}
               placeholder="Search Ingredients"
@@ -371,13 +540,7 @@ export default function DeviceSettings() {
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.ingredientItem}
-                  onPress={() => {
-                    if (selectedSlot !== null) {
-                      handleSlotChange(item.name, selectedSlot);
-                    }
-                    setModalVisible(false);
-                    setSearchQuery('');
-                  }}
+                  onPress={() => assignIngredientToSlot(item.id)}
                 >
                   <Text style={styles.ingredientText}>{item.name}</Text>
                 </TouchableOpacity>
@@ -390,6 +553,7 @@ export default function DeviceSettings() {
   );
 }
 
+// ------------------- STYLES -------------------
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -419,7 +583,7 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 20,
     alignItems: 'center',
-    minHeight: 100, // Ensure container is tall enough
+    minHeight: 100,
   },
   liquorBotText: {
     fontSize: 24,
@@ -452,66 +616,129 @@ const styles = StyleSheet.create({
     top: 20,
     right: 20,
     zIndex: 999,
-    padding: 10, // Increased touch area
-    backgroundColor: 'transparent', // Ensure it's visible during testing
+    padding: 10,
+    backgroundColor: 'transparent',
   },
   slotsContainer: {
     backgroundColor: '#1F1F1F',
     borderRadius: 10,
     padding: 20,
   },
+  slotsHeaderContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
   slotsHeader: {
     color: '#DFDCD9',
     fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 20,
   },
   connectDeviceMessage: {
-    color: '#d44a4a', // Red text color
+    color: '#d44a4a',
     fontSize: 12,
     textAlign: 'center',
-    marginBottom: 25, // Space between the message and the slot rows
+    marginBottom: 25,
   },
   slotRow: {
-    flexDirection: 'row', // Arrange items in a row
-    alignItems: 'center', // Align items vertically
-    marginBottom: 15, // Space between rows
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
   },
   slotLabel: {
     color: '#DFDCD9',
     fontSize: 16,
-    marginRight: 10, // Space between label and button
-    width: 80, // Fixed width for alignment
+    marginRight: 10,
+    width: 80,
+  },
+  pickerButtonContainer: {
+    flex: 1,
+    position: 'relative',
   },
   pickerButton: {
-    flex: 1, // Take up remaining space
+    flex: 1,
     backgroundColor: '#141414',
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 15,
-    borderWidth: 1, // Add a default border width
-    borderColor: 'transparent', // Default border color
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   pickerButtonDisconnected: {
-    borderColor: '#d44a4a', // Red border when disconnected
+    borderColor: '#d44a4a',
   },
   pickerButtonText: {
-    color: '#4f4f4f', // Darker placeholder text color
+    color: '#4f4f4f',
     fontSize: 16,
   },
   selectedPickerButtonText: {
-    color: '#dfdcd9', // Gold color for selected ingredient
+    color: '#dfdcd9',
   },
+  clearSlotOverlay: {
+    position: 'absolute',
+    top: 6,
+    right: 10,
+    backgroundColor: 'transparent',
+    padding: 5,
+  },
+  clearSlotOverlayDisabled: {
+    opacity: 0.5,
+  },
+  clearSlotOverlayText: {
+    color: '#808080',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  connectPrompt: {
+    position: 'absolute',
+    bottom: 20,
+    alignSelf: 'center',
+    backgroundColor: '#1F1F1F',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#CE975E',
+  },
+  connectPromptText: {
+    color: '#DFDCD9',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+
+  // 'Clear All' text
+  clearAllButtonText: {
+    color: '#4F4F4F',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  // Modal
   modalContainer: {
     flex: 1,
     backgroundColor: '#141414',
     padding: 20,
   },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 30,
+    left: 20,
+    zIndex: 10,
+  },
+  modalHeaderText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#DFDCD9',
+    textAlign: 'center',
+    marginTop: 10,
+    marginBottom: -20,
+  },
   horizontalPickerContainer: {
     alignItems: 'center',
     borderBottomLeftRadius: 10,
     borderBottomRightRadius: 10,
-    paddingVertical: 5, // Reduced vertical padding
+    paddingVertical: 5,
   },
   horizontalPicker: {
     flexDirection: 'row',
@@ -526,6 +753,10 @@ const styles = StyleSheet.create({
   categoryButtonContent: {
     alignItems: 'center',
   },
+  categoryButtonText: {
+    color: '#4F4F4F',
+    fontSize: 14,
+  },
   selectedCategoryText: {
     color: '#CE975E',
   },
@@ -534,10 +765,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#CE975E',
     marginTop: 2,
     width: '100%',
-  },
-  categoryButtonText: {
-    color: '#4F4F4F',
-    fontSize: 14,
   },
   searchBarContainer: {
     flexDirection: 'row',
@@ -566,20 +793,8 @@ const styles = StyleSheet.create({
     color: '#DFDCD9',
     fontSize: 16,
   },
-  modalCloseButton: {
-    position: 'absolute',
-    top: 30,
-    left: 20,
-    zIndex: 10, // Ensure it appears above other elements
-  },
-  modalHeaderText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#DFDCD9',
-    textAlign: 'center',
-    marginTop: 10, // Reduced space below the close button
-    marginBottom: -20, // Reduced space above the sort buttons
-  },
+
+  // Bluetooth modals
   bluetoothModalContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -672,21 +887,5 @@ const styles = StyleSheet.create({
   },
   deviceList: {
     paddingBottom: 20,
-  },
-  connectPrompt: {
-    position: 'absolute',
-    bottom: 20,
-    alignSelf: 'center',
-    backgroundColor: '#1F1F1F',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#CE975E',
-  },
-  connectPromptText: {
-    color: '#DFDCD9',
-    fontSize: 14,
-    textAlign: 'center',
   },
 });
