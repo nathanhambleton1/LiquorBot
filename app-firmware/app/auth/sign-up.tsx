@@ -1,332 +1,258 @@
 // -----------------------------------------------------------------------------
-// File: sign-up.tsx
-// Description: Handles the user registration process for the LiquorBot app. 
-//              Includes functionality for account creation, role selection, 
-//              and confirmation. Integrates with AWS Amplify for authentication.
-// Author: Nathan Hambleton
-// Created:  March 1, 2025
+// File: sign‑up.tsx
+// Description: Handles user registration and first‑login profile creation.
+//              ‑ Amplify v6 (Gen 1) compatible – no Cognito custom attributes.
+//              ‑ Role/bio/picture are stored in the GraphQL UserProfile table.
+// Author: Nathan Hambleton
 // -----------------------------------------------------------------------------
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { signUp, confirmSignUp, signIn } from 'aws-amplify/auth';
+import { generateClient } from 'aws-amplify/api';
+import { createUserProfile as createUserProfileMutation } from '../../src/graphql/mutations';
 import { Ionicons } from '@expo/vector-icons';
+
+const client = generateClient();
 
 export default function SignUp() {
   const router = useRouter();
 
-  // We’ll alternate between "REGISTER", "ROLE_SELECTION" and "CONFIRM"
+  /** UI state */
   const [step, setStep] = useState<'REGISTER' | 'ROLE_SELECTION' | 'CONFIRM'>('REGISTER');
-  const [selectedRole, setSelectedRole] = useState('');
+  const [selectedRole, setSelectedRole] = useState<'EventAttendee' | 'LiquorBotOwner' | 'EventCoordinator' | ''>('');
 
-  // Sign-up fields
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [email, setEmail] = useState('');
-  const [birthday, setBirthday] = useState(''); // NEW: store "MM/DD/YYYY" format
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false); // NEW: state for toggling password visibility
+  /** form fields */
+  const [username, setUsername]   = useState('');
+  const [password, setPassword]   = useState('');
+  const [email, setEmail]         = useState('');
+  const [birthday, setBirthday]   = useState('');          // MM/DD/YYYY
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
-  // Confirmation code
+  /** confirm‑code */
   const [confirmationCode, setConfirmationCode] = useState('');
 
-  // Feedback messages
+  /** messages */
   const [errorMessage, setErrorMessage] = useState('');
-  const [infoMessage, setInfoMessage] = useState('');
+  const [infoMessage,  setInfoMessage]  = useState('');
   const [confirmationSuccess, setConfirmationSuccess] = useState(false);
 
-  // -- (A) Helper to format user input as MM/DD/YYYY --
+  /* ───────────────────────── helpers ───────────────────────── */
+
+  /** keep MM/DD/YYYY as the user types */
   const handleBirthdayInput = (text: string) => {
-    // Only digits
-    let formattedText = text.replace(/[^0-9]/g, '');
-
-    // Insert slashes
-    if (formattedText.length > 2 && formattedText.length <= 4) {
-      formattedText = `${formattedText.slice(0, 2)}/${formattedText.slice(2)}`;
-    } else if (formattedText.length > 4) {
-      formattedText = `${formattedText.slice(0, 2)}/${formattedText.slice(2, 4)}/${formattedText.slice(4, 8)}`;
-    }
-
-    // Limit length to 10 total chars (MM/DD/YYYY)
-    if (formattedText.length > 10) {
-      formattedText = formattedText.slice(0, 10);
-    }
-    setBirthday(formattedText);
+    let t = text.replace(/[^0-9]/g, '');
+    if (t.length > 2 && t.length <= 4)        t = `${t.slice(0,2)}/${t.slice(2)}`;
+    else if (t.length > 4)                    t = `${t.slice(0,2)}/${t.slice(2,4)}/${t.slice(4,8)}`;
+    if (t.length > 10) t = t.slice(0, 10);
+    setBirthday(t);
   };
 
-  // -- (B) Convert "MM/DD/YYYY" => "MM-DD-YYYY" for Cognito
-  const convertToServerDate = (mdy: string) => {
-    if (mdy.length !== 10) return ''; // If user hasn't fully typed it
-    return mdy.replace(/\//g, '-'); // Replace slashes with dashes
+  const mdyToDash = (mdy: string) => mdy.length === 10 ? mdy.replace(/\//g, '-') : '';
+
+  const isAtLeast21 = (dashDate: string) => {
+    if (!dashDate) return false;
+    const [m,d,y] = dashDate.split('-').map(Number);
+    const bday    = new Date(y, m-1, d);
+    const today   = new Date();
+    const age     = today.getFullYear() - bday.getFullYear();
+    return age > 21 || (age === 21 && (
+      today.getMonth() > bday.getMonth() ||
+      (today.getMonth() === bday.getMonth() && today.getDate() >= bday.getDate())
+    ));
   };
 
-  // -- (C) Register new user
-  const onSignUpPress = async () => {
-    try {
-      setErrorMessage('');
-      setInfoMessage('');
+  /* ───────────────────────── register flow ───────────────────────── */
 
-      // Convert birthday to "MM-DD-YYYY"
-      const serverBirthday = convertToServerDate(birthday);
-
-      // Validate if the user is at least 21 years old
-      if (!isAtLeast21(serverBirthday)) {
-        setErrorMessage('You must be at least 21 years old to create an account.');
-        return;
-      }
-
-      // If everything is valid, go to role selection
-      setStep('ROLE_SELECTION');
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Something went wrong during sign-up');
-    }
+  /** first page → just validate fields, then show role selector */
+  const onSignUpPress = () => {
+    setErrorMessage(''); setInfoMessage('');
+    const dash = mdyToDash(birthday);
+    if (!isAtLeast21(dash)) { setErrorMessage('You must be at least 21.'); return; }
+    setStep('ROLE_SELECTION');
   };
 
-  // New function to handle sign-up after selecting the role
+  /** after role picked → actual Cognito sign‑up (standard attrs only) */
   const onSubmitRolePress = async () => {
     try {
-      setErrorMessage('');
-      setInfoMessage('');
-
-      // Actually call signUp here with custom role attribute
+      setErrorMessage(''); setInfoMessage('');
       const { isSignUpComplete, nextStep } = await signUp({
         username,
         password,
         options: {
           userAttributes: {
             email,
-            birthdate: convertToServerDate(birthday),
-            'custom:role': selectedRole,
+            birthdate: mdyToDash(birthday),
           },
         },
       });
-
       if (!isSignUpComplete && nextStep?.signUpStep === 'CONFIRM_SIGN_UP') {
         setInfoMessage('A confirmation code has been sent to your email.');
         setStep('CONFIRM');
       } else {
-        setInfoMessage('Sign-up complete! You can sign in now.');
+        setInfoMessage('Sign‑up complete! You can sign in now.');
       }
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Something went wrong during sign-up');
+    } catch (e: any) {
+      setErrorMessage(e?.message ?? 'Sign‑up error');
     }
   };
 
-  // Helper function to check if the user is at least 21 years old
-  const isAtLeast21 = (serverBirthday: string): boolean => {
-    if (!serverBirthday) return false;
-
-    const [month, day, year] = serverBirthday.split('-').map(Number);
-    const birthday = new Date(year, month - 1, day);
-    const today = new Date();
-
-    const age = today.getFullYear() - birthday.getFullYear();
-    const isBirthdayPassedThisYear =
-      today.getMonth() > birthday.getMonth() ||
-      (today.getMonth() === birthday.getMonth() && today.getDate() >= birthday.getDate());
-
-    return age > 21 || (age === 21 && isBirthdayPassedThisYear);
-  };
-
-  // -- (D) Confirm sign-up with code
+  /** confirm code → sign‑in → create UserProfile row */
   const onConfirmSignUpPress = async () => {
     try {
-      setErrorMessage('');
-      setInfoMessage('');
-      await confirmSignUp({
-        username,
-        confirmationCode,
-      });
-      await signIn({ username, password });
+      setErrorMessage(''); setInfoMessage('');
+      await confirmSignUp({ username, confirmationCode });
+      await signIn({ username, password });           // establish session
+
+      // create UserProfile (ignore if duplicate)
+      await client.graphql({
+        query: createUserProfileMutation,
+        variables: {
+          input: {
+            username,
+            role: selectedRole,
+            bio: '',
+            profilePicture: '',
+          },
+        },
+      }).catch(() => {});
+
       setConfirmationSuccess(true);
       setInfoMessage('Your account has been confirmed!');
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Something went wrong confirming sign-up');
+    } catch (e: any) {
+      setErrorMessage(e?.message ?? 'Confirmation error');
     }
   };
+
+  /* ───────────────────────── UI ───────────────────────── */
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Sign Up</Text>
+      <Text style={styles.title}>Sign Up</Text>
 
+      {/* ────────── REGISTER SCREEN ────────── */}
       {step === 'REGISTER' && (
         <>
-          {/* Username Field */}
           <Text style={styles.label}>Username</Text>
-          <TextInput
-            value={username}
-            onChangeText={setUsername}
-            style={styles.input}
-            autoCapitalize="none"
-          />
+          <TextInput value={username} onChangeText={setUsername} style={styles.input} autoCapitalize="none" />
 
-          {/* Password Field */}
           <Text style={styles.label}>Password</Text>
-          <View style={{ position: 'relative' }}>
+          <View>
             <TextInput
               value={password}
               onChangeText={setPassword}
               style={styles.input}
               secureTextEntry={!isPasswordVisible}
             />
-            <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)} style={styles.eyeIcon}>
+            <TouchableOpacity style={styles.eyeIcon} onPress={() => setIsPasswordVisible(!isPasswordVisible)}>
               <Ionicons name={isPasswordVisible ? 'eye' : 'eye-off'} size={24} color="#4F4F4F" />
             </TouchableOpacity>
           </View>
 
-          {/* Email Field */}
           <Text style={styles.label}>Email</Text>
-          <TextInput
-            value={email}
-            onChangeText={setEmail}
-            style={styles.input}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
+          <TextInput value={email} onChangeText={setEmail} style={styles.input} keyboardType="email-address" autoCapitalize="none" />
 
-          {/* Birthday Field (MM/DD/YYYY) */}
           <Text style={styles.label}>Birthday</Text>
           <TextInput
             value={birthday}
             onChangeText={handleBirthdayInput}
             style={[
               styles.input,
-              !isAtLeast21(convertToServerDate(birthday)) && birthday.length === 10
-                ? styles.inputError
-                : null,
+              !isAtLeast21(mdyToDash(birthday)) && birthday.length === 10 ? styles.inputError : null,
             ]}
             keyboardType="numeric"
             placeholder="MM/DD/YYYY"
             placeholderTextColor="#666"
             maxLength={10}
           />
-          {/* Real-time error message for underage users */}
-          {!isAtLeast21(convertToServerDate(birthday)) && birthday.length === 10 && (
-            <Text style={styles.error}>You must be at least 21 years old to create an account.</Text>
+          {!isAtLeast21(mdyToDash(birthday)) && birthday.length === 10 && (
+            <Text style={styles.error}>You must be at least 21 years old.</Text>
           )}
 
           {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
-          {!!infoMessage && !confirmationSuccess && (
-            <Text style={[styles.info, styles.smallInfoMessage]}>{infoMessage}</Text>
-          )}
+          {!!infoMessage  && <Text style={[styles.info, styles.smallInfoMessage]}>{infoMessage}</Text>}
 
           <TouchableOpacity style={styles.button} onPress={onSignUpPress}>
-            <Text style={styles.buttonText}>Register</Text>
+            <Text style={styles.buttonText}>Next</Text>
           </TouchableOpacity>
         </>
       )}
 
+      {/* ────────── ROLE SELECTION ────────── */}
       {step === 'ROLE_SELECTION' && (
         <View>
-          <Text style={styles.title}>Select Your Role</Text>
-          {/* Role options */}
-          <TouchableOpacity
-            style={[
-              styles.roleOption,
-              selectedRole === 'EventAttendee' && styles.selectedRoleOption,
-            ]}
-            onPress={() => setSelectedRole('EventAttendee')}
-          >
-            <Ionicons name="people" size={32} color="#CE975E" />
-            <View style={styles.roleTextContainer}>
-              <Text style={styles.roleText}>Event Attendee</Text>
-              <Text style={styles.roleDescription}>
-                Join events and enjoy LiquorBot services.
-              </Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.roleOption,
-              selectedRole === 'LiquorBotOwner' && styles.selectedRoleOption,
-            ]}
-            onPress={() => setSelectedRole('LiquorBotOwner')}
-          >
-            <Ionicons name="home" size={32} color="#CE975E" />
-            <View style={styles.roleTextContainer}>
-              <Text style={styles.roleText}>LiquorBot Owner</Text>
-              <Text style={styles.roleDescription}>
-                Manage your personal LiquorBot at home.
-              </Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.roleOption,
-              selectedRole === 'EventCoordinator' && styles.selectedRoleOption,
-            ]}
-            onPress={() => setSelectedRole('EventCoordinator')}
-          >
-            <Ionicons name="briefcase" size={32} color="#CE975E" />
-            <View style={styles.roleTextContainer}>
-              <Text style={styles.roleText}>Event Coordinator</Text>
-              <Text style={styles.roleDescription}>
-                Organize events and manage services.
-              </Text>
-            </View>
-          </TouchableOpacity>
+          <Text style={styles.title}>Select Your Role</Text>
+
+          {(['EventAttendee','LiquorBotOwner','EventCoordinator'] as const).map(role => (
+            <TouchableOpacity
+              key={role}
+              style={[styles.roleOption, selectedRole === role && styles.selectedRoleOption]}
+              onPress={() => setSelectedRole(role)}
+            >
+              <Ionicons
+                name={role === 'EventAttendee' ? 'people'
+                      : role === 'LiquorBotOwner' ? 'home'
+                      : 'briefcase'}
+                size={32}
+                color="#CE975E"
+              />
+              <View style={styles.roleTextContainer}>
+                <Text style={styles.roleText}>{role.replace(/([A-Z])/g,' $1').trim()}</Text>
+                <Text style={styles.roleDescription}>
+                  {role === 'EventAttendee'   && 'Join events and enjoy LiquorBot services.'}
+                  {role === 'LiquorBotOwner'  && 'Manage your personal LiquorBot at home.'}
+                  {role === 'EventCoordinator'&& 'Organize events and manage services.'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
 
           {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
-          {!!infoMessage && !confirmationSuccess && (
-            <Text style={[styles.info, styles.smallInfoMessage]}>{infoMessage}</Text>
-          )}
+          {!!infoMessage  && <Text style={[styles.info, styles.smallInfoMessage]}>{infoMessage}</Text>}
 
-          <TouchableOpacity style={styles.button} onPress={onSubmitRolePress}>
-            <Text style={styles.buttonText}>Next</Text>
+          <TouchableOpacity style={styles.button} onPress={onSubmitRolePress} disabled={!selectedRole}>
+            <Text style={styles.buttonText}>Register</Text>
           </TouchableOpacity>
         </View>
       )}
 
+      {/* ────────── CONFIRM CODE ────────── */}
       {step === 'CONFIRM' && (
-        <>
-          {!confirmationSuccess ? (
-            <>
-              {/* Confirmation Code Field */}
-              <Text style={styles.label}>Confirmation Code</Text>
-              <TextInput
-                value={confirmationCode}
-                onChangeText={setConfirmationCode}
-                style={styles.input}
-                keyboardType="number-pad"
-              />
+        confirmationSuccess ? (
+          <>
+            <Ionicons name="checkmark-circle" size={48} color="#44e627" style={{ alignSelf:'center', marginVertical:24 }} />
+            <Text style={[styles.info, styles.confirmationMessage]}>{infoMessage}</Text>
+            <TouchableOpacity style={styles.button} onPress={() => router.replace('/auth/sign-in')}>
+              <Text style={styles.buttonText}>Sign In</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={styles.label}>Confirmation Code</Text>
+            <TextInput
+              value={confirmationCode}
+              onChangeText={setConfirmationCode}
+              style={styles.input}
+              keyboardType="number-pad"
+            />
 
-              {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
-              {!!infoMessage && !confirmationSuccess && (
-                <Text style={[styles.info, styles.smallInfoMessage]}>{infoMessage}</Text>
-              )}
+            {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+            {!!infoMessage  && <Text style={[styles.info, styles.smallInfoMessage]}>{infoMessage}</Text>}
 
-              <TouchableOpacity style={styles.button} onPress={onConfirmSignUpPress}>
-                <Text style={styles.buttonText}>Confirm Sign Up</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <Ionicons
-                name="checkmark-circle"
-                size={48}
-                color="#44e627"
-                style={{ alignSelf: 'center', marginTop: 32, marginBottom: 16 }}
-              />
-              {!!infoMessage && confirmationSuccess && (
-                <Text style={[styles.info, styles.confirmationMessage]}>{infoMessage}</Text>
-              )}
-              <TouchableOpacity
-                style={styles.button}
-                onPress={() => router.replace('/auth/sign-in')}
-              >
-                <Text style={styles.buttonText}>Sign In</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </>
+            <TouchableOpacity style={styles.button} onPress={onConfirmSignUpPress}>
+              <Text style={styles.buttonText}>Confirm</Text>
+            </TouchableOpacity>
+          </>
+        )
       )}
 
-      {/* Back to Sign In */}
+      {/* back link */}
       {!confirmationSuccess && (
         <View style={styles.signUpContainer}>
           <Text style={styles.signUpText}>
             Already have an account?{' '}
             <Text style={styles.signUpLink} onPress={() => router.replace('/auth/sign-in')}>
-              Sign In
+              Sign In
             </Text>
           </Text>
         </View>
@@ -335,118 +261,26 @@ export default function SignUp() {
   );
 }
 
-// ---------------- Styles ----------------
+/* ───────────────────────── styles ───────────────────────── */
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  title: {
-    fontSize: 48,
-    color: '#fff',
-    marginBottom: 24,
-    textAlign: 'left',
-    fontWeight: 'bold',
-  },
-  label: {
-    fontSize: 16,
-    color: '#fff',
-    marginBottom: -5,
-    marginTop: 10,
-    textAlign: 'left',
-  },
-  input: {
-    backgroundColor: '#141414',
-    marginVertical: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    fontSize: 16,
-    color: '#DFDCD9',
-  },
-  inputError: {
-    borderColor: 'red',
-    borderWidth: 1,
-  },
-  button: {
-    backgroundColor: '#CE975E',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  buttonText: {
-    color: '#DFDCD9',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  error: {
-    color: 'red',
-    marginTop: 8,
-  },
-  info: {
-    color: '#CE975E',
-    marginTop: 8,
-  },
-  confirmationMessage: {
-    fontSize: 20, // Larger font size
-    color: '#FFFFFF', // White color
-    textAlign: 'center', // Centered text
-    marginBottom: 16, // Space below the message
-  },
-  smallInfoMessage: {
-    fontSize: 14, // Smaller font size
-    color: '#DFDCD9', // Keep the same color
-    textAlign: 'center', // Centered text
-    marginTop: 16, // Add padding to the top
-    marginBottom: 8, // Adjust spacing
-  },
-  signUpContainer: {
-    marginTop: 60,
-    alignItems: 'center',
-  },
-  signUpText: {
-    fontSize: 14,
-    color: '#fff',
-  },
-  signUpLink: {
-    color: '#CE975E',
-    fontWeight: 'bold',
-  },
-  roleOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#141414', // Light gray background
-    padding: 16,
-    borderRadius: 8,
-    marginVertical: 8,
-    borderWidth: 2, // Add a consistent border width
-    borderColor: 'transparent', // Default to transparent
-  },
-  selectedRoleOption: {
-    borderColor: '#CE975E', // Highlight selected option with gold
-  },
-  roleTextContainer: {
-    marginLeft: 14, // Space between icon and text
-    flex: 1, // Allow text to take up remaining space
-  },
-  roleText: {
-    fontSize: 18,
-    color: '#DFDCD9', // Light text
-  },
-  roleDescription: {
-    fontSize: 14,
-    color: '#4F4F4F', // Darker text for description
-    marginTop: 4, // Space between title and description
-    textAlign: 'left',
-  },
-  eyeIcon: {
-    position: 'absolute',
-    right: 16,
-    top: '50%',
-    transform: [{ translateY: -12 }],
-  },
+  container:{ flex:1, backgroundColor:'#000', justifyContent:'center', padding:24 },
+  title:{ fontSize:48, color:'#fff', marginBottom:24, fontWeight:'bold' },
+  label:{ fontSize:16, color:'#fff', marginTop:10 },
+  input:{ backgroundColor:'#141414', marginVertical:8, paddingHorizontal:16, paddingVertical:12, borderRadius:8, fontSize:16, color:'#DFDCD9' },
+  inputError:{ borderColor:'red', borderWidth:1 },
+  button:{ backgroundColor:'#CE975E', paddingVertical:12, borderRadius:8, alignItems:'center', marginTop:20 },
+  buttonText:{ color:'#DFDCD9', fontSize:18, fontWeight:'bold' },
+  error:{ color:'red', marginTop:8 },
+  info:{ color:'#CE975E', marginTop:8 },
+  confirmationMessage:{ fontSize:20, color:'#fff', textAlign:'center', marginBottom:16 },
+  smallInfoMessage:{ fontSize:14, color:'#DFDCD9', textAlign:'center', marginTop:16 },
+  signUpContainer:{ marginTop:60, alignItems:'center' },
+  signUpText:{ fontSize:14, color:'#fff' },
+  signUpLink:{ color:'#CE975E', fontWeight:'bold' },
+  roleOption:{ flexDirection:'row', alignItems:'center', backgroundColor:'#141414', padding:16, borderRadius:8, marginVertical:8, borderWidth:2, borderColor:'transparent' },
+  selectedRoleOption:{ borderColor:'#CE975E' },
+  roleTextContainer:{ marginLeft:14, flex:1 },
+  roleText:{ fontSize:18, color:'#DFDCD9' },
+  roleDescription:{ fontSize:14, color:'#4F4F4F', marginTop:4 },
+  eyeIcon:{ position:'absolute', right:16, top:'50%', transform:[{ translateY:-12 }] },
 });

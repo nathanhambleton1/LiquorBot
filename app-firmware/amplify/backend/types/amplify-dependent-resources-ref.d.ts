@@ -1,12 +1,13 @@
 export type AmplifyDependentResourcesAttributes = {
   "api": {
-    "liquorbot": {
+    "LiquorBot": {
       "GraphQLAPIEndpointOutput": "string",
-      "GraphQLAPIIdOutput": "string"
+      "GraphQLAPIIdOutput": "string",
+      "GraphQLAPIKeyOutput": "string"
     }
   },
   "auth": {
-    "liquorbotf668a8fa": {
+    "LiquorBot": {
       "AppClientID": "string",
       "AppClientIDWeb": "string",
       "IdentityPoolId": "string",
@@ -17,7 +18,7 @@ export type AmplifyDependentResourcesAttributes = {
     }
   },
   "storage": {
-    "liquorbotAppStorage": {
+    "s3liquorbotstorage8cb6bcd8": {
       "BucketName": "string",
       "Region": "string"
     }

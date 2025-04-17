@@ -10,14 +10,15 @@ type GeneratedSubscription<InputType, OutputType> = string & {
 
 export const onCreateLikedDrink = /* GraphQL */ `subscription OnCreateLikedDrink(
   $filter: ModelSubscriptionLikedDrinkFilterInput
-  $userID: String
+  $owner: String
 ) {
-  onCreateLikedDrink(filter: $filter, userID: $userID) {
+  onCreateLikedDrink(filter: $filter, owner: $owner) {
     id
     userID
     drinkID
     createdAt
     updatedAt
+    owner
     __typename
   }
 }
@@ -27,14 +28,15 @@ export const onCreateLikedDrink = /* GraphQL */ `subscription OnCreateLikedDrink
 >;
 export const onUpdateLikedDrink = /* GraphQL */ `subscription OnUpdateLikedDrink(
   $filter: ModelSubscriptionLikedDrinkFilterInput
-  $userID: String
+  $owner: String
 ) {
-  onUpdateLikedDrink(filter: $filter, userID: $userID) {
+  onUpdateLikedDrink(filter: $filter, owner: $owner) {
     id
     userID
     drinkID
     createdAt
     updatedAt
+    owner
     __typename
   }
 }
@@ -44,18 +46,148 @@ export const onUpdateLikedDrink = /* GraphQL */ `subscription OnUpdateLikedDrink
 >;
 export const onDeleteLikedDrink = /* GraphQL */ `subscription OnDeleteLikedDrink(
   $filter: ModelSubscriptionLikedDrinkFilterInput
-  $userID: String
+  $owner: String
 ) {
-  onDeleteLikedDrink(filter: $filter, userID: $userID) {
+  onDeleteLikedDrink(filter: $filter, owner: $owner) {
     id
     userID
     drinkID
     createdAt
     updatedAt
+    owner
     __typename
   }
 }
 ` as GeneratedSubscription<
   APITypes.OnDeleteLikedDrinkSubscriptionVariables,
   APITypes.OnDeleteLikedDrinkSubscription
+>;
+export const onCreateCustomRecipe = /* GraphQL */ `subscription OnCreateCustomRecipe(
+  $filter: ModelSubscriptionCustomRecipeFilterInput
+  $owner: String
+) {
+  onCreateCustomRecipe(filter: $filter, owner: $owner) {
+    id
+    name
+    description
+    ingredients {
+      ingredientID
+      amount
+      __typename
+    }
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnCreateCustomRecipeSubscriptionVariables,
+  APITypes.OnCreateCustomRecipeSubscription
+>;
+export const onUpdateCustomRecipe = /* GraphQL */ `subscription OnUpdateCustomRecipe(
+  $filter: ModelSubscriptionCustomRecipeFilterInput
+  $owner: String
+) {
+  onUpdateCustomRecipe(filter: $filter, owner: $owner) {
+    id
+    name
+    description
+    ingredients {
+      ingredientID
+      amount
+      __typename
+    }
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnUpdateCustomRecipeSubscriptionVariables,
+  APITypes.OnUpdateCustomRecipeSubscription
+>;
+export const onDeleteCustomRecipe = /* GraphQL */ `subscription OnDeleteCustomRecipe(
+  $filter: ModelSubscriptionCustomRecipeFilterInput
+  $owner: String
+) {
+  onDeleteCustomRecipe(filter: $filter, owner: $owner) {
+    id
+    name
+    description
+    ingredients {
+      ingredientID
+      amount
+      __typename
+    }
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnDeleteCustomRecipeSubscriptionVariables,
+  APITypes.OnDeleteCustomRecipeSubscription
+>;
+export const onCreateUserProfile = /* GraphQL */ `subscription OnCreateUserProfile(
+  $filter: ModelSubscriptionUserProfileFilterInput
+  $owner: String
+) {
+  onCreateUserProfile(filter: $filter, owner: $owner) {
+    id
+    username
+    bio
+    role
+    profilePicture
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnCreateUserProfileSubscriptionVariables,
+  APITypes.OnCreateUserProfileSubscription
+>;
+export const onUpdateUserProfile = /* GraphQL */ `subscription OnUpdateUserProfile(
+  $filter: ModelSubscriptionUserProfileFilterInput
+  $owner: String
+) {
+  onUpdateUserProfile(filter: $filter, owner: $owner) {
+    id
+    username
+    bio
+    role
+    profilePicture
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnUpdateUserProfileSubscriptionVariables,
+  APITypes.OnUpdateUserProfileSubscription
+>;
+export const onDeleteUserProfile = /* GraphQL */ `subscription OnDeleteUserProfile(
+  $filter: ModelSubscriptionUserProfileFilterInput
+  $owner: String
+) {
+  onDeleteUserProfile(filter: $filter, owner: $owner) {
+    id
+    username
+    bio
+    role
+    profilePicture
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnDeleteUserProfileSubscriptionVariables,
+  APITypes.OnDeleteUserProfileSubscription
 >;

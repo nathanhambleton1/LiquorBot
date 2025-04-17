@@ -1,11 +1,9 @@
 // -----------------------------------------------------------------------------
 // File: profile.tsx
-// Description: User profile screen for the LiquorBot app. Includes functionality 
-//              for viewing and editing user details, managing liked drinks, and 
-//              updating profile pictures. Integrates with AWS Amplify for 
-//              authentication, storage, and GraphQL API.
+// Description: User profile screen for the LiquorBot app. Stores & edits profile
+//              data in the UserProfile @model instead of Cognito attributes.
 // Author: Nathan Hambleton
-// Created:  March 1, 2025
+// Updated:  Apr 16 2025
 // -----------------------------------------------------------------------------
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -22,33 +20,26 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-// Amplify (v6) imports
-import {
-  getCurrentUser,
-  fetchUserAttributes,
-  updateUserAttributes,
-} from 'aws-amplify/auth';
+// Amplify core + Storage
+import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
 import { getUrl, uploadData } from 'aws-amplify/storage';
 import * as ImagePicker from 'expo-image-picker';
 
-// (A) GraphQL API client + queries/mutations
+// GraphQL client + ops
 import { Amplify } from 'aws-amplify';
 import config from '../../src/amplifyconfiguration.json';
 import { generateClient } from 'aws-amplify/api';
-import { listLikedDrinks } from '../../src/graphql/queries';
+import { listLikedDrinks, getUserProfile } from '../../src/graphql/queries';
+import {
+  createUserProfile,
+  updateUserProfile,
+} from '../../src/graphql/mutations';
 
-// (B) Import the Amplify UI hook for sign-out
+// Sign‑out hook
 import { useAuthenticator } from '@aws-amplify/ui-react-native';
 
-// Configure Amplify for this screen
 Amplify.configure(config);
 const client = generateClient();
-
-// ---------- TYPES ----------
-interface CognitoUserAttribute {
-  Name: string;
-  Value: string;
-}
 
 interface UserState {
   username: string;
@@ -75,383 +66,278 @@ interface ProfileButton {
   content: string;
 }
 
-// Drink type, matching your S3 JSON structure
 interface Drink {
   id: number;
   name: string;
   category: string;
-  description?: string;
   image: string;
-  ingredients?: string;
 }
 
-// For storing the "LikedDrink" record info in memory, so we can delete it when unliking
 interface LikedDrinkRecord {
-  id: string;       // The DynamoDB record ID
+  id: string;
   drinkID: number;
   userID: string;
 }
 
-// ---------- MAIN COMPONENT ----------
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function ProfileScreen() {
   const [user, setUser] = useState<UserState>({
-    username: 'Loading...',
-    email: 'Loading...',
+    username: 'Loading…',
+    email: 'Loading…',
     profilePicture: null,
   });
 
-  // Local states for user profile fields
+  const [userProfileId, setUserProfileId] = useState('');
+  const [profileLoaded, setProfileLoaded] = useState(false);
+
+  // Editable fields
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [birthday, setBirthday] = useState('');
-  // NEW: Short Bio
+  const [birthday, setBirthday] = useState(''); // read‑only
   const [bio, setBio] = useState('');
 
-  // Popup states
+  // UI state
   const [popupData, setPopupData] = useState<PopupData | null>(null);
   const [popupVisible, setPopupVisible] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
-  // All Drinks from S3
+  // Drinks / likes
   const [drinks, setDrinks] = useState<Drink[]>([]);
-
-  // Actual items the user liked (Drink objects). They remain displayed even if toggled off.
   const [likedDrinksData, setLikedDrinksData] = useState<Drink[]>([]);
-
-  // We'll keep a map { drinkID -> recordID } to track existing LikedDrink records from DynamoDB
   const [recordMap, setRecordMap] = useState<Record<number, string>>({});
-
-  // We'll keep a local set of "currently liked" IDs in the popup
   const [likedIDsInPopup, setLikedIDsInPopup] = useState<Set<number>>(new Set());
 
-  // (B) Get the signOut function from useAuthenticator
-  const userSelector = (context: any) => [context.user];
-  const { signOut } = useAuthenticator(userSelector);
+  // sign‑out
+  const { signOut } = useAuthenticator((ctx: any) => [ctx.user]);
 
-  // --------------------------------------------------------------------
-  // Fetch user data & user attributes
-  // --------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // INITIALISE PROFILE (UserProfile row + basic Cognito attrs)
+  // --------------------------------------------------------------------------
   useEffect(() => {
-    const fetchUserData = async () => {
+    const init = async () => {
       try {
-        // 1) get user from Cognito
-        const currentUser = await getCurrentUser();
-        if (!currentUser) return;
+        const cognitoUser = await getCurrentUser();
+        const sub = cognitoUser.username; // primary key for model
 
-        const { username } = currentUser;
-
-        // 2) fetch user attributes from Cognito
-        const attributesObject: Partial<Record<string, string>> =
-          await fetchUserAttributes();
-        const attributesArray: CognitoUserAttribute[] = Object.entries(
-          attributesObject
-        ).map(([Name, Value]) => ({ Name, Value: Value ?? '' }));
-
-        // Helper to find attribute by name
-        const findAttr = (attrName: string) =>
-          attributesArray.find((attr) => attr.Name === attrName)?.Value ?? '';
-
-        // 3) set user info in state
-        const emailValue = findAttr('email');
-        const firstNameValue = findAttr('given_name');
-        const lastNameValue = findAttr('family_name');
-        const birthdayValue = findAttr('birthdate');
-        // NEW: short bio
-        const bioValue = findAttr('custom:bio');
-
-        setUser({
-          username: username || 'Guest',
-          email: emailValue || 'No email provided',
-          profilePicture: null,
-        });
-
-        setFirstName(firstNameValue);
-        setLastName(lastNameValue);
-        setBirthday(birthdayValue);
-        setBio(bioValue); // store the custom:bio attribute
-
-        // 4) fetch profile pic from S3
+        // email / birthday just for display
+        let email = '';
+        let bday = '';
         try {
-          const { url } = await getUrl({
-            path: `public/profilePictures/${username}.jpg`,
-            options: { validateObjectExistence: false },
-          });
-          if (url) {
-            setUser((prevUser) => ({
-              ...prevUser,
-              profilePicture: url.toString(),
-            }));
-          }
-        } catch (err) {
-          console.log('No existing profile pic or error fetching it:', err);
-        }
-      } catch (error) {
-        console.error('Error fetching user data:', error);
-        setUser({
-          username: 'Guest',
-          email: 'Not logged in',
-          profilePicture: null,
+          const attrs = await fetchUserAttributes();
+          email = attrs.email ?? '';
+          bday = attrs.birthdate ?? '';
+        } catch (_) {}
+
+        // fetch or create UserProfile row
+        let res: any = await client.graphql({
+          query: getUserProfile,
+          variables: { id: sub },
         });
+        let profile = res?.data?.getUserProfile;
+
+        if (!profile) {
+          res = await client.graphql({
+            query: createUserProfile,
+            variables: {
+              input: { id: sub, username: '', bio: '', role: 'USER', profilePicture: '' },
+            },
+          });
+          profile = res.data.createUserProfile;
+        }
+
+        setUserProfileId(profile.id);
+        setFirstName(profile.username.split(' ')[0] ?? '');
+        setLastName(profile.username.split(' ').slice(1).join(' ') ?? '');
+        setBio(profile.bio ?? '');
+
+        // top‑banner user state
+        setUser({
+          username: profile.username || sub,
+          email: email || 'No email',
+          profilePicture: profile.profilePicture || null,
+        });
+
+        setBirthday(bday);
+        setProfileLoaded(true);
+      } catch (err) {
+        console.error('init profile error:', err);
       }
     };
 
-    fetchUserData();
+    init();
   }, []);
 
-  // --------------------------------------------------------------------
-  // Fetch all drinks from S3
-  // --------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // Fetch drinks list from S3 on mount
+  // --------------------------------------------------------------------------
   useEffect(() => {
-    const fetchDrinksFromS3 = async () => {
+    const fetchDrinks = async () => {
       try {
-        const s3res = await getUrl({ key: 'drinkMenu/drinks.json' });
-        const response = await fetch(s3res.url);
-        const data = await response.json();
+        const { url } = await getUrl({ key: 'drinkMenu/drinks.json' });
+        const data = await (await fetch(url)).json();
         setDrinks(data);
-      } catch (error) {
-        console.error('Error fetching drinks from S3:', error);
+      } catch (err) {
+        console.error('fetchDrinks error:', err);
       }
     };
-    fetchDrinksFromS3();
+    fetchDrinks();
   }, []);
 
-  // --------------------------------------------------------------------
-  // Button definitions
-  // --------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // Buttons
+  // --------------------------------------------------------------------------
   const buttons: ProfileButton[] = [
-    {
-      title: 'Edit Profile',
-      icon: 'create-outline',
-      content: 'Edit your profile details below.',
-    },
-    {
-      title: 'Liked Drinks',
-      icon: 'heart-outline',
-      content: 'View your liked drinks.',
-    },
-    {
-      title: 'Pour History',
-      icon: 'time-outline',
-      content: 'View your pour history.',
-    },
-    {
-      title: 'Settings',
-      icon: 'settings-outline',
-      content: 'Adjust your app settings.',
-    },
-    {
-      title: 'Help',
-      icon: 'help-circle-outline',
-      content: 'Get help and support.',
-    },
-    {
-      title: 'Sign Out',
-      icon: 'log-out-outline',
-      content: 'Sign out of your account.',
-    },
+    { title: 'Edit Profile', icon: 'create-outline', content: '' },
+    { title: 'Liked Drinks', icon: 'heart-outline', content: '' },
+    { title: 'Pour History', icon: 'time-outline', content: '' },
+    { title: 'Settings', icon: 'settings-outline', content: '' },
+    { title: 'Help', icon: 'help-circle-outline', content: '' },
+    { title: 'Sign Out', icon: 'log-out-outline', content: '' },
   ];
 
-  // --------------------------------------------------------------------
-  // Opening / closing the popup
-  // --------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // Popup helpers
+  // --------------------------------------------------------------------------
   const openPopup = (data: PopupData) => {
     setPopupData(data);
     setPopupVisible(true);
     slideAnim.setValue(SCREEN_WIDTH);
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 100,
-      useNativeDriver: false,
-    }).start();
+    Animated.timing(slideAnim, { toValue: 0, duration: 100, useNativeDriver: false }).start();
 
-    // If we're opening the "Liked Drinks" popup, fetch them
-    if (data.title === 'Liked Drinks') {
-      fetchUserLikedDrinks();
-    }
+    if (data.title === 'Liked Drinks') fetchUserLikedDrinks();
   };
 
   const closePopup = () => {
-    Animated.timing(slideAnim, {
-      toValue: SCREEN_WIDTH,
-      duration: 100,
-      useNativeDriver: false,
-    }).start(() => setPopupVisible(false));
+    Animated.timing(slideAnim, { toValue: SCREEN_WIDTH, duration: 100, useNativeDriver: false }).start(() =>
+      setPopupVisible(false)
+    );
   };
 
   const panResponder = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (evt, gestureState) =>
-        Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
-      onPanResponderMove: (evt, gestureState) => {
-        if (gestureState.dx > 0) slideAnim.setValue(gestureState.dx);
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderMove: (_, g) => {
+        if (g.dx > 0) slideAnim.setValue(g.dx);
       },
-      onPanResponderRelease: (evt, gestureState) => {
-        if (gestureState.dx > SCREEN_WIDTH / 3) {
-          closePopup();
-        } else {
-          Animated.timing(slideAnim, {
-            toValue: 0,
-            duration: 300,
-            useNativeDriver: false,
-          }).start();
-        }
+      onPanResponderRelease: (_, g) => {
+        if (g.dx > SCREEN_WIDTH / 3) closePopup();
+        else Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: false }).start();
       },
     })
   ).current;
 
-  // --------------------------------------------------------------------
-  // Save profile changes to Cognito
-  // --------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // SAVE PROFILE → UserProfile model
+  // --------------------------------------------------------------------------
   const handleSaveProfile = async () => {
     try {
-      await updateUserAttributes({
-        userAttributes: {
-          given_name: firstName,
-          family_name: lastName,
-          birthdate: birthday,
-          'custom:bio': bio, // saving the short bio to Cognito
-        },
+      const fullName = `${firstName} ${lastName}`.trim();
+      await client.graphql({
+        query: updateUserProfile,
+        variables: { input: { id: userProfileId, username: fullName, bio } },
       });
-      console.log('User attributes updated in Cognito.');
+      setUser((prev) => ({ ...prev, username: fullName }));
       closePopup();
-    } catch (error) {
-      console.log('Error updating user attributes:', error);
+    } catch (err) {
+      console.log('updateUserProfile error:', err);
     }
   };
 
-  // --------------------------------------------------------------------
-  // Handle picking & uploading a profile pic
-  // --------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // Upload picture & persist URL
+  // --------------------------------------------------------------------------
   const handleProfilePictureUpload = async () => {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
+      const picker = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 1,
       });
+      if (picker.canceled) return;
 
-      if (!result.canceled) {
-        const localUri = result.assets[0].uri;
-        const response = await fetch(localUri);
-        const blob = await response.blob();
+      const localUri = picker.assets[0].uri;
+      const blob = await (await fetch(localUri)).blob();
+      const s3Path = `public/profilePictures/${userProfileId}.jpg`;
 
-        const s3Path = `public/profilePictures/${user.username}.jpg`;
-        await uploadData({ path: s3Path, data: blob });
+      await uploadData({ path: s3Path, data: blob });
+      const { url } = await getUrl({ path: s3Path });
 
-        const { url } = await getUrl({ path: s3Path });
-        if (url) {
-          setUser((prevUser) => ({
-            ...prevUser,
-            profilePicture: url.toString(),
-          }));
-        }
-      }
-    } catch (error) {
-      console.error('Error uploading profile picture:', error);
+      await client.graphql({
+        query: updateUserProfile,
+        variables: { input: { id: userProfileId, profilePicture: url.toString() } },
+      });
+
+      setUser((p) => ({ ...p, profilePicture: url.toString() }));
+    } catch (err) {
+      console.error('profile pic upload error:', err);
     }
   };
 
-  // --------------------------------------------------------------------
-  // Format birthday input
-  // --------------------------------------------------------------------
-  const handleBirthdayInput = (text: string) => {
-    let formattedText = text.replace(/[^0-9]/g, '');
-    if (formattedText.length > 2 && formattedText.length <= 4) {
-      formattedText = `${formattedText.slice(0, 2)}/${formattedText.slice(2)}`;
-    } else if (formattedText.length > 4) {
-      formattedText = `${formattedText.slice(0, 2)}/${formattedText.slice(
-        2,
-        4
-      )}/${formattedText.slice(4, 8)}`;
-    }
-    if (formattedText.length > 10) {
-      formattedText = formattedText.slice(0, 10);
-    }
-    setBirthday(formattedText);
+  // --------------------------------------------------------------------------
+  // Birthday formatter (display only)
+  // --------------------------------------------------------------------------
+  const handleBirthdayInput = (t: string) => {
+    let f = t.replace(/[^0-9]/g, '');
+    if (f.length > 2 && f.length <= 4) f = `${f.slice(0, 2)}/${f.slice(2)}`;
+    else if (f.length > 4) f = `${f.slice(0, 2)}/${f.slice(2, 4)}/${f.slice(4, 8)}`;
+    if (f.length > 10) f = f.slice(0, 10);
+    setBirthday(f);
   };
 
-  // --------------------------------------------------------------------
-  // FETCH USER'S LIKED DRINKS
-  // --------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // Fetch liked drinks
+  // --------------------------------------------------------------------------
   const fetchUserLikedDrinks = async () => {
     try {
-      if (!user.username) return;
-
-      const res = await client.graphql({
+      const res: any = await client.graphql({
         query: listLikedDrinks,
-        variables: {
-          filter: {
-            userID: { eq: user.username },
-          },
-        },
+        variables: { filter: { userID: { eq: userProfileId } } },
       });
-
-      // items = [{ id, userID, drinkID }]
       const items: LikedDrinkRecord[] = res?.data?.listLikedDrinks?.items ?? [];
+      const likedIds = items.map((i) => i.drinkID);
 
-      // Gather the IDs the user has liked
-      const likedIDs = items.map((r) => r.drinkID);
-
-      // Build a { drinkID -> recordID } map
-      const newRecordMap: Record<number, string> = {};
-      items.forEach((rec) => {
-        newRecordMap[rec.drinkID] = rec.id;
-      });
-      setRecordMap(newRecordMap);
-
-      // The user’s currently liked set
-      const newLikedSet = new Set(likedIDs);
-      setLikedIDsInPopup(newLikedSet);
-
-      // Filter the master "drinks" array so we have only the user's liked ones
-      const userLikedDrinks = drinks.filter((d) => likedIDs.includes(d.id));
-      setLikedDrinksData(userLikedDrinks);
+      const map: Record<number, string> = {};
+      items.forEach((i) => (map[i.drinkID] = i.id));
+      setRecordMap(map);
+      setLikedIDsInPopup(new Set(likedIds));
+      setLikedDrinksData(drinks.filter((d) => likedIds.includes(d.id)));
     } catch (err) {
-      console.error('Error fetching user liked drinks:', err);
+      console.error('liked drinks fetch error:', err);
     }
   };
 
-  // --------------------------------------------------------------------
-  // Render the content of the popup
-  // --------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // Popup body
+  // --------------------------------------------------------------------------
   const renderPopupContent = () => {
     if (!popupData) return null;
 
-    // --------------------- EDIT PROFILE -------------------
     if (popupData.title === 'Edit Profile') {
       return (
         <View style={styles.popupContent}>
-          {/* Profile Picture with Edit Button */}
+          {/* picture + user info */}
           <View style={styles.popupProfilePictureContainer}>
             <TouchableOpacity onPress={handleProfilePictureUpload} style={styles.popupProfilePictureWrapper}>
               <Image
                 source={
-                  user.profilePicture
-                    ? { uri: user.profilePicture }
-                    : require('../../assets/images/default-profile.png')
+                  user.profilePicture ? { uri: user.profilePicture } : require('../../assets/images/default-profile.png')
                 }
                 style={styles.popupProfilePicture}
-                onError={() => {
-                  // If the URL is invalid or fails to load, fall back to default
-                  setUser((prev) => ({ ...prev, profilePicture: null }));
-                }}
+                onError={() => setUser((p) => ({ ...p, profilePicture: null }))}
               />
-              {/* Grayed-out overlay with camera/edit icon */}
               <View style={styles.popupProfilePictureOverlay}>
                 <Ionicons name="camera" size={15} color="#DFDCD9" />
               </View>
             </TouchableOpacity>
-            {/* Username and Email Display */}
             <View style={styles.popupUserInfo}>
               <Text style={styles.popupUsernameText}>{user.username}</Text>
               <Text style={styles.popupEmailText}>{user.email}</Text>
             </View>
           </View>
 
-          {/* First Name */}
+          {/* first / last */}
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>First Name</Text>
             <TextInput
@@ -462,8 +348,6 @@ export default function ProfileScreen() {
               onChangeText={setFirstName}
             />
           </View>
-
-          {/* Last Name */}
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Last Name</Text>
             <TextInput
@@ -475,44 +359,35 @@ export default function ProfileScreen() {
             />
           </View>
 
-          {/* Birthday (Read-only) */}
+          {/* birthday read‑only */}
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Birthday</Text>
-            <Text style={styles.readOnlyText}>
-              {birthday ? birthday.replace(/-/g, '/') : 'Not provided'}
-            </Text>
-            <Text style={styles.supportText}>
-              If this is incorrect, please contact support.
-            </Text>
+            <Text style={styles.readOnlyText}>{birthday ? birthday.replace(/-/g, '/') : 'Not provided'}</Text>
+            <Text style={styles.supportText}>If this is incorrect, please contact support.</Text>
           </View>
 
-          {/* NEW: Short Bio */}
+          {/* bio */}
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Bio</Text>
             <TextInput
               style={[styles.input, styles.bioInput]}
+              multiline
               value={bio}
-              onChangeText={(text) => {
-                const lines = text.split('\n');
-                if (lines.length <= 3) {
-                  setBio(text);
-                }
+              maxLength={100}
+              placeholder="Write a bio…"
+              placeholderTextColor="#666"
+              onChangeText={(txt) => {
+                const rows = txt.split('\n');
+                if (rows.length <= 3) setBio(txt);
               }}
               onKeyPress={({ nativeEvent }) => {
-                if (nativeEvent.key === 'Enter' && bio.split('\n').length >= 3) {
-                  // Ignore "Enter" key press by returning early
-                  return;
-                }
+                if (nativeEvent.key === 'Enter' && bio.split('\n').length >= 3) return;
               }}
-              multiline
-              placeholder="Write a bio..."
-              placeholderTextColor="#666"
             />
-            {/* Character Counter */}
             <Text style={styles.charCounter}>{bio.length}/100</Text>
           </View>
 
-          {/* Save/Cancel Buttons */}
+          {/* save / cancel */}
           <View style={styles.saveCancelRow}>
             <TouchableOpacity style={styles.saveButton} onPress={handleSaveProfile}>
               <Text style={styles.buttonText}>Save</Text>
@@ -525,36 +400,21 @@ export default function ProfileScreen() {
       );
     }
 
-    // --------------------- LIKED DRINKS -------------------
     if (popupData.title === 'Liked Drinks') {
       return (
         <View style={[styles.popupContent, { alignItems: 'flex-start' }]}>
           {likedDrinksData.length === 0 ? (
-            <View>
-              <Text style={styles.popupText}>
-                You haven’t liked any drinks yet.
-              </Text>
-            </View>
+            <Text style={styles.popupText}>You haven’t liked any drinks yet.</Text>
           ) : (
             <ScrollView style={{ marginTop: 10, width: '100%' }} contentContainerStyle={{ paddingBottom: 70 }}>
-              {likedDrinksData.map((drink) => (
-                <View key={drink.id} style={styles.likedDrinkItem}>
-                  {/* Drink Image */}
-                  <Image
-                    source={{ uri: drink.image }}
-                    style={styles.likedDrinkImage}
-                  />
+              {likedDrinksData.map((d) => (
+                <View key={d.id} style={styles.likedDrinkItem}>
+                  <Image source={{ uri: d.image }} style={styles.likedDrinkImage} />
                   <View style={{ marginLeft: 10, flex: 1 }}>
-                    <Text style={styles.likedDrinkName}>{drink.name}</Text>
-                    <Text style={styles.likedDrinkCategory}>{drink.category}</Text>
+                    <Text style={styles.likedDrinkName}>{d.name}</Text>
+                    <Text style={styles.likedDrinkCategory}>{d.category}</Text>
                   </View>
-                  {/* Colored Heart Icon */}
-                  <Ionicons
-                    name="heart"
-                    size={24}
-                    color="#CE975E"
-                    style={{ marginRight: 10 }}
-                  />
+                  <Ionicons name="heart" size={24} color="#CE975E" style={{ marginRight: 10 }} />
                 </View>
               ))}
             </ScrollView>
@@ -563,72 +423,52 @@ export default function ProfileScreen() {
       );
     }
 
-    // -------------------- EVERYTHING ELSE -------------------
     return <Text style={styles.popupText}>{popupData.content}</Text>;
   };
 
-  // --------------------------------------------------------------------
+  // --------------------------------------------------------------------------
   // RENDER
-  // --------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  if (!profileLoaded) return null; // or a spinner
   return (
     <View style={styles.container}>
-      {/* Top user info */}
+      {/* banner */}
       <View style={styles.userInfoContainer}>
         <View style={styles.profilePictureContainer}>
           <Image
-            source={
-              user.profilePicture
-                ? { uri: user.profilePicture }
-                : require('../../assets/images/default-profile.png')
-            }
+            source={user.profilePicture ? { uri: user.profilePicture } : require('../../assets/images/default-profile.png')}
             style={styles.profilePicture}
-            onError={() => {
-              // If the URL is invalid or fails to load, fall back to default
-              setUser((prev) => ({ ...prev, profilePicture: null }));
-            }}
+            onError={() => setUser((p) => ({ ...p, profilePicture: null }))}
           />
         </View>
         <Text style={styles.usernameText}>{user.username}</Text>
         <Text style={styles.emailText}>{user.email}</Text>
       </View>
 
-      {/* Scroll with buttons */}
+      {/* buttons */}
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.buttonContainer}>
-          {buttons.map((button, idx) => (
+          {buttons.map((b, i) => (
             <TouchableOpacity
-              key={idx}
+              key={i}
               style={styles.button}
               onPress={() => {
-                // If user taps Sign Out, call signOut
-                if (button.title === 'Sign Out') {
-                  signOut();
-                  return;
-                }
-                // Otherwise, open the popup
-                openPopup({ title: button.title, content: button.content });
+                if (b.title === 'Sign Out') signOut();
+                else openPopup({ title: b.title, content: b.content });
               }}
             >
               <View style={styles.buttonRow}>
-                <Ionicons
-                  name={button.icon}
-                  size={24}
-                  color="#CE975E"
-                  style={styles.buttonIcon}
-                />
-                <Text style={styles.buttonText}>{button.title}</Text>
+                <Ionicons name={b.icon} size={24} color="#CE975E" style={styles.buttonIcon} />
+                <Text style={styles.buttonText}>{b.title}</Text>
               </View>
             </TouchableOpacity>
           ))}
         </View>
       </ScrollView>
 
-      {/* Animated Popup */}
+      {/* popup */}
       {popupVisible && popupData && (
-        <Animated.View
-          style={[styles.popup, { transform: [{ translateX: slideAnim }] }]}
-          {...panResponder.panHandlers}
-        >
+        <Animated.View style={[styles.popup, { transform: [{ translateX: slideAnim }] }]} {...panResponder.panHandlers}>
           <View style={styles.popupHeader}>
             <TouchableOpacity onPress={closePopup}>
               <Ionicons name="arrow-back" size={24} color="#DFDCD9" />
@@ -636,7 +476,6 @@ export default function ProfileScreen() {
             <Text style={styles.popupTitle}>{popupData.title}</Text>
             <View style={{ width: 24 }} />
           </View>
-
           {renderPopupContent()}
         </Animated.View>
       )}
@@ -644,54 +483,18 @@ export default function ProfileScreen() {
   );
 }
 
-// ------------------ STYLES ------------------ //
+// --------------------------------------------------------------------------
+// STYLES (unchanged except where noted)
+// --------------------------------------------------------------------------
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#141414',
-  },
-  userInfoContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 60,
-    paddingBottom: 20,
-  },
-  profilePictureContainer: {
-    position: 'relative',
-  },
-  profilePicture: {
-    width: 125,
-    height: 125,
-    borderRadius: 75,
-    marginBottom: 20,
-    marginTop: 20,
-  },
-  editIconContainer: {
-    position: 'absolute',
-    bottom: 20,
-    right: 10,
-    backgroundColor: '#1F1F1F',
-    borderRadius: 50,
-    padding: 5,
-  },
-  usernameText: {
-    color: '#DFDCD9',
-    fontSize: 24,
-    textAlign: 'center',
-  },
-  emailText: {
-    color: '#4F4F4F',
-    fontSize: 16,
-    textAlign: 'center',
-    marginTop: 5,
-  },
-  scrollContainer: {
-    paddingHorizontal: 20,
-  },
-  buttonContainer: {
-    marginVertical: 20,
-    alignItems: 'center',
-  },
+  container: { flex: 1, backgroundColor: '#141414' },
+  userInfoContainer: { alignItems: 'center', justifyContent: 'center', paddingTop: 60, paddingBottom: 20 },
+  profilePictureContainer: { position: 'relative' },
+  profilePicture: { width: 125, height: 125, borderRadius: 75, marginBottom: 20, marginTop: 20 },
+  usernameText: { color: '#DFDCD9', fontSize: 24, textAlign: 'center' },
+  emailText: { color: '#4F4F4F', fontSize: 16, textAlign: 'center', marginTop: 5 },
+  scrollContainer: { paddingHorizontal: 20 },
+  buttonContainer: { marginVertical: 20, alignItems: 'center' },
   button: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -702,17 +505,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     width: '100%',
   },
-  buttonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  buttonIcon: {
-    marginRight: 15,
-  },
-  buttonText: {
-    color: '#DFDCD9',
-    fontSize: 18,
-  },
+  buttonRow: { flexDirection: 'row', alignItems: 'center' },
+  buttonIcon: { marginRight: 15 },
+  buttonText: { color: '#DFDCD9', fontSize: 18 },
   popup: {
     position: 'absolute',
     top: 0,
@@ -723,170 +518,30 @@ const styles = StyleSheet.create({
     elevation: 10,
     zIndex: 10,
   },
-  popupHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 15,
-    paddingTop: 75,
-    backgroundColor: '#141414',
-  },
-  popupTitle: {
-    flex: 1,
-    textAlign: 'center',
-    color: '#DFDCD9',
-    fontSize: 18,
-  },
-  popupContent: {
-    flex: 1,
-    padding: 20,
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-  },
-  popupText: {
-    color: '#DFDCD9',
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  inputContainer: {
-    width: '100%',
-    marginBottom: 20,
-    paddingHorizontal: 20,
-  },
-  inputLabel: {
-    color: '#DFDCD9',
-    fontSize: 16,
-    marginBottom: 5,
-  },
-  input: {
-    backgroundColor: '#1F1F1F',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    color: '#DFDCD9',
-    fontSize: 16,
-  },
-  bioInput: {
-    height: 85, // Adjust height for visible text
-    textAlignVertical: 'top',
-    lineHeight: 20, // Adjust line height for consistent spacing
-  },
-  charCounter: {
-    textAlign: 'right',
-    color: '#888', // Light gray color
-    fontSize: 12,
-    marginTop: 5,
-    marginRight: 5,
-  },
-  inputError: {
-    borderColor: 'red',
-    borderWidth: 1,
-  },
-  error: {
-    color: 'red',
-    fontSize: 12,
-    marginTop: 5,
-  },
-  saveCancelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 40,
-    marginTop: 30,
-  },
-  saveButton: {
-    backgroundColor: '#CE975E',
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    borderRadius: 10,
-    marginHorizontal: 10,
-  },
-  cancelButton: {
-    backgroundColor: '#444',
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    borderRadius: 10,
-    marginHorizontal: 10,
-  },
-  cancelButtonText: {
-    color: '#DFDCD9',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  // Liked Drinks styling
-  likedDrinkItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1F1F1F',
-    borderRadius: 10,
-    marginBottom: 10,
-    padding: 10,
-  },
-  likedDrinkImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-  },
-  likedDrinkName: {
-    color: '#DFDCD9',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  likedDrinkCategory: {
-    color: '#CE975E',
-    fontSize: 14,
-  },
-  readOnlyText: {
-    backgroundColor: '#1F1F1F',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    color: '#4f4f4f', // Gray text color to indicate read-only
-    fontSize: 16,
-  },
-  supportText: {
-    color: '#4f4f4f', // Light gray text
-    fontSize: 12,
-    marginTop: 5,
-    marginLeft: 5,
-  },
-  popupProfilePictureContainer: {
-    flexDirection: 'row', // Align profile picture and user info horizontally
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  popupProfilePictureWrapper: {
-    position: 'relative',
-    width: 100, // Matches the profile picture width
-    height: 100, // Matches the profile picture height
-    marginLeft: 20, // Add some left margin
-    borderRadius: 50, // Ensure the wrapper is circular
-    overflow: 'hidden', // Clip any content outside the circle
-  },
-  popupProfilePicture: {
-    width: '100%', // Dynamically adjusts to wrapper size
-    height: '100%', // Dynamically adjusts to wrapper size
-    borderRadius: 40, // Ensure the image is circular
-  },
-  popupProfilePictureOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '30%', // Proportional height to follow profile picture size
-    backgroundColor: 'rgba(0, 0, 0, 0.8)', // Grayed-out overlay
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  popupUserInfo: {
-    marginLeft: 30, // Space between profile picture and user info
-  },
-  popupUsernameText: {
-    color: '#DFDCD9', // White color
-    fontSize: 20, // Larger font size for username
-    fontWeight: 'bold',
-  },
-  popupEmailText: {
-    color: '#4f4f4f', // Darker gray color for email
-    fontSize: 14, // Smaller font size for email
-    marginTop: 5,
-  },
+  popupHeader: { flexDirection: 'row', alignItems: 'center', padding: 15, paddingTop: 75, backgroundColor: '#141414' },
+  popupTitle: { flex: 1, textAlign: 'center', color: '#DFDCD9', fontSize: 18 },
+  popupContent: { flex: 1, padding: 20, justifyContent: 'flex-start', alignItems: 'center' },
+  popupText: { color: '#DFDCD9', fontSize: 16, textAlign: 'center' },
+  inputContainer: { width: '100%', marginBottom: 20, paddingHorizontal: 20 },
+  inputLabel: { color: '#DFDCD9', fontSize: 16, marginBottom: 5 },
+  input: { backgroundColor: '#1F1F1F', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 15, color: '#DFDCD9', fontSize: 16 },
+  bioInput: { height: 85, textAlignVertical: 'top', lineHeight: 20 },
+  charCounter: { textAlign: 'right', color: '#888', fontSize: 12, marginTop: 5, marginRight: 5 },
+  saveCancelRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 40, marginTop: 30 },
+  saveButton: { backgroundColor: '#CE975E', paddingVertical: 12, paddingHorizontal: 25, borderRadius: 10, marginHorizontal: 10 },
+  cancelButton: { backgroundColor: '#444', paddingVertical: 12, paddingHorizontal: 25, borderRadius: 10, marginHorizontal: 10 },
+  cancelButtonText: { color: '#DFDCD9', fontSize: 16, fontWeight: '600' },
+  likedDrinkItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, marginBottom: 10, padding: 10 },
+  likedDrinkImage: { width: 60, height: 60, borderRadius: 8 },
+  likedDrinkName: { color: '#DFDCD9', fontSize: 16, fontWeight: '600' },
+  likedDrinkCategory: { color: '#CE975E', fontSize: 14 },
+  readOnlyText: { backgroundColor: '#1F1F1F', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 15, color: '#4f4f4f', fontSize: 16 },
+  supportText: { color: '#4f4f4f', fontSize: 12, marginTop: 5, marginLeft: 5 },
+  popupProfilePictureContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  popupProfilePictureWrapper: { position: 'relative', width: 100, height: 100, marginLeft: 20, borderRadius: 50, overflow: 'hidden' },
+  popupProfilePicture: { width: '100%', height: '100%', borderRadius: 40 },
+  popupProfilePictureOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '30%', backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
+  popupUserInfo: { marginLeft: 30 },
+  popupUsernameText: { color: '#DFDCD9', fontSize: 20, fontWeight: 'bold' },
+  popupEmailText: { color: '#4f4f4f', fontSize: 14, marginTop: 5 },
 });

@@ -18,6 +18,7 @@ export const createLikedDrink = /* GraphQL */ `mutation CreateLikedDrink(
     drinkID
     createdAt
     updatedAt
+    owner
     __typename
   }
 }
@@ -35,6 +36,7 @@ export const updateLikedDrink = /* GraphQL */ `mutation UpdateLikedDrink(
     drinkID
     createdAt
     updatedAt
+    owner
     __typename
   }
 }
@@ -52,10 +54,140 @@ export const deleteLikedDrink = /* GraphQL */ `mutation DeleteLikedDrink(
     drinkID
     createdAt
     updatedAt
+    owner
     __typename
   }
 }
 ` as GeneratedMutation<
   APITypes.DeleteLikedDrinkMutationVariables,
   APITypes.DeleteLikedDrinkMutation
+>;
+export const createCustomRecipe = /* GraphQL */ `mutation CreateCustomRecipe(
+  $input: CreateCustomRecipeInput!
+  $condition: ModelCustomRecipeConditionInput
+) {
+  createCustomRecipe(input: $input, condition: $condition) {
+    id
+    name
+    description
+    ingredients {
+      ingredientID
+      amount
+      __typename
+    }
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.CreateCustomRecipeMutationVariables,
+  APITypes.CreateCustomRecipeMutation
+>;
+export const updateCustomRecipe = /* GraphQL */ `mutation UpdateCustomRecipe(
+  $input: UpdateCustomRecipeInput!
+  $condition: ModelCustomRecipeConditionInput
+) {
+  updateCustomRecipe(input: $input, condition: $condition) {
+    id
+    name
+    description
+    ingredients {
+      ingredientID
+      amount
+      __typename
+    }
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.UpdateCustomRecipeMutationVariables,
+  APITypes.UpdateCustomRecipeMutation
+>;
+export const deleteCustomRecipe = /* GraphQL */ `mutation DeleteCustomRecipe(
+  $input: DeleteCustomRecipeInput!
+  $condition: ModelCustomRecipeConditionInput
+) {
+  deleteCustomRecipe(input: $input, condition: $condition) {
+    id
+    name
+    description
+    ingredients {
+      ingredientID
+      amount
+      __typename
+    }
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.DeleteCustomRecipeMutationVariables,
+  APITypes.DeleteCustomRecipeMutation
+>;
+export const createUserProfile = /* GraphQL */ `mutation CreateUserProfile(
+  $input: CreateUserProfileInput!
+  $condition: ModelUserProfileConditionInput
+) {
+  createUserProfile(input: $input, condition: $condition) {
+    id
+    username
+    bio
+    role
+    profilePicture
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.CreateUserProfileMutationVariables,
+  APITypes.CreateUserProfileMutation
+>;
+export const updateUserProfile = /* GraphQL */ `mutation UpdateUserProfile(
+  $input: UpdateUserProfileInput!
+  $condition: ModelUserProfileConditionInput
+) {
+  updateUserProfile(input: $input, condition: $condition) {
+    id
+    username
+    bio
+    role
+    profilePicture
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.UpdateUserProfileMutationVariables,
+  APITypes.UpdateUserProfileMutation
+>;
+export const deleteUserProfile = /* GraphQL */ `mutation DeleteUserProfile(
+  $input: DeleteUserProfileInput!
+  $condition: ModelUserProfileConditionInput
+) {
+  deleteUserProfile(input: $input, condition: $condition) {
+    id
+    username
+    bio
+    role
+    profilePicture
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.DeleteUserProfileMutationVariables,
+  APITypes.DeleteUserProfileMutation
 >;

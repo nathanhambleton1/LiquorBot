@@ -1,12 +1,28 @@
-type LikedDrink 
-  @model
-  @auth(
-    rules: [
-      # Let only the "owner" (the user who created the record) access that record
-      { allow: owner, ownerField: "userID", identityClaim: "username", operations: [create, read, update, delete] }
-    ]
-  ) {
+type LikedDrink @model @auth(rules: [{allow: public}, {allow: owner}]) {
   id: ID!
-  userID: String!
-  drinkID: Int!
+  userID: ID
+  drinkID: Int
+  createdAt: AWSDateTime
 }
+
+type RecipeIngredient {
+  ingredientID: ID
+  amount: Float
+}
+
+type CustomRecipe @model @auth(rules: [{allow: public}, {allow: owner}]) {
+  id: ID!
+  name: String
+  description: String
+  ingredients: RecipeIngredient
+  createdAt: AWSDateTime
+}
+
+type UserProfile @model @auth(rules: [{allow: public}, {allow: owner}]) {
+  id: ID!
+  username: String
+  bio: String
+  role: String
+  profilePicture: String
+}
+ 

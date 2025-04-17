@@ -1,0 +1,12 @@
+{
+  "resourceName": "s3liquorbotstorage8cb6bcd8",
+  "bucketName": "liquorbot-storage-8cb6bcd8",
+  "policyUUID": "1f09dd4b",
+  "storageAccess": "auth",
+  "guestAccess": [],
+  "authAccess": [
+    "CREATE_AND_UPDATE",
+    "READ",
+    "DELETE"
+  ]
+}
