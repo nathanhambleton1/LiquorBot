@@ -20,7 +20,7 @@ export default function SignUp() {
 
   /** UI state */
   const [step, setStep] = useState<'REGISTER' | 'ROLE_SELECTION' | 'CONFIRM'>('REGISTER');
-  const [selectedRole, setSelectedRole] = useState<'EventAttendee' | 'LiquorBotOwner' | 'EventCoordinator' | ''>('');
+  const [selectedRole, setSelectedRole] = useState<'EventAttendee' | 'PersonalUse' | 'EventCoordinator' | ''>('');
 
   /** form fields */
   const [username, setUsername]   = useState('');
@@ -28,6 +28,14 @@ export default function SignUp() {
   const [email, setEmail]         = useState('');
   const [birthday, setBirthday]   = useState('');          // MM/DD/YYYY
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [passwordValidity, setPasswordValidity] = useState({
+    minLength: false,
+    upper: false,
+    lower: false,
+    number: false,
+    symbol: false,
+  });
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
 
   /** confirm‑code */
   const [confirmationCode, setConfirmationCode] = useState('');
@@ -62,13 +70,64 @@ export default function SignUp() {
     ));
   };
 
+  /** Helper to validate password against the policy */
+  const validatePassword = (password: string): boolean => {
+    const minLength = 8;
+    const hasLowercase = /[a-z]/.test(password);
+    const hasUppercase = /[A-Z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+
+    return (
+      password.length >= minLength &&
+      hasLowercase &&
+      hasUppercase &&
+      hasNumber &&
+      hasSymbol
+    );
+  };
+
+  const handlePasswordChange = (pwd: string) => {
+    setPassword(pwd);
+    setPasswordValidity({
+      minLength: pwd.length >= 8,
+      upper: /[A-Z]/.test(pwd),
+      lower: /[a-z]/.test(pwd),
+      number: /[0-9]/.test(pwd),
+      symbol: /[!@#$%^&*(),.?":{}|<>]/.test(pwd),
+    });
+  };
+
   /* ───────────────────────── register flow ───────────────────────── */
 
   /** first page → just validate fields, then show role selector */
   const onSignUpPress = () => {
-    setErrorMessage(''); setInfoMessage('');
+    setErrorMessage('');
+    setInfoMessage('');
+
+    if (!username.trim()) {
+      setErrorMessage('Username is required.');
+      return;
+    }
+    
+    if (!validatePassword(password)) {
+      setErrorMessage(
+        'Password must be at least 8 characters long and include lowercase, uppercase, numerals, and symbols.'
+      );
+      return;
+    }
+
+    if (!email.trim()) {
+      setErrorMessage('Email is required.');
+      return;
+    }
+
     const dash = mdyToDash(birthday);
-    if (!isAtLeast21(dash)) { setErrorMessage('You must be at least 21.'); return; }
+    if (!isAtLeast21(dash)) {
+      setErrorMessage('You must be at least 21.');
+      return;
+    }
+
     setStep('ROLE_SELECTION');
   };
 
@@ -134,23 +193,83 @@ export default function SignUp() {
       {step === 'REGISTER' && (
         <>
           <Text style={styles.label}>Username</Text>
-          <TextInput value={username} onChangeText={setUsername} style={styles.input} autoCapitalize="none" />
+          <TextInput
+            value={username}
+            onChangeText={setUsername}
+            style={styles.input}
+            autoCapitalize="none"
+          />
 
           <Text style={styles.label}>Password</Text>
           <View>
             <TextInput
               value={password}
-              onChangeText={setPassword}
+              onChangeText={handlePasswordChange}
               style={styles.input}
               secureTextEntry={!isPasswordVisible}
+              onFocus={() => setIsPasswordFocused(true)}
+              onBlur={() => setIsPasswordFocused(false)}
             />
-            <TouchableOpacity style={styles.eyeIcon} onPress={() => setIsPasswordVisible(!isPasswordVisible)}>
+            <TouchableOpacity
+              style={styles.eyeIcon}
+              onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+            >
               <Ionicons name={isPasswordVisible ? 'eye' : 'eye-off'} size={24} color="#4F4F4F" />
             </TouchableOpacity>
           </View>
+          {isPasswordFocused && (
+            <View style={{ marginBottom: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons
+                  name={passwordValidity.minLength ? 'checkmark' : 'close'}
+                  size={12}
+                  color={passwordValidity.minLength ? 'green' : 'red'}
+                />
+                <Text style={{ color: '#4f4f4f', marginLeft: 8, fontSize: 12 }}>At least 8 characters</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons
+                  name={passwordValidity.upper ? 'checkmark' : 'close'}
+                  size={12}
+                  color={passwordValidity.upper ? 'green' : 'red'}
+                />
+                <Text style={{ color: '#4f4f4f', marginLeft: 8, fontSize: 12 }}>Contains uppercase</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons
+                  name={passwordValidity.lower ? 'checkmark' : 'close'}
+                  size={12}
+                  color={passwordValidity.lower ? 'green' : 'red'}
+                />
+                <Text style={{ color: '#4f4f4f', marginLeft: 8, fontSize: 12 }}>Contains lowercase</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons
+                  name={passwordValidity.number ? 'checkmark' : 'close'}
+                  size={12}
+                  color={passwordValidity.number ? 'green' : 'red'}
+                />
+                <Text style={{ color: '#4f4f4f', marginLeft: 8, fontSize: 12 }}>Contains a number</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons
+                  name={passwordValidity.symbol ? 'checkmark' : 'close'}
+                  size={12}
+                  color={passwordValidity.symbol ? 'green' : 'red'}
+                />
+                <Text style={{ color: '#4f4f4f', marginLeft: 8, fontSize: 12 }}>Contains a special symbol</Text>
+              </View>
+            </View>
+          )}
 
           <Text style={styles.label}>Email</Text>
-          <TextInput value={email} onChangeText={setEmail} style={styles.input} keyboardType="email-address" autoCapitalize="none" />
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            style={styles.input}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
 
           <Text style={styles.label}>Birthday</Text>
           <TextInput
@@ -170,7 +289,7 @@ export default function SignUp() {
           )}
 
           {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
-          {!!infoMessage  && <Text style={[styles.info, styles.smallInfoMessage]}>{infoMessage}</Text>}
+          {!!infoMessage && <Text style={[styles.info, styles.smallInfoMessage]}>{infoMessage}</Text>}
 
           <TouchableOpacity style={styles.button} onPress={onSignUpPress}>
             <Text style={styles.buttonText}>Next</Text>
@@ -183,7 +302,7 @@ export default function SignUp() {
         <View>
           <Text style={styles.title}>Select Your Role</Text>
 
-          {(['EventAttendee','LiquorBotOwner','EventCoordinator'] as const).map(role => (
+          {(['EventAttendee','PersonalUse','EventCoordinator'] as const).map(role => (
             <TouchableOpacity
               key={role}
               style={[styles.roleOption, selectedRole === role && styles.selectedRoleOption]}
@@ -191,7 +310,7 @@ export default function SignUp() {
             >
               <Ionicons
                 name={role === 'EventAttendee' ? 'people'
-                      : role === 'LiquorBotOwner' ? 'home'
+                      : role === 'PersonalUse' ? 'home'
                       : 'briefcase'}
                 size={32}
                 color="#CE975E"
@@ -200,7 +319,7 @@ export default function SignUp() {
                 <Text style={styles.roleText}>{role.replace(/([A-Z])/g,' $1').trim()}</Text>
                 <Text style={styles.roleDescription}>
                   {role === 'EventAttendee'   && 'Join events and enjoy LiquorBot services.'}
-                  {role === 'LiquorBotOwner'  && 'Manage your personal LiquorBot at home.'}
+                  {role === 'PersonalUse'  && 'Manage your personal LiquorBot at home.'}
                   {role === 'EventCoordinator'&& 'Organize events and manage services.'}
                 </Text>
               </View>
