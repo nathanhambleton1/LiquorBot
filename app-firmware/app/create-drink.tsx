@@ -1,10 +1,10 @@
 // -----------------------------------------------------------------------------
 // File: create-drink.tsx
 // Description: Custom‑drink creator with dynamic ingredient rows, delete buttons,
-//              per‑ingredient volume controls, and smart name‑collision hinting
-//              against drinks.json already stored on S3.
+//              per‑ingredient volume & priority controls, and smart name‑collision
+//              hinting against drinks.json already stored on S3.
 // Author: Nathan Hambleton
-// Updated: April 16 2025
+// Updated: April 17 2025
 // -----------------------------------------------------------------------------
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -39,7 +39,8 @@ interface Ingredient {
 
 interface RecipeRow {
   id: number;
-  volume: number; // oz
+  volume: number;   // oz
+  priority: number; // 1‑9
 }
 
 interface DrinkMeta {
@@ -63,7 +64,9 @@ export default function CreateDrinkScreen() {
   const [loadingIngredients, setLoadingIngredients] = useState(false);
 
   // Form rows
-  const [rows, setRows] = useState<RecipeRow[]>([{ id: 0, volume: 1.5 }]);
+  const [rows, setRows] = useState<RecipeRow[]>([
+    { id: 0, volume: 1.5, priority: 1 },
+  ]);
 
   // Picker modal
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -71,6 +74,8 @@ export default function CreateDrinkScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const categories = ['All', 'Alcohol', 'Mixer', 'Sour', 'Sweet', 'Misc'];
+
+  const [showPriorityInfoIndex, setShowPriorityInfoIndex] = useState<number | null>(null);
 
   // ---------- FETCH DATA ----------
   useEffect(() => {
@@ -129,7 +134,8 @@ export default function CreateDrinkScreen() {
     if (editingIndex === null) return;
     const next = [...rows];
     next[editingIndex].id = ingredientId;
-    if (editingIndex === rows.length - 1) next.push({ id: 0, volume: 1.5 });
+    if (editingIndex === rows.length - 1)
+      next.push({ id: 0, volume: 1.5, priority: 1 });
     setRows(next);
     setPickerVisible(false);
     setSearchQuery('');
@@ -137,7 +143,7 @@ export default function CreateDrinkScreen() {
 
   const removeRow = (idx: number) => {
     const next = rows.filter((_, i) => i !== idx);
-    setRows(next.length ? next : [{ id: 0, volume: 1.5 }]);
+    setRows(next.length ? next : [{ id: 0, volume: 1.5, priority: 1 }]);
   };
 
   const adjustVol = (idx: number, delta: number) =>
@@ -152,14 +158,35 @@ export default function CreateDrinkScreen() {
   const setVolDirect = (idx: number, txt: string) => {
     const num = parseFloat(txt);
     if (!isNaN(num)) {
-      setRows((p) => p.map((r, i) => (i === idx ? { ...r, volume: num } : r)));
+      setRows((p) =>
+        p.map((r, i) => (i === idx ? { ...r, volume: num } : r)),
+      );
     }
   };
 
+  const adjustPriority = (idx: number, delta: number) =>
+    setRows((p) =>
+      p.map((r, i) =>
+        i === idx
+          ? {
+              ...r,
+              priority: Math.min(9, Math.max(1, r.priority + delta)),
+            }
+          : r,
+      ),
+    );
+
   // ---------- SAVE ----------
   const handleSave = () => {
-    const final = rows.filter((r) => r.id !== 0);
+    const final = rows
+      .filter((r) => r.id !== 0)
+      .map(({ id, volume, priority }) => ({
+        ingredientID: id,
+        amount: volume,
+        priority,
+      }));
     console.log('Drink Created:', { drinkName, ingredients: final });
+    // TODO: call your GraphQL mutation to persist CustomRecipe here.
     router.back();
   };
 
@@ -170,7 +197,10 @@ export default function CreateDrinkScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* Close */}
-      <TouchableOpacity style={styles.closeButton} onPress={() => router.push('/menu')}>
+      <TouchableOpacity
+        style={styles.closeButton}
+        onPress={() => router.push('/menu')}
+      >
         <Ionicons name="close" size={30} color="#DFDCD9" />
       </TouchableOpacity>
 
@@ -185,7 +215,7 @@ export default function CreateDrinkScreen() {
         <View style={styles.formGroup}>
           <Text style={styles.label}>Drink Name</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.drinkNameInput]}
             placeholder="e.g., Vodka Cranberry"
             placeholderTextColor="#4F4F4F"
             value={drinkName}
@@ -227,39 +257,93 @@ export default function CreateDrinkScreen() {
                   />
                 </TouchableOpacity>
                 {/* Delete */}
-                <TouchableOpacity onPress={() => removeRow(idx)} style={styles.deleteBtn}>
+                <TouchableOpacity
+                  onPress={() => removeRow(idx)}
+                  style={styles.deleteBtn}
+                >
                   <Ionicons name="close" size={22} color="#d44a4a" />
                 </TouchableOpacity>
               </View>
 
-              {/* Volume */}
+              {/* Volume + Priority */}
               <View style={styles.volumeRow}>
-                <TouchableOpacity onPress={() => adjustVol(idx, -0.25)} style={styles.volBtn}>
-                  <Ionicons name="remove" size={18} color="#DFDCD9" />
+                <View style={styles.volumeGroup}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <TouchableOpacity
+                      onPress={() => adjustVol(idx, -0.25)}
+                      style={styles.volBtn}
+                    >
+                      <Ionicons name="remove" size={18} color="#DFDCD9" />
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.volumeInput}
+                      keyboardType="decimal-pad"
+                      value={row.volume.toFixed(2)}
+                      onChangeText={(txt) => setVolDirect(idx, txt)}
+                      maxLength={5}
+                    />
+                    <TouchableOpacity
+                      onPress={() => adjustVol(idx, 0.25)}
+                      style={styles.volBtn}
+                    >
+                      <Ionicons name="add" size={18} color="#DFDCD9" />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.counterLabel}>Volume in oz</Text>
+                </View>
+                <View style={styles.priorityGroup}>
+                  <View style={styles.priorityContainer}>
+                    <TouchableOpacity
+                      onPress={() => adjustPriority(idx, -1)}
+                      style={styles.priBtn}
+                    >
+                      <Ionicons name="chevron-down" size={18} color="#DFDCD9" />
+                    </TouchableOpacity>
+                    <Text style={styles.priorityValue}>{row.priority}</Text>
+                    <TouchableOpacity
+                      onPress={() => adjustPriority(idx, 1)}
+                      style={styles.priBtn}
+                    >
+                      <Ionicons name="chevron-up" size={18} color="#DFDCD9" />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.counterLabel}>Priority</Text>
+                </View>
+
+                {/* Info icon inline with counters */}
+                <TouchableOpacity
+                  onPress={() => setShowPriorityInfoIndex(idx)}
+                  style={styles.infoBtn}
+                >
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={24} // Increased size
+                    color="#4f4f4f" // Changed color to gray
+                    marginLeft={10} // Added margin to separate from the counter
+                    marginBottom={18} // Added margin to separate from the counter
+                  />
                 </TouchableOpacity>
-                <TextInput
-                  style={styles.volumeInput}
-                  keyboardType="decimal-pad"
-                  value={row.volume.toFixed(2)}
-                  onChangeText={(txt) => setVolDirect(idx, txt)}
-                  maxLength={5}
-                />
-                <TouchableOpacity onPress={() => adjustVol(idx, 0.25)} style={styles.volBtn}>
-                  <Ionicons name="add" size={18} color="#DFDCD9" />
-                </TouchableOpacity>
-                <Text style={styles.volumeUnit}>oz</Text>
               </View>
             </View>
           ))}
 
-          <TouchableOpacity onPress={() => setRows((p) => [...p, { id: 0, volume: 1.5 }])}>
-            <Text style={styles.addIngredientText}>+ Add another ingredient</Text>
+          <TouchableOpacity
+            onPress={() =>
+              setRows((p) => [...p, { id: 0, volume: 1.5, priority: 1 }])
+            }
+          >
+            <Text style={styles.addIngredientText}>
+              + Add another ingredient
+            </Text>
           </TouchableOpacity>
         </View>
 
         {/* SAVE */}
         <TouchableOpacity
-          style={[styles.saveButton, drinkName.trim() === '' && { opacity: 0.4 }]}
+          style={[
+            styles.saveButton,
+            drinkName.trim() === '' && { opacity: 0.4 },
+          ]}
           disabled={drinkName.trim() === ''}
           onPress={handleSave}
         >
@@ -307,7 +391,9 @@ export default function CreateDrinkScreen() {
                     >
                       {cat}
                     </Text>
-                    {selectedCategory === cat && <View style={styles.underline} />}
+                    {selectedCategory === cat && (
+                      <View style={styles.underline} />
+                    )}
                   </View>
                 </TouchableOpacity>
               ))}
@@ -316,7 +402,12 @@ export default function CreateDrinkScreen() {
 
           {/* Search */}
           <View style={styles.searchBarContainer}>
-            <Ionicons name="search" size={20} color="#4F4F4F" style={styles.searchIcon} />
+            <Ionicons
+              name="search"
+              size={20}
+              color="#4F4F4F"
+              style={styles.searchIcon}
+            />
             <TextInput
               style={styles.searchBar}
               placeholder="Search Ingredients"
@@ -345,50 +436,234 @@ export default function CreateDrinkScreen() {
           )}
         </View>
       </Modal>
+
+      {/* PRIORITY INFO POPUP */}
+      <Modal
+        visible={showPriorityInfoIndex !== null}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowPriorityInfoIndex(null)}
+      >
+        <TouchableOpacity
+          style={styles.popupOverlay}
+          activeOpacity={1}
+          onPressOut={() => setShowPriorityInfoIndex(null)}
+        >
+          <View style={styles.popupContainer}>
+            <Text style={styles.popupText}>
+              Priority controls pour order: Higher (1) pours first, lower pours after.
+            </Text>
+            <Text style={styles.popupText}>
+              For example, in a Tequila Sunrise, you give grenadine a higher priority so it’s poured first.
+            </Text>
+            <Text style={styles.popupText}>
+              This creates a lovely gradient as orange juice is added on top.
+            </Text>
+            <TouchableOpacity
+              style={styles.popupCloseBtn}
+              onPress={() => setShowPriorityInfoIndex(null)}
+            >
+              <Ionicons name="close" size={24} color="#DFDCD9" />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
 
 // ---------- STYLES ----------
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#141414', paddingTop: 80, paddingHorizontal: 20 },
-  closeButton: { position: 'absolute', top: 75, left: 20, zIndex: 999, padding: 10 },
-  headerText: { fontSize: 28, color: '#DFDCD9', fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
+  container: {
+    flex: 1,
+    backgroundColor: '#141414',
+    paddingTop: 80,
+    paddingHorizontal: 20,
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 75,
+    left: 20,
+    zIndex: 999,
+    padding: 10,
+  },
+  headerText: {
+    fontSize: 28,
+    color: '#DFDCD9',
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
   contentContainer: { paddingVertical: 20 },
   formGroup: { marginBottom: 20 },
   label: { color: '#DFDCD9', marginBottom: 5, fontSize: 16 },
-  input: { backgroundColor: '#1F1F1F', color: '#DFDCD9', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16 },
+  input: {
+    backgroundColor: '#1F1F1F',
+    color: '#DFDCD9',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+  drinkNameInput: {
+    borderWidth: 2,
+    borderColor: '#CE975E', // Gold border
+  },
   nameHint: { color: '#4F4F4F', fontSize: 12, marginTop: 5 },
   // rows
   ingredientsSection: { marginBottom: 30 },
   rowContainer: { marginBottom: 20 },
   ingredientRow: { flexDirection: 'row', alignItems: 'center' },
-  ingredientBox: { backgroundColor: '#1F1F1F', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', flex: 1 },
+  ingredientBox: {
+    backgroundColor: '#1F1F1F',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
   ingredientBoxText: { color: '#4F4F4F', fontSize: 16, flex: 1 },
   ingredientBoxTextSelected: { color: '#DFDCD9' },
   deleteBtn: { marginLeft: 10, padding: 6 },
-  volumeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  volBtn: { backgroundColor: '#1F1F1F', padding: 8, borderRadius: 8 },
-  volumeInput: { backgroundColor: '#1F1F1F', marginHorizontal: 10, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, color: '#DFDCD9', fontSize: 16, minWidth: 60, textAlign: 'center' },
-  volumeUnit: { color: '#4F4F4F', fontSize: 16, marginLeft: 6, marginTop: 10 },
+  volumeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8, // Removed justifyContent to keep groups together on the left
+  },
+  volumeGroup: {
+    alignItems: 'flex-start',
+  },
+  priorityGroup: {
+    alignItems: 'flex-start',
+    marginLeft: 15, // Adds spacing between volume and priority groups
+  },
+  counterLabel: {
+    color: '#808080',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  volBtn: {
+    backgroundColor: '#1F1F1F',
+    padding: 8,
+    borderRadius: 8,
+    minWidth: 36, // Ensure consistent size
+    alignItems: 'center', // Center icon
+    justifyContent: 'center', // Center icon
+  },
+  volumeInput: {
+    backgroundColor: '#1F1F1F',
+    marginHorizontal: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    color: '#DFDCD9',
+    fontSize: 16,
+    minWidth: 60,
+    textAlign: 'center',
+  },
+  // priority controls
+  priorityContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    // Removed marginLeft to keep the priority box aligned to the left
+  },
+  priBtn: {
+    backgroundColor: '#1F1F1F',
+    padding: 8,
+    borderRadius: 8,
+    minWidth: 36, // Ensure consistent size
+    alignItems: 'center', // Center icon
+    justifyContent: 'center', // Center icon
+  },
+  priorityValue: {
+    color: '#DFDCD9',
+    fontSize: 16,
+    marginHorizontal: 8,
+    minWidth: 16,
+    textAlign: 'center',
+  },
   addIngredientText: { color: '#4F4F4F', fontSize: 14, marginTop: 5 },
-  saveButton: { backgroundColor: '#CE975E', borderRadius: 10, paddingVertical: 15, alignItems: 'center', marginTop: 10 },
+  saveButton: {
+    backgroundColor: '#CE975E',
+    borderRadius: 10,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginTop: 10,
+  },
   saveButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
   // modal
   modalContainer: { flex: 1, backgroundColor: '#141414', padding: 20 },
   modalCloseButton: { position: 'absolute', top: 30, left: 20, zIndex: 10 },
-  modalHeaderText: { fontSize: 20, fontWeight: 'bold', color: '#DFDCD9', textAlign: 'center', marginTop: 10, marginBottom: -20 },
+  modalHeaderText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#DFDCD9',
+    textAlign: 'center',
+    marginTop: 10,
+    marginBottom: -20,
+  },
   horizontalPickerContainer: { alignItems: 'center', paddingVertical: 5 },
   horizontalPicker: { flexDirection: 'row', alignItems: 'center' },
-  categoryButton: { marginTop: 40, paddingVertical: 10, paddingHorizontal: 5, marginHorizontal: 15 },
+  categoryButton: {
+    marginTop: 40,
+    paddingVertical: 10,
+    paddingHorizontal: 5,
+    marginHorizontal: 15,
+  },
   categoryButtonContent: { alignItems: 'center' },
   categoryButtonText: { color: '#4F4F4F', fontSize: 14 },
   selectedCategoryText: { color: '#CE975E' },
-  underline: { height: 2, backgroundColor: '#CE975E', marginTop: 2, width: '100%' },
-  searchBarContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, paddingHorizontal: 15, marginBottom: 15, marginTop: 10 },
+  underline: {
+    height: 2,
+    backgroundColor: '#CE975E',
+    marginTop: 2,
+    width: '100%',
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1F1F1F',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    marginBottom: 15,
+    marginTop: 10,
+  },
   searchIcon: { marginRight: 10 },
   searchBar: { flex: 1, color: '#DFDCD9', fontSize: 16, paddingVertical: 10 },
   loadingText: { color: '#DFDCD9', textAlign: 'center', margin: 10 },
-  ingredientItem: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#333333' },
+  ingredientItem: {
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333333',
+  },
   ingredientText: { color: '#DFDCD9', fontSize: 16 },
+  infoBtn: {
+    marginLeft: 10,
+    justifyContent: 'center',
+  },
+  popupOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  popupContainer: {
+    backgroundColor: '#1F1F1F',
+    padding: 20,
+    borderRadius: 10,
+    marginHorizontal: 30,
+    position: 'relative',
+  },
+  popupText: {
+    color: '#DFDCD9',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  popupCloseBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    padding: 5,
+  },
 });
