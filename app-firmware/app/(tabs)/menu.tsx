@@ -277,6 +277,7 @@ export default function MenuScreen() {
   // new: make‑able filter modal & state
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [onlyMakeable, setOnlyMakeable] = useState(false);
+  const [alphabetical, setAlphabetical] = useState(false);
 
   // slot config from ESP (15 slots)
   const [slots, setSlots] = useState<number[]>(Array(15).fill(0));
@@ -407,12 +408,15 @@ export default function MenuScreen() {
     return needed.every((id) => loadedIds.includes(id));
   };
 
-  const filteredDrinks = drinks.filter(
+  let filteredDrinks = drinks.filter(
     (d) =>
       (selectedCategory === 'All' || d.category === selectedCategory) &&
       d.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
       canMake(d)
   );
+  if (alphabetical) {
+    filteredDrinks.sort((a, b) => a.name.localeCompare(b.name));
+  }
 
   // re‑order for expanded
   const renderedDrinks = [...filteredDrinks];
@@ -544,6 +548,15 @@ export default function MenuScreen() {
               <Switch
                 value={onlyMakeable}
                 onValueChange={setOnlyMakeable}
+                trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
+                thumbColor="#DFDCD9"
+              />
+            </View>
+            <View style={styles.filterRow}>
+              <Text style={styles.filterLabel}>Sort alphabetically</Text>
+              <Switch
+                value={alphabetical}
+                onValueChange={setAlphabetical}
                 trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
                 thumbColor="#DFDCD9"
               />
