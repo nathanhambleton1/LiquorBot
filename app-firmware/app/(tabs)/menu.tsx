@@ -1,11 +1,12 @@
 // -----------------------------------------------------------------------------
 // File: menu.tsx
-// Description: Displays the drink menu for the LiquorBot app, including drink 
-//              details, categories, search functionality, and IoT integration 
-//              for pouring drinks. Integrates with AWS Amplify, PubSub, and 
-//              LiquorBot context for dynamic functionality.
+// Description: Displays the drink menu for the LiquorBot app, including drink
+//              details, categories, search / filter, and IoT integration for
+//              pouring drinks.  Adds a “make‑able” filter toggle that limits
+//              the list to drinks that can be prepared with the ingredients
+//              currently loaded on the ESP32 (pulled via MQTT).
 // Author: Nathan Hambleton
-// Created:  March 1, 2025
+// Updated: Apr 18 2025 – Added filter‑popup & make‑able toggle
 // -----------------------------------------------------------------------------
 import { useState, useEffect, useRef } from 'react';
 import {
@@ -21,25 +22,26 @@ import {
   UIManager,
   Animated,
   TextInput,
+  Modal,
+  Switch,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useRouter } from 'expo-router'; // Add router hook
+import { useRouter } from 'expo-router';
 
-// Amplify & PubSub
+// Amplify & PubSub
 import { Amplify } from 'aws-amplify';
 import { PubSub } from '@aws-amplify/pubsub';
 import config from '../../src/amplifyconfiguration.json';
 
-// GraphQL & Auth
+// GraphQL & Auth
 import { generateClient } from 'aws-amplify/api';
 import { createLikedDrink, deleteLikedDrink } from '../../src/graphql/mutations';
 import { listLikedDrinks } from '../../src/graphql/queries';
-import { getCurrentUser } from 'aws-amplify/auth';
-import { fetchAuthSession } from 'aws-amplify/auth';
+import { getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
 import { getUrl } from 'aws-amplify/storage';
 
-// IMPORTANT: Use the LiquorBotProvider context
-import { useLiquorBot } from '../components/liquorbot-provider'; // Adjust import path as needed
+// LiquorBot context
+import { useLiquorBot } from '../components/liquorbot-provider';
 
 Amplify.configure(config);
 const client = generateClient();
@@ -49,45 +51,27 @@ const pubsub = new PubSub({
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
 
+const SLOT_CONFIG_TOPIC = 'liquorbot/liquorbot001/slot-config';
+
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 
-// -- DRINK & INGREDIENT TYPES --
+// --------------------------- TYPES ---------------------------
 type Drink = {
   id: number;
   name: string;
   category: string;
   description?: string;
   image: string;
-  ingredients?: string;
+  ingredients?: string; // “id:amount:priority,id:amount:priority,…”
 };
 
-type BaseIngredient = {
-  id: number;
-  name: string;
-  type: string;
-};
+type BaseIngredient = { id: number; name: string; type: string };
 
-type ParsedIngredient = {
-  id: number;
-  name: string;
-  amount: number;
-  priority: number;
-};
+type ParsedIngredient = { id: number; name: string; amount: number; priority: number };
 
-interface DrinkItemProps {
-  drink: Drink;
-  isExpanded: boolean;
-  isLiked: boolean;
-  toggleFavorite: (id: number) => Promise<void>;
-  onExpand: (id: number) => void;
-  onCollapse: () => void;
-  allIngredients: BaseIngredient[];
-  onExpandedLayout?: (layout: { x: number; y: number; width: number; height: number }) => void;
-}
-
-// Helper: parse "2:2.0:1,8:1.0:1,17:1.0:2" → array of { id, name, amount, priority }
+// ------------ HELPERS ------------
 function parseIngredientString(
   ingredientString: string,
   allIngredients: BaseIngredient[]
@@ -98,15 +82,23 @@ function parseIngredientString(
     const id = parseInt(idStr, 10);
     const amount = parseFloat(amountStr);
     const priority = parseInt(priorityStr, 10);
-
     const ingObj = allIngredients.find((ing) => ing.id === id);
-    const name = ingObj ? ingObj.name : `Ingredient #${id} (not found)`;
-
+    const name = ingObj ? ingObj.name : `Ingredient #${id}`;
     return { id, name, amount, priority };
   });
 }
 
-// Single drink component
+// -------------------- SINGLE DRINK CARD --------------------
+interface DrinkItemProps {
+  drink: Drink;
+  isExpanded: boolean;
+  isLiked: boolean;
+  toggleFavorite: (id: number) => Promise<void>;
+  onExpand: (id: number) => void;
+  onCollapse: () => void;
+  allIngredients: BaseIngredient[];
+  onExpandedLayout?: (layout: { x: number; y: number; width: number; height: number }) => void;
+}
 function DrinkItem({
   drink,
   isExpanded,
@@ -119,14 +111,9 @@ function DrinkItem({
 }: DrinkItemProps) {
   const [animValue] = useState(new Animated.Value(isExpanded ? 1 : 0));
   const [quantity, setQuantity] = useState(1);
-
-  const incrementQuantity = () => setQuantity((prev) => (prev < 3 ? prev + 1 : prev));
-  const decrementQuantity = () => setQuantity((prev) => (prev > 1 ? prev - 1 : prev));
+  const { isConnected, forceDisconnect } = useLiquorBot();
 
   const parsedIngredients = parseIngredientString(drink.ingredients ?? '', allIngredients);
-
-  // Access isConnected + forceDisconnect from the provider
-  const { isConnected, forceDisconnect } = useLiquorBot();
 
   useEffect(() => {
     Animated.timing(animValue, {
@@ -136,69 +123,42 @@ function DrinkItem({
     }).start();
   }, [isExpanded]);
 
-  // 1) Attempt a heartbeat check first
-  // 2) If we get "OK", send the actual drink code
-  // 3) If no "OK", set disconnected
-  async function handlePourDrink() {
-    try {
-      if (!isConnected) {
-        console.warn('LiquorBot is not connected. Aborting pour request.');
-        return;
-      }
-
-      let responded = false;
-
-      // Subscribe briefly to hear the next message from 'liquorbot/heartbeat'
-      const sub = pubsub.subscribe({ topics: ['liquorbot/heartbeat'] }).subscribe({
-        next: (resp: any) => {
-          console.log('Heartbeat check response:', resp);
-          if (resp?.content === 'OK') {
-            responded = true;
-            sub.unsubscribe();
-            console.log('LiquorBot responded OK, sending drink code now...');
-            publishDrinkCommand();
-          }
-        },
-        error: (err: unknown) => {
-          console.error('Subscription error (heartbeat check):', err);
-          sub.unsubscribe();
-          forceDisconnect();
-        },
-        complete: () => {
-          console.log('Short-lived heartbeat check subscription complete.');
-        },
-      });
-
-      // Publish the check
-      await pubsub.publish({
-        topics: ['liquorbot/heartbeat'],
-        message: { content: 'CHECK' }, // The ESP must respond with "OK" to the same topic
-      });
-
-      // If no response after 2s, mark disconnected
-      setTimeout(() => {
-        if (!responded) {
-          console.error('No OK response from LiquorBot within 2s. Marking disconnected');
-          sub.unsubscribe();
-          forceDisconnect();
-        }
-      }, 2000);
-
-    } catch (err) {
-      console.error('Error sending heartbeat check:', err);
-    }
-  }
-
-  // This actually publishes the drink code
+  // ----------- POUR DRINK HANDLERS (unchanged) -----------
   async function publishDrinkCommand() {
     try {
       await pubsub.publish({
         topics: ['liquorbot/publish'],
         message: { content: drink.ingredients ?? '' },
       });
-      console.log(`Published command="${drink.ingredients}"`);
+      console.log(`Published command="${drink.ingredients}"`);
     } catch (error) {
-      console.error('Error publishing PubSub message:', error);
+      console.error('Error publishing PubSub message:', error);
+    }
+  }
+  async function handlePourDrink() {
+    try {
+      if (!isConnected) {
+        console.warn('LiquorBot is not connected. Aborting.');
+        return;
+      }
+      let responded = false;
+      const sub = pubsub.subscribe({ topics: ['liquorbot/heartbeat'] }).subscribe({
+        next: (resp: any) => {
+          if (resp?.content === 'OK') {
+            responded = true;
+            sub.unsubscribe();
+            publishDrinkCommand();
+          }
+        },
+        error: () => {
+          sub.unsubscribe();
+          forceDisconnect();
+        },
+      });
+      await pubsub.publish({ topics: ['liquorbot/heartbeat'], message: { content: 'CHECK' } });
+      setTimeout(() => !responded && (sub.unsubscribe(), forceDisconnect()), 2000);
+    } catch (err) {
+      console.error(err);
     }
   }
 
@@ -206,8 +166,8 @@ function DrinkItem({
     toggleFavorite(drink.id);
   }
 
+  // ---------- RENDER ----------
   if (isExpanded) {
-    // Expanded card layout
     return (
       <Animated.View
         onLayout={(e) => onExpandedLayout?.(e.nativeEvent.layout)}
@@ -226,23 +186,11 @@ function DrinkItem({
           },
         ]}
       >
-        <TouchableOpacity
-          onPress={() => {
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            onCollapse();
-          }}
-          style={styles.closeButton}
-        >
+        {/* close & heart buttons */}
+        <TouchableOpacity onPress={onCollapse} style={styles.closeButton}>
           <Ionicons name="close" size={24} color="#DFDCD9" />
         </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={(e) => {
-            e.stopPropagation();
-            handleToggleLike();
-          }}
-          style={styles.expandedFavoriteButton}
-        >
+        <TouchableOpacity onPress={handleToggleLike} style={styles.expandedFavoriteButton}>
           <Ionicons
             name={isLiked ? 'heart' : 'heart-outline'}
             size={24}
@@ -250,6 +198,7 @@ function DrinkItem({
           />
         </TouchableOpacity>
 
+        {/* content */}
         <View style={styles.expandedContent}>
           <View style={styles.expandedTitleContainer}>
             <Text style={styles.expandedboxText}>{drink.name}</Text>
@@ -260,377 +209,274 @@ function DrinkItem({
 
         <View style={styles.expandeddetailContainer}>
           {parsedIngredients.length === 0 ? (
-            <Text style={styles.expandeddescriptionText}>No ingredients found.</Text>
+            <Text style={styles.expandeddescriptionText}>No ingredients found.</Text>
           ) : (
             <Text style={styles.expandeddescriptionText}>
-              Contains refreshing{' '}
+              Contains{' '}
               {parsedIngredients
-                .map((item, index) => {
-                  if (index === parsedIngredients.length - 1 && index !== 0) {
-                    return `and ${item.name}`;
-                  }
-                  return item.name;
-                })
-                .join(', ')}.
+                .map((item, i) =>
+                  i === parsedIngredients.length - 1 && i !== 0 ? `and ${item.name}` : item.name
+                )
+                .join(', ')}
+              .
             </Text>
           )}
         </View>
 
+        {/* qty + button */}
         <View style={styles.quantityContainer}>
-          <TouchableOpacity onPress={decrementQuantity} style={styles.quantityButton}>
-            <Text style={styles.quantityButtonText}>-</Text>
+          <TouchableOpacity onPress={() => setQuantity((q) => Math.max(1, q - 1))} style={styles.quantityButton}>
+            <Text style={styles.quantityButtonText}>−</Text>
           </TouchableOpacity>
           <Text style={styles.quantityText}>{quantity}</Text>
-          <TouchableOpacity onPress={incrementQuantity} style={styles.quantityButton}>
+          <TouchableOpacity onPress={() => setQuantity((q) => Math.min(3, q + 1))} style={styles.quantityButton}>
             <Text style={styles.quantityButtonText}>+</Text>
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.button} onPress={handlePourDrink}>
-          <Text style={styles.buttonText}>Pour Drink</Text>
+          <Text style={styles.buttonText}>Pour Drink</Text>
         </TouchableOpacity>
       </Animated.View>
     );
-  } else {
-    // Collapsed card layout
-    return (
-      <TouchableOpacity
-        key={drink.id}
-        onPress={() => {
-          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-          onExpand(drink.id);
-        }}
-        activeOpacity={0.9}
-        style={styles.box}
-      >
-        <TouchableOpacity
-          onPress={(e) => {
-            e.stopPropagation();
-            handleToggleLike();
-          }}
-          style={styles.favoriteButton}
-        >
-          <Ionicons
-            name={isLiked ? 'heart' : 'heart-outline'}
-            size={24}
-            color={isLiked ? '#CE975E' : '#4F4F4F'}
-          />
-        </TouchableOpacity>
-
-        <Image source={{ uri: drink.image }} style={styles.image} />
-        <Text style={styles.boxText}>{drink.name}</Text>
-        <Text style={styles.categoryText}>{drink.category}</Text>
-      </TouchableOpacity>
-    );
   }
+
+  // ---- collapsed card ----
+  return (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={() => (LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut), onExpand(drink.id))}
+      style={styles.box}
+    >
+      <TouchableOpacity onPress={handleToggleLike} style={styles.favoriteButton}>
+        <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={24} color={isLiked ? '#CE975E' : '#4F4F4F'} />
+      </TouchableOpacity>
+      <Image source={{ uri: drink.image }} style={styles.image} />
+      <Text style={styles.boxText}>{drink.name}</Text>
+      <Text style={styles.categoryText}>{drink.category}</Text>
+    </TouchableOpacity>
+  );
 }
 
+// ======================= MAIN SCREEN =======================
 export default function MenuScreen() {
+  const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
-  const router = useRouter(); // Add router hook
-
-  // Access isConnected from the provider (for the status dot)
   const { isConnected } = useLiquorBot();
 
-  // Drinks & Ingredients
+  // ------------ state ------------
   const [drinks, setDrinks] = useState<Drink[]>([]);
   const [allIngredients, setAllIngredients] = useState<BaseIngredient[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Category, expansions, search
+  // category & search
+  const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey'];
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [expandedDrink, setExpandedDrink] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // new: make‑able filter modal & state
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [onlyMakeable, setOnlyMakeable] = useState(false);
+
+  // slot config from ESP (15 slots)
+  const [slots, setSlots] = useState<number[]>(Array(15).fill(0));
+
+  // expand, likes, user
+  const [expandedDrink, setExpandedDrink] = useState<number | null>(null);
   const [scrollViewHeight, setScrollViewHeight] = useState(0);
-
-  // For IoT messages
-  const [latestMessage, setLatestMessage] = useState('');
-
-  // Liked drinks
   const [userID, setUserID] = useState<string | null>(null);
   const [likedDrinks, setLikedDrinks] = useState<number[]>([]);
+  const [latestMessage, setLatestMessage] = useState('');
 
-  // Glow animation for the dot
-  const glowAnimation = useRef(new Animated.Value(1)).current;
+  // glow anim for status dot
+  const glowAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(glowAnimation, {
-          toValue: 1.2,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(glowAnimation, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
+        Animated.timing(glowAnim, { toValue: 1.2, duration: 800, useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
       ])
     ).start();
-  }, [glowAnimation]);
+  }, [glowAnim]);
 
-  // Fetch drinks.json & ingredients.json from S3
+  // ------------- fetch drinks / ingredients -------------
   useEffect(() => {
-    async function fetchDrinksFromS3() {
+    const fetchAll = async () => {
       try {
-        const drinksUrl = await getUrl({ key: 'drinkMenu/drinks.json' });
-        const response = await fetch(drinksUrl.url);
-        const data = await response.json();
-        setDrinks(data);
-      } catch (error) {
-        console.error('Error fetching drinks from S3:', error);
+        const [drinksUrl, ingUrl] = await Promise.all([
+          getUrl({ key: 'drinkMenu/drinks.json' }),
+          getUrl({ key: 'drinkMenu/ingredients.json' }),
+        ]);
+        const [drinksRes, ingRes] = await Promise.all([fetch(drinksUrl.url), fetch(ingUrl.url)]);
+        setDrinks(await drinksRes.json());
+        setAllIngredients(await ingRes.json());
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
       }
-    }
-
-    async function fetchIngredientsFromS3() {
-      try {
-        const ingUrl = await getUrl({ key: 'drinkMenu/ingredients.json' });
-        const response = await fetch(ingUrl.url);
-        const data = await response.json();
-        setAllIngredients(data);
-      } catch (error) {
-        console.error('Error fetching ingredients from S3:', error);
-      }
-    }
-
-    Promise.all([fetchDrinksFromS3(), fetchIngredientsFromS3()]).finally(() => {
-      setLoading(false);
-    });
+    };
+    fetchAll();
   }, []);
 
-  // Fetch user ID on mount
+  // --------- user ID + liked drinks ----------
   useEffect(() => {
     (async () => {
       try {
         const user = await getCurrentUser();
-        if (user?.username) {
-          setUserID(user.username);
-        } else {
-          console.warn('No authenticated user found');
-        }
-      } catch (err) {
-        console.error('Error getting current user:', err);
+        user?.username && setUserID(user.username);
+      } catch (e) {
+        console.error(e);
       }
     })();
   }, []);
-
-  // Load liked drinks (user's favorites)
-  async function loadLikedDrinks() {
+  useEffect(() => {
     if (!userID) return;
-    try {
-      const res = await client.graphql({
-        query: listLikedDrinks,
-        variables: { filter: { userID: { eq: userID } } },
-        authMode: 'userPool',
-      });
-
-      const items = res.data?.listLikedDrinks?.items || [];
-      const justDrinkIDs = items.map((item: any) => item.drinkID);
-
-      setLikedDrinks([]);
-      setLikedDrinks(justDrinkIDs);
-    } catch (error) {
-      console.error('Error loading liked drinks:', error);
-    }
-  }
-
-  useEffect(() => {
-    if (userID) {
-      loadLikedDrinks();
-    }
-  }, [userID]);
-
-  // Subscribe to IoT messages
-  useEffect(() => {
     (async () => {
       try {
-        const info = await fetchAuthSession();
-        console.log('Cognito Identity ID:', info.identityId);
-      } catch (error) {
-        console.error('Error fetching Cognito Identity ID:', error);
-      }
-    })();
-
-    const subscription = pubsub.subscribe({ topics: ['messages'] }).subscribe({
-      next: (data) => {
-        console.log('Received message from IoT:', data);
-        if (typeof data?.message === 'string') {
-          setLatestMessage(data.message);
-        } else {
-          setLatestMessage(JSON.stringify(data));
-        }
-      },
-      error: (error) => console.error('Subscription error:', error),
-      complete: () => console.log('Subscription completed.'),
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // Toggle a favorite (create or delete from DynamoDB)
-  async function toggleFavorite(drinkId: number) {
-    if (!userID) {
-      console.warn('No user ID. Cannot toggle favorite.');
-      return;
-    }
-
-    // If already liked, delete it
-    if (likedDrinks.includes(drinkId)) {
-      try {
-        // 1) Find the existing LikedDrink record
-        const fetchRes = await client.graphql({
+        const res = await client.graphql({
           query: listLikedDrinks,
-          variables: {
-            filter: {
-              userID: { eq: userID },
-              drinkID: { eq: drinkId },
-            },
-          },
-        });
-        const existing = fetchRes.data?.listLikedDrinks?.items?.[0];
-
-        if (!existing) {
-          console.warn('No existing record found to delete — removing locally.');
-          setLikedDrinks((prev) => prev.filter((id) => id !== drinkId));
-          return;
-        }
-
-        // 2) Delete from DB
-        await client.graphql({
-          query: deleteLikedDrink,
-          variables: { input: { id: existing.id } },
+          variables: { filter: { userID: { eq: userID } } },
           authMode: 'userPool',
         });
+        setLikedDrinks(res.data?.listLikedDrinks?.items.map((i: any) => i.drinkID) || []);
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, [userID]);
 
-        // 3) Update local state
-        setLikedDrinks((prev) => prev.filter((id) => id !== drinkId));
-      } catch (error) {
-        console.error('Error deleting LikedDrink:', error);
+  // ------------ MQTT: slot config & misc ------------
+  useEffect(() => {
+    // subscribe
+    const sub = pubsub.subscribe({ topics: [SLOT_CONFIG_TOPIC] }).subscribe({
+      next: (data) => {
+        const msg = (data as any)?.value ?? data;
+        if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
+          setSlots(msg.slots.map((id: any) => Number(id) || 0));
+        }
+      },
+      error: (e) => console.error('slot‑config sub error', e),
+    });
+    // request config once connected
+    isConnected &&
+      pubsub.publish({ topics: [SLOT_CONFIG_TOPIC], message: { action: 'GET_CONFIG' } }).catch(console.error);
+    return () => sub.unsubscribe();
+  }, [isConnected]);
+
+  // --------- toggle favourite (unchanged) ---------
+  async function toggleFavorite(drinkId: number) {
+    if (!userID) return;
+    if (likedDrinks.includes(drinkId)) {
+      try {
+        const res = await client.graphql({
+          query: listLikedDrinks,
+          variables: { filter: { userID: { eq: userID }, drinkID: { eq: drinkId } } },
+        });
+        const existing = res.data?.listLikedDrinks?.items?.[0];
+        existing &&
+          (await client.graphql({
+            query: deleteLikedDrink,
+            variables: { input: { id: existing.id } },
+            authMode: 'userPool',
+          }));
+        setLikedDrinks((p) => p.filter((id) => id !== drinkId));
+      } catch (e) {
+        console.error(e);
       }
     } else {
-      // Otherwise create it
       try {
         await client.graphql({
           query: createLikedDrink,
-          variables: {
-            input: {
-              userID: userID,
-              drinkID: drinkId,
-            },
-          },
+          variables: { input: { userID, drinkID: drinkId } },
           authMode: 'userPool',
         });
-        setLikedDrinks((prev) => [...prev, drinkId]);
-      } catch (error) {
-        console.error('Error creating LikedDrink:', error);
+        setLikedDrinks((p) => [...p, drinkId]);
+      } catch (e) {
+        console.error(e);
       }
     }
   }
 
-  // Categories to display up top
-  const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey'];
+  // ---------------- FILTER LOGIC ----------------
+  const loadedIds = slots.filter((id) => id > 0);
+  const canMake = (drink: Drink) => {
+    if (!onlyMakeable) return true;
+    if (!drink.ingredients || loadedIds.length === 0) return false;
+    const needed = drink.ingredients.split(',').map((c) => parseInt(c.split(':')[0], 10));
+    return needed.every((id) => loadedIds.includes(id));
+  };
 
-  // Filter drinks by category & search
-  const filteredDrinks = drinks.filter((drink) => {
-    const matchesCategory =
-      selectedCategory === 'All' || drink.category === selectedCategory;
-    const matchesSearch = drink.name
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  const filteredDrinks = drinks.filter(
+    (d) =>
+      (selectedCategory === 'All' || d.category === selectedCategory) &&
+      d.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      canMake(d)
+  );
 
-  // If expanded, shift the expanded item up a row if it’s on the right side
+  // re‑order for expanded
   const renderedDrinks = [...filteredDrinks];
   if (expandedDrink != null) {
-    const expandedIndex = renderedDrinks.findIndex((d) => d.id === expandedDrink);
-    if (expandedIndex !== -1 && expandedIndex % 2 === 1) {
-      const [expandedItem] = renderedDrinks.splice(expandedIndex, 1);
-      renderedDrinks.splice(expandedIndex - 1, 0, expandedItem);
-    }
+    const i = renderedDrinks.findIndex((d) => d.id === expandedDrink);
+    i !== -1 && i % 2 === 1 && renderedDrinks.splice(i - 1, 0, renderedDrinks.splice(i, 1)[0]);
   }
 
-  const handleExpandedLayout = (layout: { y: number; height: number }) => {
-    if (scrollViewRef.current && scrollViewHeight) {
-      scrollViewRef.current.scrollTo({ y: layout.y, animated: true });
-    }
-  };
+  const handleExpandedLayout = (layout: { y: number }) =>
+    scrollViewRef.current?.scrollTo({ y: layout.y, animated: true });
 
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: '#DFDCD9', fontSize: 18 }}>Loading drinks...</Text>
+      <View style={styles.loadingScreen}>
+        <Text style={styles.loadingText}>Loading drinks…</Text>
       </View>
     );
   }
 
+  // ================== RENDER UI ==================
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {/* ------------ HEADER ------------ */}
       <View style={styles.headerContainer}>
         <Text style={styles.headerText}>Drinks</Text>
 
-        {/* Dynamic connection status */}
         <View style={styles.connectionRow}>
           <Animated.View
             style={[
               styles.greenDot,
               {
-                // If disconnected => red, else green
                 backgroundColor: isConnected ? '#63d44a' : '#B81A1A',
-                transform: [{ scale: glowAnimation }],
+                transform: [{ scale: glowAnim }],
                 shadowColor: isConnected ? '#00FF00' : '#B81A1A',
-                shadowOpacity: glowAnimation.interpolate({
-                  inputRange: [1, 1.2],
-                  outputRange: [0.3, 0.8],
-                }),
               },
             ]}
           />
-          <Text style={styles.subHeaderText}>
-            {isConnected ? 'LiquorBot #001' : 'LiquorBot #001'}
-          </Text>
+          <Text style={styles.subHeaderText}>LiquorBot #001</Text>
         </View>
 
-        {/* Edit Icon in the top-right corner */}
-        <TouchableOpacity
-          style={styles.editIconContainer}
-          onPress={() => router.push('/create-drink')} // Navigate to create-drink.tsx
-        >
+        <TouchableOpacity style={styles.editIconContainer} onPress={() => router.push('/create-drink')}>
           <Ionicons name="create-outline" size={30} color="#CE975E" />
         </TouchableOpacity>
       </View>
 
-      {/* Horizontal category picker */}
+      {/* ------------ CATEGORY PICKER ------------ */}
       <View style={styles.horizontalPickerContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontalPicker}
-        >
-          {categories.map((category) => (
-            <TouchableOpacity
-              key={category}
-              onPress={() => setSelectedCategory(category)}
-              style={styles.categoryButton}
-            >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalPicker}>
+          {categories.map((cat) => (
+            <TouchableOpacity key={cat} onPress={() => setSelectedCategory(cat)} style={styles.categoryButton}>
               <View style={styles.categoryButtonContent}>
                 <Text
-                  style={[
-                    styles.categoryButtonText,
-                    selectedCategory === category && styles.selectedCategoryText,
-                  ]}
+                  style={[styles.categoryButtonText, selectedCategory === cat && styles.selectedCategoryText]}
                 >
-                  {category}
+                  {cat}
                 </Text>
-                {selectedCategory === category && <View style={styles.underline} />}
+                {selectedCategory === cat && <View style={styles.underline} />}
               </View>
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
 
-      {/* Search Bar */}
+      {/* ------------ SEARCH + FILTER ------------ */}
       <View style={styles.searchBarContainer}>
         <Ionicons name="search" size={20} color="#4F4F4F" style={styles.searchIcon} />
         <TextInput
@@ -640,9 +486,16 @@ export default function MenuScreen() {
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
+        <TouchableOpacity onPress={() => setFilterModalVisible(true)} style={styles.filterIcon}>
+          <Ionicons
+            name="funnel-outline"
+            size={20}
+            color={onlyMakeable ? '#CE975E' : '#4F4F4F'}
+          />
+        </TouchableOpacity>
       </View>
 
-      {/* Drinks Grid */}
+      {/* ------------ DRINK GRID ------------ */}
       <ScrollView
         ref={scrollViewRef}
         onLayout={() => setScrollViewHeight(500)}
@@ -656,7 +509,7 @@ export default function MenuScreen() {
               isExpanded={expandedDrink === drink.id}
               isLiked={likedDrinks.includes(drink.id)}
               toggleFavorite={toggleFavorite}
-              onExpand={(id: number) => setExpandedDrink(id)}
+              onExpand={(id) => setExpandedDrink(id)}
               onCollapse={() => setExpandedDrink(null)}
               allIngredients={allIngredients}
               onExpandedLayout={handleExpandedLayout}
@@ -665,12 +518,39 @@ export default function MenuScreen() {
         </View>
       </ScrollView>
 
-      {/* Latest IoT Message */}
+      {/* ------------ LATEST IoT MSG ------------ */}
       {latestMessage ? (
         <View style={{ padding: 10, backgroundColor: '#333' }}>
-          <Text style={{ color: '#fff' }}>Latest IoT Message: {latestMessage}</Text>
+          <Text style={{ color: '#fff' }}>Latest IoT Message: {latestMessage}</Text>
         </View>
       ) : null}
+
+      {/* ------------ FILTER POPUP ------------ */}
+      <Modal
+        visible={filterModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFilterModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.filterModal}>
+            <TouchableOpacity style={styles.modalCloseButton} onPress={() => setFilterModalVisible(false)}>
+              <Ionicons name="close" size={24} color="#DFDCD9" />
+            </TouchableOpacity>
+            <Text style={styles.filterModalTitle}>Filter Options</Text>
+
+            <View style={styles.filterRow}>
+              <Text style={styles.filterLabel}>Only show drinks I can make</Text>
+              <Switch
+                value={onlyMakeable}
+                onValueChange={setOnlyMakeable}
+                trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
+                thumbColor="#DFDCD9"
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -918,4 +798,13 @@ const styles = StyleSheet.create({
     top: 100,
     right: 30,
   },
+  loadingScreen: { flex: 1, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center' },
+  loadingText: { color: '#DFDCD9', fontSize: 18 },
+  filterIcon: { marginLeft: 10 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  filterModal: { width: SCREEN_WIDTH * 0.8, backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20 },
+  filterModalTitle: { color: '#DFDCD9', fontSize: 20, fontWeight: 'bold', marginBottom: 20, alignSelf: 'center' },
+  filterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  filterLabel: { color: '#DFDCD9', fontSize: 16, flex: 1, flexWrap: 'wrap' },
+  modalCloseButton: { position: 'absolute', top: 15, right: 15 },
 });
