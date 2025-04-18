@@ -8,6 +8,7 @@ type LikedDrink @model @auth(rules: [{allow: public}, {allow: owner}]) {
 type RecipeIngredient {
   ingredientID: ID
   amount: Float
+  priority: Int
 }
 
 type CustomRecipe @model @auth(rules: [{allow: public}, {allow: owner}]) {

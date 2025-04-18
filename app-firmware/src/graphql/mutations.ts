@@ -73,6 +73,7 @@ export const createCustomRecipe = /* GraphQL */ `mutation CreateCustomRecipe(
     ingredients {
       ingredientID
       amount
+      priority
       __typename
     }
     createdAt
@@ -96,6 +97,7 @@ export const updateCustomRecipe = /* GraphQL */ `mutation UpdateCustomRecipe(
     ingredients {
       ingredientID
       amount
+      priority
       __typename
     }
     createdAt
@@ -119,6 +121,7 @@ export const deleteCustomRecipe = /* GraphQL */ `mutation DeleteCustomRecipe(
     ingredients {
       ingredientID
       amount
+      priority
       __typename
     }
     createdAt

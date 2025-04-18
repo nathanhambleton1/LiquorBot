@@ -73,6 +73,7 @@ export const onCreateCustomRecipe = /* GraphQL */ `subscription OnCreateCustomRe
     ingredients {
       ingredientID
       amount
+      priority
       __typename
     }
     createdAt
@@ -96,6 +97,7 @@ export const onUpdateCustomRecipe = /* GraphQL */ `subscription OnUpdateCustomRe
     ingredients {
       ingredientID
       amount
+      priority
       __typename
     }
     createdAt
@@ -119,6 +121,7 @@ export const onDeleteCustomRecipe = /* GraphQL */ `subscription OnDeleteCustomRe
     ingredients {
       ingredientID
       amount
+      priority
       __typename
     }
     createdAt

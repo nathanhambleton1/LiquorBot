@@ -54,6 +54,7 @@ export const getCustomRecipe = /* GraphQL */ `query GetCustomRecipe($id: ID!) {
     ingredients {
       ingredientID
       amount
+      priority
       __typename
     }
     createdAt

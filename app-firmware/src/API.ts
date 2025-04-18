@@ -120,6 +120,7 @@ export type CreateCustomRecipeInput = {
 export type RecipeIngredientInput = {
   ingredientID?: string | null,
   amount?: number | null,
+  priority?: number | null,
 };
 
 export type ModelCustomRecipeConditionInput = {
@@ -148,6 +149,7 @@ export type RecipeIngredient = {
   __typename: "RecipeIngredient",
   ingredientID?: string | null,
   amount?: number | null,
+  priority?: number | null,
 };
 
 export type UpdateCustomRecipeInput = {
@@ -406,6 +408,7 @@ export type CreateCustomRecipeMutation = {
       __typename: "RecipeIngredient",
       ingredientID?: string | null,
       amount?: number | null,
+      priority?: number | null,
     } | null,
     createdAt?: string | null,
     updatedAt: string,
@@ -428,6 +431,7 @@ export type UpdateCustomRecipeMutation = {
       __typename: "RecipeIngredient",
       ingredientID?: string | null,
       amount?: number | null,
+      priority?: number | null,
     } | null,
     createdAt?: string | null,
     updatedAt: string,
@@ -450,6 +454,7 @@ export type DeleteCustomRecipeMutation = {
       __typename: "RecipeIngredient",
       ingredientID?: string | null,
       amount?: number | null,
+      priority?: number | null,
     } | null,
     createdAt?: string | null,
     updatedAt: string,
@@ -566,6 +571,7 @@ export type GetCustomRecipeQuery = {
       __typename: "RecipeIngredient",
       ingredientID?: string | null,
       amount?: number | null,
+      priority?: number | null,
     } | null,
     createdAt?: string | null,
     updatedAt: string,
@@ -703,6 +709,7 @@ export type OnCreateCustomRecipeSubscription = {
       __typename: "RecipeIngredient",
       ingredientID?: string | null,
       amount?: number | null,
+      priority?: number | null,
     } | null,
     createdAt?: string | null,
     updatedAt: string,
@@ -725,6 +732,7 @@ export type OnUpdateCustomRecipeSubscription = {
       __typename: "RecipeIngredient",
       ingredientID?: string | null,
       amount?: number | null,
+      priority?: number | null,
     } | null,
     createdAt?: string | null,
     updatedAt: string,
@@ -747,6 +755,7 @@ export type OnDeleteCustomRecipeSubscription = {
       __typename: "RecipeIngredient",
       ingredientID?: string | null,
       amount?: number | null,
+      priority?: number | null,
     } | null,
     createdAt?: string | null,
     updatedAt: string,
