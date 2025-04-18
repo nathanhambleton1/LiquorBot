@@ -450,15 +450,29 @@ export default function CreateDrinkScreen() {
           onPressOut={() => setShowPriorityInfoIndex(null)}
         >
           <View style={styles.popupContainer}>
+            {/* Volume Section */}
+            <Text style={[styles.popupText, styles.goldText]}>Volume:</Text>
             <Text style={styles.popupText}>
-              Priority controls pour order: Higher (1) pours first, lower pours after.
+              The volume represents the amount of each ingredient in increments of 0.25 oz. All measurements are in ounces (oz).
             </Text>
+
+            {/* Empty line */}
+            <Text style={styles.popupText}>{'\n'}</Text>
+
+            {/* Priority Section */}
+            <Text style={[styles.popupText, styles.goldText]}>Priority:</Text>
             <Text style={styles.popupText}>
-              For example, in a Tequila Sunrise, you give grenadine a higher priority so it’s poured first.
+              Priority determines the pour order. Higher priority (1) pours first, while lower priority pours later.
             </Text>
-            <Text style={styles.popupText}>
-              This creates a lovely gradient as orange juice is added on top.
+
+            {/* Two empty lines */}
+            <Text style={styles.popupText}>{'\n'}</Text>
+
+            {/* Example Section */}
+            <Text style={[styles.popupText, styles.grayText]}>
+              For example, in a Tequila Sunrise, grenadine is given a higher priority so it’s poured first, creating a lovely gradient as orange juice is added on top.
             </Text>
+
             <TouchableOpacity
               style={styles.popupCloseBtn}
               onPress={() => setShowPriorityInfoIndex(null)}
@@ -665,5 +679,17 @@ const styles = StyleSheet.create({
     top: 10,
     right: 10,
     padding: 5,
+  },
+  goldText: {
+    color: '#CE975E',
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginBottom: 5,
+  },
+  grayText: {
+    color: '#4f4f4f',
+    fontSize: 12,
+    lineHeight: 20,
+    fontStyle: 'italic',
   },
 });
