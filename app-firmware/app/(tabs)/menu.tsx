@@ -334,6 +334,7 @@ export default function MenuScreen() {
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [onlyMakeable, setOnlyMakeable] = useState(false);
   const [alphabetical, setAlphabetical] = useState(false);
+  const [onlyCustom, setOnlyCustom] = useState(false);
 
   // slot‑config
   const [slots, setSlots] = useState<number[]>(Array(15).fill(0));
@@ -536,6 +537,7 @@ export default function MenuScreen() {
 
   let filteredDrinks = drinks.filter(
     (d) =>
+      (!onlyCustom || d.category === 'Custom') &&
       (selectedCategory === 'All' || d.category === selectedCategory) &&
       d.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
       canMake(d),
@@ -708,6 +710,15 @@ export default function MenuScreen() {
               <Switch
                 value={alphabetical}
                 onValueChange={setAlphabetical}
+                trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
+                thumbColor="#DFDCD9"
+              />
+            </View>
+            <View style={styles.filterRow}>
+              <Text style={styles.filterLabel}>Only show my custom drinks</Text>
+              <Switch
+                value={onlyCustom}
+                onValueChange={setOnlyCustom}
                 trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
                 thumbColor="#DFDCD9"
               />
