@@ -820,7 +820,7 @@ const styles = StyleSheet.create({
   },
   box: {
     width: '45%',
-    marginBottom: 40,
+    marginBottom: 25,
     alignItems: 'center',
     backgroundColor: '#1F1F1F',
     borderRadius: 10,
@@ -832,7 +832,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 500,
     padding: 20,
-    marginBottom: 40,
+    marginBottom: 25,
     overflow: 'visible',
   },
   favoriteButton: {
