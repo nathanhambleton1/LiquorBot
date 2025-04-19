@@ -25,6 +25,8 @@ import { useRouter } from 'expo-router';
 
 import { Amplify } from 'aws-amplify';
 import { getUrl } from 'aws-amplify/storage';
+import { generateClient } from 'aws-amplify/api';
+import { createCustomRecipe } from '../src/graphql/mutations';
 import config from '../src/amplifyconfiguration.json';
 
 Amplify.configure(config);
@@ -51,7 +53,7 @@ interface DrinkMeta {
 // ---------- MAIN ----------
 export default function CreateDrinkScreen() {
   const router = useRouter();
-
+  const client = generateClient();
   // Drink name
   const [drinkName, setDrinkName] = useState('');
 
@@ -177,17 +179,40 @@ export default function CreateDrinkScreen() {
     );
 
   // ---------- SAVE ----------
-  const handleSave = () => {
-    const final = rows
-      .filter((r) => r.id !== 0)
+  const handleSave = async () => {
+    // Build ingredient list
+    const ingredientsInput = rows
+      .filter(r => r.id !== 0)
       .map(({ id, volume, priority }) => ({
-        ingredientID: id,
-        amount: volume,
-        priority,
+        ingredientID: String(id),   // GraphQL expects ID = string
+        amount: volume,             // Float
+        priority,                   // Int
       }));
-    console.log('Drink Created:', { drinkName, ingredients: final });
-    // TODO: call your GraphQL mutation to persist CustomRecipe here.
-    router.back();
+  
+    if (ingredientsInput.length === 0) {
+      alert('Add at least one ingredient before saving.');
+      return;
+    }
+  
+    try {
+      await client.graphql({
+        query: createCustomRecipe,
+        variables: {
+          input: {
+            name: drinkName.trim(),
+            // description field is optional in the schema; add one if you have a UI input
+            ingredients: ingredientsInput,   // ← array (after schema tweak)
+          },
+        },
+        authMode: 'userPool',   // omit or change if you use API key / IAM
+      });
+  
+      // success ‑ go back to menu
+      router.back();
+    } catch (error) {
+      console.error('Failed to save drink:', error);
+      alert('Something went wrong while saving. Check the console for details.');
+    }
   };
 
   // ---------- UI ----------

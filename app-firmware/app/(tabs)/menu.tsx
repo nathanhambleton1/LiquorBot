@@ -4,9 +4,11 @@
 //              details, categories, search / filter, and IoT integration for
 //              pouring drinks.  Adds a “make‑able” filter toggle that limits
 //              the list to drinks that can be prepared with the ingredients
-//              currently loaded on the ESP32 (pulled via MQTT).
+//              currently loaded on the ESP32 (pulled via MQTT) **and now
+//              injects the user’s CustomRecipe items pulled from the GraphQL
+//              API so they show up alongside built‑in drinks.**
 // Author: Nathan Hambleton
-// Updated: Apr 18 2025 – Added filter‑popup & make‑able toggle
+// Updated: Apr 19 2025 – Show user‑created drinks on the menu
 // -----------------------------------------------------------------------------
 import { useState, useEffect, useRef } from 'react';
 import {
@@ -35,9 +37,15 @@ import config from '../../src/amplifyconfiguration.json';
 
 // GraphQL & Auth
 import { generateClient } from 'aws-amplify/api';
-import { createLikedDrink, deleteLikedDrink } from '../../src/graphql/mutations';
-import { listLikedDrinks } from '../../src/graphql/queries';
-import { getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
+import {
+  createLikedDrink,
+  deleteLikedDrink,
+} from '../../src/graphql/mutations';
+import {
+  listLikedDrinks,
+  listCustomRecipes,     // 👈 NEW
+} from '../../src/graphql/queries';
+import { getCurrentUser } from 'aws-amplify/auth';
 import { getUrl } from 'aws-amplify/storage';
 
 // LiquorBot context
@@ -69,12 +77,17 @@ type Drink = {
 
 type BaseIngredient = { id: number; name: string; type: string };
 
-type ParsedIngredient = { id: number; name: string; amount: number; priority: number };
+type ParsedIngredient = {
+  id: number;
+  name: string;
+  amount: number;
+  priority: number;
+};
 
 // ------------ HELPERS ------------
 function parseIngredientString(
   ingredientString: string,
-  allIngredients: BaseIngredient[]
+  allIngredients: BaseIngredient[],
 ): ParsedIngredient[] {
   if (!ingredientString) return [];
   return ingredientString.split(',').map((chunk) => {
@@ -88,7 +101,10 @@ function parseIngredientString(
   });
 }
 
-// -------------------- SINGLE DRINK CARD --------------------
+/* -------------------------------------------------------------------------- */
+/*                              SINGLE DRINK CARD                             */
+/* -------------------------------------------------------------------------- */
+
 interface DrinkItemProps {
   drink: Drink;
   isExpanded: boolean;
@@ -97,8 +113,14 @@ interface DrinkItemProps {
   onExpand: (id: number) => void;
   onCollapse: () => void;
   allIngredients: BaseIngredient[];
-  onExpandedLayout?: (layout: { x: number; y: number; width: number; height: number }) => void;
+  onExpandedLayout?: (layout: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => void;
 }
+
 function DrinkItem({
   drink,
   isExpanded,
@@ -113,7 +135,10 @@ function DrinkItem({
   const [quantity, setQuantity] = useState(1);
   const { isConnected, forceDisconnect } = useLiquorBot();
 
-  const parsedIngredients = parseIngredientString(drink.ingredients ?? '', allIngredients);
+  const parsedIngredients = parseIngredientString(
+    drink.ingredients ?? '',
+    allIngredients,
+  );
 
   useEffect(() => {
     Animated.timing(animValue, {
@@ -123,7 +148,7 @@ function DrinkItem({
     }).start();
   }, [isExpanded]);
 
-  // ----------- POUR DRINK HANDLERS (unchanged) -----------
+  /* --------------- pour‑drink helpers (unchanged) --------------- */
   async function publishDrinkCommand() {
     try {
       await pubsub.publish({
@@ -142,31 +167,37 @@ function DrinkItem({
         return;
       }
       let responded = false;
-      const sub = pubsub.subscribe({ topics: ['liquorbot/heartbeat'] }).subscribe({
-        next: (resp: any) => {
-          if (resp?.content === 'OK') {
-            responded = true;
+      const sub = pubsub
+        .subscribe({ topics: ['liquorbot/heartbeat'] })
+        .subscribe({
+          next: (resp: any) => {
+            if (resp?.content === 'OK') {
+              responded = true;
+              sub.unsubscribe();
+              publishDrinkCommand();
+            }
+          },
+          error: () => {
             sub.unsubscribe();
-            publishDrinkCommand();
-          }
-        },
-        error: () => {
-          sub.unsubscribe();
-          forceDisconnect();
-        },
+            forceDisconnect();
+          },
+        });
+      await pubsub.publish({
+        topics: ['liquorbot/heartbeat'],
+        message: { content: 'CHECK' },
       });
-      await pubsub.publish({ topics: ['liquorbot/heartbeat'], message: { content: 'CHECK' } });
-      setTimeout(() => !responded && (sub.unsubscribe(), forceDisconnect()), 2000);
+      setTimeout(
+        () => !responded && (sub.unsubscribe(), forceDisconnect()),
+        2000,
+      );
     } catch (err) {
       console.error(err);
     }
   }
 
-  function handleToggleLike() {
-    toggleFavorite(drink.id);
-  }
+  const handleToggleLike = () => toggleFavorite(drink.id);
 
-  // ---------- RENDER ----------
+  /* ---------------------------- RENDER --------------------------- */
   if (isExpanded) {
     return (
       <Animated.View
@@ -186,11 +217,14 @@ function DrinkItem({
           },
         ]}
       >
-        {/* close & heart buttons */}
+        {/* close & heart buttons */}
         <TouchableOpacity onPress={onCollapse} style={styles.closeButton}>
           <Ionicons name="close" size={24} color="#DFDCD9" />
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleToggleLike} style={styles.expandedFavoriteButton}>
+        <TouchableOpacity
+          onPress={handleToggleLike}
+          style={styles.expandedFavoriteButton}
+        >
           <Ionicons
             name={isLiked ? 'heart' : 'heart-outline'}
             size={24}
@@ -209,13 +243,17 @@ function DrinkItem({
 
         <View style={styles.expandeddetailContainer}>
           {parsedIngredients.length === 0 ? (
-            <Text style={styles.expandeddescriptionText}>No ingredients found.</Text>
+            <Text style={styles.expandeddescriptionText}>
+              No ingredients found.
+            </Text>
           ) : (
             <Text style={styles.expandeddescriptionText}>
               Contains{' '}
               {parsedIngredients
                 .map((item, i) =>
-                  i === parsedIngredients.length - 1 && i !== 0 ? `and ${item.name}` : item.name
+                  i === parsedIngredients.length - 1 && i !== 0
+                    ? `and ${item.name}`
+                    : item.name,
                 )
                 .join(', ')}
               .
@@ -225,11 +263,17 @@ function DrinkItem({
 
         {/* qty + button */}
         <View style={styles.quantityContainer}>
-          <TouchableOpacity onPress={() => setQuantity((q) => Math.max(1, q - 1))} style={styles.quantityButton}>
+          <TouchableOpacity
+            onPress={() => setQuantity((q) => Math.max(1, q - 1))}
+            style={styles.quantityButton}
+          >
             <Text style={styles.quantityButtonText}>−</Text>
           </TouchableOpacity>
           <Text style={styles.quantityText}>{quantity}</Text>
-          <TouchableOpacity onPress={() => setQuantity((q) => Math.min(3, q + 1))} style={styles.quantityButton}>
+          <TouchableOpacity
+            onPress={() => setQuantity((q) => Math.min(3, q + 1))}
+            style={styles.quantityButton}
+          >
             <Text style={styles.quantityButtonText}>+</Text>
           </TouchableOpacity>
         </View>
@@ -241,15 +285,24 @@ function DrinkItem({
     );
   }
 
-  // ---- collapsed card ----
+  /* ---------------------- collapsed card ----------------------- */
   return (
     <TouchableOpacity
       activeOpacity={0.9}
-      onPress={() => (LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut), onExpand(drink.id))}
+      onPress={() =>
+        (LayoutAnimation.configureNext(
+          LayoutAnimation.Presets.easeInEaseOut,
+        ),
+        onExpand(drink.id))
+      }
       style={styles.box}
     >
       <TouchableOpacity onPress={handleToggleLike} style={styles.favoriteButton}>
-        <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={24} color={isLiked ? '#CE975E' : '#4F4F4F'} />
+        <Ionicons
+          name={isLiked ? 'heart' : 'heart-outline'}
+          size={24}
+          color={isLiked ? '#CE975E' : '#4F4F4F'}
+        />
       </TouchableOpacity>
       <Image source={{ uri: drink.image }} style={styles.image} />
       <Text style={styles.boxText}>{drink.name}</Text>
@@ -258,57 +311,70 @@ function DrinkItem({
   );
 }
 
-// ======================= MAIN SCREEN =======================
+/* -------------------------------------------------------------------------- */
+/*                               MAIN MENU SCREEN                             */
+/* -------------------------------------------------------------------------- */
+
 export default function MenuScreen() {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
   const { isConnected } = useLiquorBot();
 
-  // ------------ state ------------
+  /* ------------------------- STATE ------------------------- */
   const [drinks, setDrinks] = useState<Drink[]>([]);
   const [allIngredients, setAllIngredients] = useState<BaseIngredient[]>([]);
   const [loading, setLoading] = useState(true);
 
   // category & search
-  const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey'];
+  const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey']; // “Custom” drinks still appear under “All”
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // new: make‑able filter modal & state
+  // make‑able filter
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [onlyMakeable, setOnlyMakeable] = useState(false);
   const [alphabetical, setAlphabetical] = useState(false);
 
-  // slot config from ESP (15 slots)
+  // slot‑config
   const [slots, setSlots] = useState<number[]>(Array(15).fill(0));
 
-  // expand, likes, user
+  // expand / likes / user
   const [expandedDrink, setExpandedDrink] = useState<number | null>(null);
-  const [scrollViewHeight, setScrollViewHeight] = useState(0);
   const [userID, setUserID] = useState<string | null>(null);
   const [likedDrinks, setLikedDrinks] = useState<number[]>([]);
-  const [latestMessage, setLatestMessage] = useState('');
+  const [customFetched, setCustomFetched] = useState(false);
 
   // glow anim for status dot
   const glowAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1.2, duration: 800, useNativeDriver: true }),
-        Animated.timing(glowAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-      ])
+        Animated.timing(glowAnim, {
+          toValue: 1.2,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ]),
     ).start();
   }, [glowAnim]);
 
-  // ------------- fetch drinks / ingredients -------------
+  /* ----- base drinks & ingredient catalogue (S3 JSON) ----- */
   useEffect(() => {
-    const fetchAll = async () => {
+    (async () => {
       try {
         const [drinksUrl, ingUrl] = await Promise.all([
           getUrl({ key: 'drinkMenu/drinks.json' }),
           getUrl({ key: 'drinkMenu/ingredients.json' }),
         ]);
-        const [drinksRes, ingRes] = await Promise.all([fetch(drinksUrl.url), fetch(ingUrl.url)]);
+        const [drinksRes, ingRes] = await Promise.all([
+          fetch(drinksUrl.url),
+          fetch(ingUrl.url),
+        ]);
         setDrinks(await drinksRes.json());
         setAllIngredients(await ingRes.json());
       } catch (err) {
@@ -316,11 +382,10 @@ export default function MenuScreen() {
       } finally {
         setLoading(false);
       }
-    };
-    fetchAll();
+    })();
   }, []);
 
-  // --------- user ID + liked drinks ----------
+  /* ----------------- Cognito username / ID ----------------- */
   useEffect(() => {
     (async () => {
       try {
@@ -331,6 +396,8 @@ export default function MenuScreen() {
       }
     })();
   }, []);
+
+  /* -------------------- liked drinks ----------------------- */
   useEffect(() => {
     if (!userID) return;
     (async () => {
@@ -340,16 +407,67 @@ export default function MenuScreen() {
           variables: { filter: { userID: { eq: userID } } },
           authMode: 'userPool',
         });
-        setLikedDrinks(res.data?.listLikedDrinks?.items.map((i: any) => i.drinkID) || []);
+        setLikedDrinks(
+          res.data?.listLikedDrinks?.items.map((i: any) => i.drinkID) || [],
+        );
       } catch (e) {
         console.error(e);
       }
     })();
   }, [userID]);
 
-  // ------------ MQTT: slot config & misc ------------
+  /* -------- NEW: pull the user’s CustomRecipe items ---------- */
   useEffect(() => {
-    // subscribe
+    if (!userID || customFetched) return;
+
+    (async () => {
+      try {
+        const res = await client.graphql({
+          query: listCustomRecipes,
+          authMode: 'userPool', // owner‑based auth will return only the user’s items
+        });
+
+        const custom: Drink[] =
+          res.data?.listCustomRecipes?.items?.map(
+            (item: any, idx: number): Drink => {
+              // Keep IDs unique by offsetting into a high range
+              const numericId = 1_000_000 + idx;
+
+              // Convert {ingredientID, amount, priority}[] → "id:amt:prio,id:amt:prio"
+              const ingredientsString = Array.isArray(item.ingredients)
+                ? item.ingredients
+                    .map(
+                      (ri: any) =>
+                        `${Number(ri.ingredientID)}:${Number(
+                          ri.amount,
+                        )}:${Number(ri.priority ?? 1)}`,
+                    )
+                    .join(',')
+                : '';
+
+              return {
+                id: numericId,
+                name: item.name ?? `Custom #${idx + 1}`,
+                category: 'Custom',
+                description: item.description ?? '',
+                image:
+                  'https://d3jj0su0y4d6lr.cloudfront.net/placeholder_drink.png', // fallback image
+                ingredients: ingredientsString,
+              };
+            },
+          ) ?? [];
+
+        // Merge without clobbering earlier fetch results
+        setDrinks((prev) => [...prev, ...custom]);
+        setCustomFetched(true);
+      } catch (e) {
+        console.error('Error loading custom drinks', e);
+      }
+    })();
+  }, [userID, customFetched]);
+
+  /* --------------------- MQTT: slot config ------------------- */
+  useEffect(() => {
     const sub = pubsub.subscribe({ topics: [SLOT_CONFIG_TOPIC] }).subscribe({
       next: (data) => {
         const msg = (data as any)?.value ?? data;
@@ -359,13 +477,19 @@ export default function MenuScreen() {
       },
       error: (e) => console.error('slot‑config sub error', e),
     });
-    // request config once connected
+
     isConnected &&
-      pubsub.publish({ topics: [SLOT_CONFIG_TOPIC], message: { action: 'GET_CONFIG' } }).catch(console.error);
+      pubsub
+        .publish({
+          topics: [SLOT_CONFIG_TOPIC],
+          message: { action: 'GET_CONFIG' },
+        })
+        .catch(console.error);
+
     return () => sub.unsubscribe();
   }, [isConnected]);
 
-  // --------- toggle favourite (unchanged) ---------
+  /* -------------------- favourite toggle -------------------- */
   async function toggleFavorite(drinkId: number) {
     if (!userID) return;
     if (likedDrinks.includes(drinkId)) {
@@ -399,12 +523,14 @@ export default function MenuScreen() {
     }
   }
 
-  // ---------------- FILTER LOGIC ----------------
+  /* ---------------------- FILTER LOGIC ---------------------- */
   const loadedIds = slots.filter((id) => id > 0);
   const canMake = (drink: Drink) => {
     if (!onlyMakeable) return true;
     if (!drink.ingredients || loadedIds.length === 0) return false;
-    const needed = drink.ingredients.split(',').map((c) => parseInt(c.split(':')[0], 10));
+    const needed = drink.ingredients
+      .split(',')
+      .map((c) => parseInt(c.split(':')[0], 10));
     return needed.every((id) => loadedIds.includes(id));
   };
 
@@ -412,22 +538,25 @@ export default function MenuScreen() {
     (d) =>
       (selectedCategory === 'All' || d.category === selectedCategory) &&
       d.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      canMake(d)
+      canMake(d),
   );
   if (alphabetical) {
     filteredDrinks.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  // re‑order for expanded
+  // keep expanded card on left column
   const renderedDrinks = [...filteredDrinks];
   if (expandedDrink != null) {
     const i = renderedDrinks.findIndex((d) => d.id === expandedDrink);
-    i !== -1 && i % 2 === 1 && renderedDrinks.splice(i - 1, 0, renderedDrinks.splice(i, 1)[0]);
+    i !== -1 &&
+      i % 2 === 1 &&
+      renderedDrinks.splice(i - 1, 0, renderedDrinks.splice(i, 1)[0]);
   }
 
   const handleExpandedLayout = (layout: { y: number }) =>
     scrollViewRef.current?.scrollTo({ y: layout.y, animated: true });
 
+  /* ---------------------- initial loader --------------------- */
   if (loading) {
     return (
       <View style={styles.loadingScreen}>
@@ -436,7 +565,7 @@ export default function MenuScreen() {
     );
   }
 
-  // ================== RENDER UI ==================
+  /* ---------------------------- UI --------------------------- */
   return (
     <View style={styles.container}>
       {/* ------------ HEADER ------------ */}
@@ -457,19 +586,33 @@ export default function MenuScreen() {
           <Text style={styles.subHeaderText}>LiquorBot #001</Text>
         </View>
 
-        <TouchableOpacity style={styles.editIconContainer} onPress={() => router.push('/create-drink')}>
+        <TouchableOpacity
+          style={styles.editIconContainer}
+          onPress={() => router.push('/create-drink')}
+        >
           <Ionicons name="create-outline" size={30} color="#CE975E" />
         </TouchableOpacity>
       </View>
 
       {/* ------------ CATEGORY PICKER ------------ */}
       <View style={styles.horizontalPickerContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalPicker}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.horizontalPicker}
+        >
           {categories.map((cat) => (
-            <TouchableOpacity key={cat} onPress={() => setSelectedCategory(cat)} style={styles.categoryButton}>
+            <TouchableOpacity
+              key={cat}
+              onPress={() => setSelectedCategory(cat)}
+              style={styles.categoryButton}
+            >
               <View style={styles.categoryButtonContent}>
                 <Text
-                  style={[styles.categoryButtonText, selectedCategory === cat && styles.selectedCategoryText]}
+                  style={[
+                    styles.categoryButtonText,
+                    selectedCategory === cat && styles.selectedCategoryText,
+                  ]}
                 >
                   {cat}
                 </Text>
@@ -482,7 +625,12 @@ export default function MenuScreen() {
 
       {/* ------------ SEARCH + FILTER ------------ */}
       <View style={styles.searchBarContainer}>
-        <Ionicons name="search" size={20} color="#4F4F4F" style={styles.searchIcon} />
+        <Ionicons
+          name="search"
+          size={20}
+          color="#4F4F4F"
+          style={styles.searchIcon}
+        />
         <TextInput
           style={styles.searchBar}
           placeholder="Search"
@@ -490,7 +638,10 @@ export default function MenuScreen() {
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
-        <TouchableOpacity onPress={() => setFilterModalVisible(true)} style={styles.filterIcon}>
+        <TouchableOpacity
+          onPress={() => setFilterModalVisible(true)}
+          style={styles.filterIcon}
+        >
           <Ionicons
             name="funnel-outline"
             size={20}
@@ -502,8 +653,10 @@ export default function MenuScreen() {
       {/* ------------ DRINK GRID ------------ */}
       <ScrollView
         ref={scrollViewRef}
-        onLayout={() => setScrollViewHeight(500)}
-        contentContainerStyle={[styles.scrollContainer, { paddingBottom: expandedDrink ? 100 : 80 }]}
+        contentContainerStyle={[
+          styles.scrollContainer,
+          { paddingBottom: expandedDrink ? 100 : 80 },
+        ]}
       >
         <View style={styles.grid}>
           {renderedDrinks.map((drink) => (
@@ -522,13 +675,6 @@ export default function MenuScreen() {
         </View>
       </ScrollView>
 
-      {/* ------------ LATEST IoT MSG ------------ */}
-      {latestMessage ? (
-        <View style={{ padding: 10, backgroundColor: '#333' }}>
-          <Text style={{ color: '#fff' }}>Latest IoT Message: {latestMessage}</Text>
-        </View>
-      ) : null}
-
       {/* ------------ FILTER POPUP ------------ */}
       <Modal
         visible={filterModalVisible}
@@ -538,13 +684,18 @@ export default function MenuScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.filterModal}>
-            <TouchableOpacity style={styles.modalCloseButton} onPress={() => setFilterModalVisible(false)}>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setFilterModalVisible(false)}
+            >
               <Ionicons name="close" size={24} color="#DFDCD9" />
             </TouchableOpacity>
             <Text style={styles.filterModalTitle}>Filter Options</Text>
 
             <View style={styles.filterRow}>
-              <Text style={styles.filterLabel}>Only show drinks I can make</Text>
+              <Text style={styles.filterLabel}>
+                Only show drinks I can make
+              </Text>
               <Switch
                 value={onlyMakeable}
                 onValueChange={setOnlyMakeable}

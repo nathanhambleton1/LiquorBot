@@ -113,7 +113,7 @@ export type CreateCustomRecipeInput = {
   id?: string | null,
   name?: string | null,
   description?: string | null,
-  ingredients?: RecipeIngredientInput | null,
+  ingredients?: Array< RecipeIngredientInput | null > | null,
   createdAt?: string | null,
 };
 
@@ -139,7 +139,7 @@ export type CustomRecipe = {
   id: string,
   name?: string | null,
   description?: string | null,
-  ingredients?: RecipeIngredient | null,
+  ingredients?:  Array<RecipeIngredient | null > | null,
   createdAt?: string | null,
   updatedAt: string,
   owner?: string | null,
@@ -156,7 +156,7 @@ export type UpdateCustomRecipeInput = {
   id: string,
   name?: string | null,
   description?: string | null,
-  ingredients?: RecipeIngredientInput | null,
+  ingredients?: Array< RecipeIngredientInput | null > | null,
   createdAt?: string | null,
 };
 
@@ -404,12 +404,12 @@ export type CreateCustomRecipeMutation = {
     id: string,
     name?: string | null,
     description?: string | null,
-    ingredients?:  {
+    ingredients?:  Array< {
       __typename: "RecipeIngredient",
       ingredientID?: string | null,
       amount?: number | null,
       priority?: number | null,
-    } | null,
+    } | null > | null,
     createdAt?: string | null,
     updatedAt: string,
     owner?: string | null,
@@ -427,12 +427,12 @@ export type UpdateCustomRecipeMutation = {
     id: string,
     name?: string | null,
     description?: string | null,
-    ingredients?:  {
+    ingredients?:  Array< {
       __typename: "RecipeIngredient",
       ingredientID?: string | null,
       amount?: number | null,
       priority?: number | null,
-    } | null,
+    } | null > | null,
     createdAt?: string | null,
     updatedAt: string,
     owner?: string | null,
@@ -450,12 +450,12 @@ export type DeleteCustomRecipeMutation = {
     id: string,
     name?: string | null,
     description?: string | null,
-    ingredients?:  {
+    ingredients?:  Array< {
       __typename: "RecipeIngredient",
       ingredientID?: string | null,
       amount?: number | null,
       priority?: number | null,
-    } | null,
+    } | null > | null,
     createdAt?: string | null,
     updatedAt: string,
     owner?: string | null,
@@ -567,12 +567,12 @@ export type GetCustomRecipeQuery = {
     id: string,
     name?: string | null,
     description?: string | null,
-    ingredients?:  {
+    ingredients?:  Array< {
       __typename: "RecipeIngredient",
       ingredientID?: string | null,
       amount?: number | null,
       priority?: number | null,
-    } | null,
+    } | null > | null,
     createdAt?: string | null,
     updatedAt: string,
     owner?: string | null,
@@ -705,12 +705,12 @@ export type OnCreateCustomRecipeSubscription = {
     id: string,
     name?: string | null,
     description?: string | null,
-    ingredients?:  {
+    ingredients?:  Array< {
       __typename: "RecipeIngredient",
       ingredientID?: string | null,
       amount?: number | null,
       priority?: number | null,
-    } | null,
+    } | null > | null,
     createdAt?: string | null,
     updatedAt: string,
     owner?: string | null,
@@ -728,12 +728,12 @@ export type OnUpdateCustomRecipeSubscription = {
     id: string,
     name?: string | null,
     description?: string | null,
-    ingredients?:  {
+    ingredients?:  Array< {
       __typename: "RecipeIngredient",
       ingredientID?: string | null,
       amount?: number | null,
       priority?: number | null,
-    } | null,
+    } | null > | null,
     createdAt?: string | null,
     updatedAt: string,
     owner?: string | null,
@@ -751,12 +751,12 @@ export type OnDeleteCustomRecipeSubscription = {
     id: string,
     name?: string | null,
     description?: string | null,
-    ingredients?:  {
+    ingredients?:  Array< {
       __typename: "RecipeIngredient",
       ingredientID?: string | null,
       amount?: number | null,
       priority?: number | null,
-    } | null,
+    } | null > | null,
     createdAt?: string | null,
     updatedAt: string,
     owner?: string | null,

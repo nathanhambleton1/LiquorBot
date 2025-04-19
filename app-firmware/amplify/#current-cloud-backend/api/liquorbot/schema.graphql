@@ -15,7 +15,7 @@ type CustomRecipe @model @auth(rules: [{allow: public}, {allow: owner}]) {
   id: ID!
   name: String
   description: String
-  ingredients: RecipeIngredient
+  ingredients: [RecipeIngredient]
   createdAt: AWSDateTime
 }
 
