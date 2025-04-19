@@ -86,6 +86,9 @@ export default function DeviceSettings() {
   const DEVICE_SERVICE_UUID = '1fb68313-bd17-4fd8-b615-554ddfd462d6';
   const manager = new BleManager();
 
+  // Config loading state
+  const [configLoading, setConfigLoading] = useState(false);
+
   // ---------------- FETCH INGREDIENTS FROM S3 ----------------
   useEffect(() => {
     (async () => {
@@ -123,6 +126,7 @@ export default function DeviceSettings() {
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
           // coerce any string IDs to numbers just in case
           setSlots(msg.slots.map((id: any) => Number(id) || 0));
+          setConfigLoading(false);
           return;
         }
       
@@ -169,6 +173,7 @@ export default function DeviceSettings() {
   // Ask the ESP for its current slot config
   const fetchCurrentConfig = () => {
     if (!isConnected) return;
+    setConfigLoading(true);
     publishSlotMessage({ action: 'GET_CONFIG' });
   };
 
@@ -549,6 +554,13 @@ export default function DeviceSettings() {
           )}
         </View>
       </Modal>
+
+      {/* Loading overlay */}
+      {configLoading && (
+        <View style={styles.loadingOverlay} pointerEvents="none">
+          <ActivityIndicator size="large" color="#CE975E" />
+        </View>
+      )}
     </View>
   );
 }
@@ -887,5 +899,18 @@ const styles = StyleSheet.create({
   },
   deviceList: {
     paddingBottom: 20,
+  },
+
+  // Loading overlay
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
   },
 });
