@@ -428,6 +428,40 @@ export default function ProfileScreen() {
       );
     }
 
+    if (popupData.title === 'Help') {
+      return (
+        <ScrollView style={{ flex: 1, padding: 20 }}>
+          <Text style={styles.popupText}>
+            Welcome to LiquorBot Help!
+          </Text>
+          <Text style={styles.popupText}>
+            • Getting Started: Tap “Create Drink” to make your own recipes.
+          </Text>
+          <Text style={styles.popupText}>
+            • Browse Categories: Use the category picker to filter drinks.
+          </Text>
+          <Text style={styles.popupText}>
+            • Search: Type in the search bar to find a drink by name.
+          </Text>
+          <Text style={styles.popupText}>
+            • Favorites: Tap the heart icon on a drink card to like/unlike.
+          </Text>
+          <Text style={styles.popupText}>
+            • Make‑able Filter: Toggle the funnel icon to show only drinks you can make with current ingredients.
+          </Text>
+          <Text style={styles.popupText}>
+            • Profile: Edit your bio and see your liked drinks history.
+          </Text>
+          <Text style={styles.popupText}>
+            • Sign Out: Tap “Sign Out” to log out of your account.
+          </Text>
+          <Text style={styles.popupText}>
+            For more detailed instructions, visit our documentation or contact support.
+          </Text>
+        </ScrollView>
+      );
+    }
+
     return <Text style={styles.popupText}>{popupData.content}</Text>;
   };
 
