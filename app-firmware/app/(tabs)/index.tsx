@@ -48,7 +48,7 @@ export default function Index() {
       {/* WiFi Icon in the top-right corner */}
       <View style={styles.wifiIconContainer}>
         <TouchableOpacity onPress={() => router.push('/device-settings')}>
-          <Ionicons name="hardware-chip" size={30} color="#FFFFFF" />
+          <Ionicons name="hardware-chip" size={36} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
   },
   overlay: {
     position: 'absolute',
-    top: 100, // Lower the text
+    top: 60, // Lower the text
     alignItems: 'flex-start', // Align text to the left
     width: '100%',
     paddingLeft: 20, // Add some padding from the left edge
@@ -148,8 +148,8 @@ const styles = StyleSheet.create({
   },
   wifiIconContainer: {
     position: 'absolute',
-    top: 115,
-    right: 50,
+    top: 80,
+    right: 40,
     zIndex: 10,
   },
 });

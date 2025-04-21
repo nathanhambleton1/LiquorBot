@@ -9,8 +9,6 @@
 import React from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Text, View, StyleSheet, Image, TouchableOpacity } from 'react-native';
-import TopView from './TopView'; 
-// ^ Adjust the import path if you put TopView in a different folder
 
 type DrinkParam = {
   id: number;
@@ -38,7 +36,6 @@ export default function DrinkDetails() {
   if (!drink) {
     return (
       <View style={styles.container}>
-        <TopView title="Drink Details" />
         <Text style={styles.errorText}>Drink not found</Text>
       </View>
     );
@@ -46,7 +43,6 @@ export default function DrinkDetails() {
 
   return (
     <View style={styles.container}>
-      <TopView title={drink.name} />
       <View style={styles.contentContainer}>
         <Image source={drink.image} style={styles.image} />
         <Text style={styles.categoryText}>{drink.category}</Text>

@@ -108,6 +108,9 @@ export default function ProfileScreen() {
   const [recordMap, setRecordMap] = useState<Record<number, string>>({});
   const [likedIDsInPopup, setLikedIDsInPopup] = useState<Set<number>>(new Set());
 
+  // Registered username
+  const [registeredUsername, setRegisteredUsername] = useState('');
+
   // sign‑out
   const { signOut } = useAuthenticator((ctx: any) => [ctx.user]);
 
@@ -119,6 +122,7 @@ export default function ProfileScreen() {
       try {
         const cognitoUser = await getCurrentUser();
         const sub = cognitoUser.username; // primary key for model
+        setRegisteredUsername(sub); // preserve the registered username
 
         // email / birthday just for display
         let email = '';
@@ -332,7 +336,8 @@ export default function ProfileScreen() {
               </View>
             </TouchableOpacity>
             <View style={styles.popupUserInfo}>
-              <Text style={styles.popupUsernameText}>{user.username}</Text>
+              {/* Display the registered username instead of combined first and last names */}
+              <Text style={styles.popupUsernameText}>{registeredUsername}</Text>
               <Text style={styles.popupEmailText}>{user.email}</Text>
             </View>
           </View>
@@ -488,7 +493,7 @@ export default function ProfileScreen() {
 // --------------------------------------------------------------------------
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#141414' },
-  userInfoContainer: { alignItems: 'center', justifyContent: 'center', paddingTop: 60, paddingBottom: 20 },
+  userInfoContainer: { alignItems: 'center', justifyContent: 'center', paddingTop: 30, paddingBottom: 20 },
   profilePictureContainer: { position: 'relative' },
   profilePicture: { width: 125, height: 125, borderRadius: 75, marginBottom: 20, marginTop: 20 },
   usernameText: { color: '#DFDCD9', fontSize: 24, textAlign: 'center' },
@@ -518,7 +523,7 @@ const styles = StyleSheet.create({
     elevation: 10,
     zIndex: 10,
   },
-  popupHeader: { flexDirection: 'row', alignItems: 'center', padding: 15, paddingTop: 75, backgroundColor: '#141414' },
+  popupHeader: { flexDirection: 'row', alignItems: 'center', padding: 15, paddingTop: 30, backgroundColor: '#141414' },
   popupTitle: { flex: 1, textAlign: 'center', color: '#DFDCD9', fontSize: 18 },
   popupContent: { flex: 1, padding: 20, justifyContent: 'flex-start', alignItems: 'center' },
   popupText: { color: '#DFDCD9', fontSize: 16, textAlign: 'center' },

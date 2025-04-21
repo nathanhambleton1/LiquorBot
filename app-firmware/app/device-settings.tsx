@@ -486,7 +486,7 @@ export default function DeviceSettings() {
             style={styles.modalCloseButton}
             onPress={() => setModalVisible(false)}
           >
-            <Ionicons name="close" size={30} color="#DFDCD9" />
+            <Ionicons name="chevron-down" size={30} color="#DFDCD9" />
           </TouchableOpacity>
 
           {/* Header */}
@@ -573,19 +573,19 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: 'absolute',
-    top: 80,
+    top: 30,
     left: 25,
   },
   headerText: {
     position: 'absolute',
-    top: 80,
+    top: 30,
     alignSelf: 'center',
     fontSize: 24,
     color: '#FFFFFF',
     fontWeight: 'bold',
   },
   scrollContainer: {
-    paddingTop: 150,
+    paddingTop: 90,
     paddingHorizontal: 20,
     paddingBottom: 20,
   },

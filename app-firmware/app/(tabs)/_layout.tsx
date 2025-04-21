@@ -40,6 +40,7 @@ export default function TabLayout() {
             bottom: 0,
             elevation: 0,
             shadowOpacity: 0,
+            height: 60, // Increased height
           },
         }}
       >
@@ -52,7 +53,7 @@ export default function TabLayout() {
                 name={focused ? 'home-sharp' : 'home-outline'}
                 color={color}
                 size={24}
-                style={{ marginBottom: -10 }}
+                style={{ marginBottom: -20 }}
               />
             ),
           }}
@@ -66,7 +67,7 @@ export default function TabLayout() {
                 name={focused ? 'wine-sharp' : 'wine-sharp'}
                 color={color}
                 size={24}
-                style={{ marginBottom: -10 }}
+                style={{ marginBottom: -20 }}
               />
             ),
           }}
@@ -80,7 +81,7 @@ export default function TabLayout() {
                 name={focused ? 'person-circle-sharp' : 'person-circle-outline'}
                 color={color}
                 size={24}
-                style={{ marginBottom: -10 }}
+                style={{ marginBottom: -20 }}
               />
             ),
           }}
