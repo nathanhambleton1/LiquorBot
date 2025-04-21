@@ -18,7 +18,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 // Sub‑popups
 import EditProfilePopup from '../components/profile/EditProfilePopup';
 import LikedDrinksPopup from '../components/profile/LikedDrinksPopup';
+import PourHistoryPopup   from '../components/profile/PourHistoryPopup';
 import HelpPopup from '../components/profile/HelpPopup';
+import SettingsPopup from '../components/profile/SettingsPopup';
 
 // Amplify + AWS imports –‑‑‑ identical to your original ----------------------
 import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
@@ -53,6 +55,14 @@ interface LikedDrinkRecord {
   drinkID: number;
   userID: string;
 }
+
+interface PourEvent {
+  id: string;
+  drinkName: string;
+  timestamp: string;
+  time: string; // Add missing property
+  volumeOz: number; // Add missing property
+}
 interface PopupMeta { title: string; content?: string; }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -74,6 +84,7 @@ export default function ProfileScreen() {
 
   const [drinks, setDrinks] = useState<Drink[]>([]);
   const [likedDrinks, setLikedDrinks] = useState<Drink[]>([]);
+  const [pourHistory, setPourHistory]   = useState<PourEvent[]>([]);
 
   // Popup control
   const [popup, setPopup] = useState<PopupMeta | null>(null);
@@ -130,7 +141,7 @@ export default function ProfileScreen() {
     })();
   }, []);
 
-  // ───────────────────── LIKED‑DRINKS FETCH ────────────────────────────────
+  // ───────────────────── FETCH HELPERS ────────────────────────────────
   const fetchUserLikedDrinks = async () => {
     try {
       const res: any = await client.graphql({
@@ -142,10 +153,24 @@ export default function ProfileScreen() {
     } catch (err) { console.error('liked drinks fetch error', err); }
   };
 
+  const fetchPourHistory = async () => {
+    try {
+      const { url } = await getUrl({ key: 'logs/pourHistory.json' });      // adjust path
+      const data = await (await fetch(url)).json();                        // expects PourEvent[]
+      setPourHistory(data.reverse());                                      // newest first
+    } catch { setPourHistory([]); }
+  };
+
+  const clearPourHistory = async () => {
+    setPourHistory([]);
+    // Persist clearing here if using cloud storage
+  };
+
   // ────────────────────── POPUP HANDLERS ───────────────────────────────────
   const openPopup = (p: PopupMeta) => {
     setPopup(p);
     if (p.title === 'Liked Drinks') fetchUserLikedDrinks();
+    if (p.title === 'Pour History') fetchPourHistory();
     slideAnim.setValue(SCREEN_WIDTH);
     Animated.timing(slideAnim, { toValue: 0, duration: 100, useNativeDriver: false }).start();
   };
@@ -197,6 +222,7 @@ export default function ProfileScreen() {
   const buttons = [
     { title: 'Edit Profile', icon: 'create-outline' as const },
     { title: 'Liked Drinks', icon: 'heart-outline' as const },
+    { title: 'Pour History', icon: 'time-outline'  as const },
     { title: 'Settings',      icon: 'settings-outline' as const },   // placeholders
     { title: 'Help',          icon: 'help-circle-outline' as const },
     { title: 'Sign Out',      icon: 'log-out-outline' as const },
@@ -226,6 +252,10 @@ export default function ProfileScreen() {
         );
       case 'Liked Drinks':
         return <LikedDrinksPopup drinks={likedDrinks} />;
+      case 'Pour History':
+          return <PourHistoryPopup events={pourHistory} onClear={clearPourHistory} />;
+      case 'Settings':
+        return <SettingsPopup />;
       case 'Help':
         return <HelpPopup />;
       default:
