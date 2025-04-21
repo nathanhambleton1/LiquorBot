@@ -573,19 +573,19 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: 'absolute',
-    top: 30,
+    top: 70,
     left: 25,
   },
   headerText: {
     position: 'absolute',
-    top: 30,
+    top: 70,
     alignSelf: 'center',
     fontSize: 24,
     color: '#FFFFFF',
     fontWeight: 'bold',
   },
   scrollContainer: {
-    paddingTop: 90,
+    paddingTop: 130,
     paddingHorizontal: 20,
     paddingBottom: 20,
   },

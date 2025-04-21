@@ -226,7 +226,7 @@ export default function CreateDrinkScreen() {
         style={styles.closeButton}
         onPress={() => router.push('/menu')}
       >
-        <Ionicons name="chevron-down" size={30} color="#DFDCD9" />
+        <Ionicons name="close" size={30} color="#DFDCD9" />
       </TouchableOpacity>
 
       <Text style={styles.headerText}>Custom Drink</Text>
@@ -516,12 +516,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#141414',
-    paddingTop: 30,
+    paddingTop: 60,
     paddingHorizontal: 20,
   },
   closeButton: {
     position: 'absolute',
-    top: 25,
+    top: 55,
     left: 20,
     zIndex: 999,
     padding: 10,

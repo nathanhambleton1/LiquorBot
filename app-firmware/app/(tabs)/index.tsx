@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
   },
   overlay: {
     position: 'absolute',
-    top: 60, // Lower the text
+    top: 100, // Lower the text
     alignItems: 'flex-start', // Align text to the left
     width: '100%',
     paddingLeft: 20, // Add some padding from the left edge
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   },
   wifiIconContainer: {
     position: 'absolute',
-    top: 80,
+    top: 115,
     right: 40,
     zIndex: 10,
   },

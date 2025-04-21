@@ -739,7 +739,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#141414',
   },
   headerContainer: {
-    paddingTop: 30,
+    paddingTop: 80,
     paddingHorizontal: 20,
     marginBottom: 10,
   },
@@ -970,7 +970,7 @@ const styles = StyleSheet.create({
   },
   editIconContainer: {
     position: 'absolute',
-    top: 40,
+    top: 85,
     right: 30,
   },
   loadingScreen: { flex: 1, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center' },

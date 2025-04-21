@@ -527,7 +527,7 @@ export default function ProfileScreen() {
 // --------------------------------------------------------------------------
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#141414' },
-  userInfoContainer: { alignItems: 'center', justifyContent: 'center', paddingTop: 30, paddingBottom: 20 },
+  userInfoContainer: { alignItems: 'center', justifyContent: 'center', paddingTop: 80, paddingBottom: 20 },
   profilePictureContainer: { position: 'relative' },
   profilePicture: { width: 125, height: 125, borderRadius: 75, marginBottom: 20, marginTop: 20 },
   usernameText: { color: '#DFDCD9', fontSize: 24, textAlign: 'center' },
@@ -557,7 +557,7 @@ const styles = StyleSheet.create({
     elevation: 10,
     zIndex: 10,
   },
-  popupHeader: { flexDirection: 'row', alignItems: 'center', padding: 15, paddingTop: 30, backgroundColor: '#141414' },
+  popupHeader: { flexDirection: 'row', alignItems: 'center', padding: 15, paddingTop: 70, backgroundColor: '#141414' },
   popupTitle: { flex: 1, textAlign: 'center', color: '#DFDCD9', fontSize: 18 },
   popupContent: { flex: 1, padding: 20, justifyContent: 'flex-start', alignItems: 'center' },
   popupText: { color: '#DFDCD9', fontSize: 16, textAlign: 'center' },
