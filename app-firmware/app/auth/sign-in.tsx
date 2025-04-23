@@ -1,14 +1,19 @@
 // -----------------------------------------------------------------------------
 // File: sign-in.tsx
-// Description: Handles the sign-in process for the LiquorBot app. Includes 
-//              functionality for user authentication and navigation to the 
-//              main app upon successful login. Integrates with AWS Amplify 
-//              for authentication.
+// Description: Handles the sign-in process. If the account isn't confirmed it
+//              routes to confirm-code screen and passes BOTH username & password.
 // Author: Nathan Hambleton
-// Created:  March 1, 2025
+// Updated: Apr 23 2025
 // -----------------------------------------------------------------------------
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { signIn, getCurrentUser } from 'aws-amplify/auth';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -22,29 +27,48 @@ export default function SignIn() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
+  /* ───────────────────────── check session ───────────────────────── */
   useEffect(() => {
-    checkUserSession();
+    (async () => {
+      try {
+        const current = await getCurrentUser();
+        if (current) router.replace('/(tabs)');
+      } catch {}
+      setIsLoading(false);
+    })();
   }, []);
 
-  const checkUserSession = async () => {
-    try {
-      const currentUser = await getCurrentUser();
-      if (currentUser) {
-        router.replace('/(tabs)');
-        return;
-      }
-    } catch (err) {
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  /* ───────────────────────── sign-in ───────────────────────── */
   const onSignInPress = async () => {
     setError('');
     try {
-      await signIn({ username, password });
-      router.replace('/(tabs)');
+      const { isSignedIn, nextStep } = await signIn({ username, password });
+
+      if (isSignedIn) {
+        router.replace('/(tabs)');
+        return;
+      }
+
+      if (nextStep?.signInStep === 'CONFIRM_SIGN_UP') {
+        router.push({
+          pathname: './confirm-code',
+          params: { username, password },
+        });
+        return;
+      }
+
+      setError('Additional authentication required (not implemented yet).');
     } catch (e: any) {
+      if (
+        e?.name === 'UserNotConfirmedException' ||
+        e?.code === 'UserNotConfirmedException'
+      ) {
+        router.push({
+          pathname: './confirm-code',
+          params: { username, password },
+        });
+        return;
+      }
       setError(e?.message || 'Something went wrong');
     }
   };
@@ -57,14 +81,15 @@ export default function SignIn() {
     );
   }
 
+  /* ───────────────────────── UI ───────────────────────── */
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Sign In</Text>
 
       <Text style={styles.label}>Username</Text>
       <TextInput
-        onChangeText={setUsername}
         value={username}
+        onChangeText={setUsername}
         style={styles.input}
         autoCapitalize="none"
       />
@@ -72,13 +97,20 @@ export default function SignIn() {
       <Text style={styles.label}>Password</Text>
       <View style={{ position: 'relative' }}>
         <TextInput
-          onChangeText={setPassword}
           value={password}
+          onChangeText={setPassword}
           style={styles.input}
           secureTextEntry={!isPasswordVisible}
         />
-        <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)} style={styles.eyeIcon}>
-          <MaterialIcons name={isPasswordVisible ? 'visibility' : 'visibility-off'} size={24} color="#4f4f4f" />
+        <TouchableOpacity
+          onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+          style={styles.eyeIcon}
+        >
+          <MaterialIcons
+            name={isPasswordVisible ? 'visibility' : 'visibility-off'}
+            size={24}
+            color="#4f4f4f"
+          />
         </TouchableOpacity>
       </View>
 
@@ -98,7 +130,7 @@ export default function SignIn() {
       <View style={styles.signUpContainer}>
         <Text style={styles.signUpText}>
           Don&apos;t have an account?{' '}
-          <Text style={styles.signUpLink} onPress={() => router.push('./sign-up')}>
+          <Text style={styles.signUpLink} onPress={() => router.push('/auth/sign-up')}>
             Sign Up
           </Text>
         </Text>
@@ -108,74 +140,16 @@ export default function SignIn() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  title: {
-    fontSize: 48,
-    color: '#fff',
-    marginBottom: 24,
-    textAlign: 'left',
-    fontWeight: 'bold',
-  },
-  label: {
-    fontSize: 16,
-    color: '#fff',
-    marginBottom: -5,
-    marginTop: 10,
-    textAlign: 'left',
-  },
-  input: {
-    backgroundColor: '#141414',
-    marginVertical: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    fontSize: 16,
-    color: '#DFDCD9',
-  },
-  eyeIcon: {
-    position: 'absolute',
-    right: 16,
-    top: '50%',
-    transform: [{ translateY: -12 }],
-  },
-  button: {
-    backgroundColor: '#CE975E',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  buttonText: {
-    color: '#DFDCD9',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  forgotPassword: {
-    alignSelf: 'flex-end',
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  forgotPasswordText: {
-    color: '#CE975E',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  signUpContainer: {
-    marginTop: 100,
-    alignItems: 'center',
-  },
-  signUpText: {
-    fontSize: 14,
-    color: '#fff',
-  },
-  signUpLink: {
-    color: '#CE975E',
-    fontWeight: 'bold',
-  },
+  container:{ flex:1, backgroundColor:'#000', justifyContent:'center', padding:24 },
+  title:{ fontSize:48, color:'#fff', marginBottom:24, fontWeight:'bold' },
+  label:{ fontSize:16, color:'#fff', marginBottom:-5, marginTop:10 },
+  input:{ backgroundColor:'#141414', marginVertical:12, paddingHorizontal:16, paddingVertical:12, borderRadius:8, fontSize:16, color:'#DFDCD9' },
+  eyeIcon:{ position:'absolute', right:16, top:'50%', transform:[{ translateY:-12 }] },
+  button:{ backgroundColor:'#CE975E', paddingVertical:12, paddingHorizontal:16, borderRadius:8, alignItems:'center', marginTop:20 },
+  buttonText:{ color:'#DFDCD9', fontSize:18, fontWeight:'bold' },
+  forgotPassword:{ alignSelf:'flex-end', marginTop:8, marginBottom:16 },
+  forgotPasswordText:{ color:'#CE975E', fontSize:14, fontWeight:'bold' },
+  signUpContainer:{ marginTop:100, alignItems:'center' },
+  signUpText:{ fontSize:14, color:'#fff' },
+  signUpLink:{ color:'#CE975E', fontWeight:'bold' },
 });
