@@ -1,16 +1,28 @@
 // -----------------------------------------------------------------------------
 // File: sign-up.tsx
-// Description: Handles user registration. When Cognito asks for confirmation
-//              it routes to the shared confirm-code screen instead of rendering
-//              its own code entry UI.
+// Description: Registration screen with live username-availability checking
+//              (GraphQL → fallback Cognito probe) and suggestion generation.
 // Author: Nathan Hambleton
-// Updated: Apr 23 2025
+// Updated: Apr 23 2025 – fixes “always-available” bug
 // -----------------------------------------------------------------------------
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { signUp, signIn } from 'aws-amplify/auth';
+import { generateClient } from 'aws-amplify/api';
 import { Ionicons } from '@expo/vector-icons';
+
+const client = generateClient();
+const dummyPwd = 'DummyPa$$word123!'; // meets Cognito rules
+
+/* minimal query, no codegen needed */
+const LIST_USERNAMES = /* GraphQL */ `
+  query Check($username: String!) {
+    listUserProfiles(filter: { username: { eq: $username } }, limit: 1) {
+      items { id }
+    }
+  }
+`;
 
 export default function SignUp() {
   const router = useRouter();
@@ -24,9 +36,15 @@ export default function SignUp() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [email, setEmail] = useState('');
-  const [birthday, setBirthday] = useState(''); // MM/DD/YYYY
+  const [birthday, setBirthday] = useState('');
 
+  /* username check results */
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+  const [usernameSuggestion, setUsernameSuggestion] = useState('');
+
+  /* password helpers */
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
   const [passwordValidity, setPasswordValidity] = useState({
     minLength: false,
     upper: false,
@@ -34,7 +52,6 @@ export default function SignUp() {
     number: false,
     symbol: false,
   });
-  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -46,7 +63,6 @@ export default function SignUp() {
     if (s.length > 10) s = s.slice(0, 10);
     setBirthday(s);
   };
-
   const mdyToDash = (mdy: string) => (mdy.length === 10 ? mdy.replace(/\//g, '-') : '');
   const isAtLeast21 = (dash: string) => {
     if (!dash) return false;
@@ -61,14 +77,12 @@ export default function SignUp() {
           (today.getMonth() === bday.getMonth() && today.getDate() >= bday.getDate())))
     );
   };
-
   const validatePassword = (p: string) =>
     p.length >= 8 &&
     /[a-z]/.test(p) &&
     /[A-Z]/.test(p) &&
     /[0-9]/.test(p) &&
     /[!@#$%^&*(),.?":{}|<>]/.test(p);
-
   const handlePasswordChange = (p: string) => {
     setPassword(p);
     setPasswordValidity({
@@ -80,14 +94,59 @@ export default function SignUp() {
     });
   };
 
+  /* ───── username availability ───── */
+  const checkUsernameAvailability = async (name: string) => {
+    const clean = name.trim();
+    if (!clean) { setUsernameAvailable(null); setUsernameSuggestion(''); return; }
+
+    try {
+      /* step 1 – look in UserProfile table */
+      const res: any = await client.graphql({
+        query: LIST_USERNAMES,
+        variables: { username: clean },
+      });
+      let taken = res?.data?.listUserProfiles?.items?.length > 0;
+
+      /* step 2 – if table empty, probe Cognito */
+      if (!taken) {
+        try {
+          await signIn({ username: clean, password: dummyPwd });
+          taken = true; // (should never actually succeed)
+        } catch (e: any) {
+          const n = e?.name;
+          taken = n === 'NotAuthorizedException' || n === 'UserNotConfirmedException';
+        }
+      }
+
+      setUsernameAvailable(!taken);
+
+      /* generate first free suggestion if taken */
+      if (taken) {
+        for (let i = 1; i <= 999; i++) {
+          const candidate = `${clean}${i}`;
+          const r: any = await client.graphql({
+            query: LIST_USERNAMES,
+            variables: { username: candidate },
+          });
+          const free = r?.data?.listUserProfiles?.items?.length === 0;
+          if (free) { setUsernameSuggestion(candidate); break; }
+        }
+      } else {
+        setUsernameSuggestion('');
+      }
+    } catch {
+      setUsernameAvailable(null);
+      setUsernameSuggestion('');
+    }
+  };
+
   /* ───── first screen validation ───── */
   const onSignUpPress = () => {
     setErrorMessage('');
     if (!username.trim()) return setErrorMessage('Username is required.');
+    if (usernameAvailable === false) return setErrorMessage('Username already taken.');
     if (!validatePassword(password))
-      return setErrorMessage(
-        'Password must be at least 8 characters long and include lowercase, uppercase, numerals, and symbols.'
-      );
+      return setErrorMessage('Password must be at least 8 characters long and include lowercase, uppercase, numerals, and symbols.');
     if (!email.trim()) return setErrorMessage('Email is required.');
     if (!isAtLeast21(mdyToDash(birthday))) return setErrorMessage('You must be at least 21.');
     setStep('ROLE_SELECTION');
@@ -98,28 +157,19 @@ export default function SignUp() {
     try {
       setErrorMessage('');
       const { isSignUpComplete, nextStep } = await signUp({
-        username,
-        password,
+        username, password,
         options: { userAttributes: { email, birthdate: mdyToDash(birthday) } },
       });
 
-      /* if the user was auto-confirmed, just sign them in */
       if (isSignUpComplete) {
         await signIn({ username, password });
         router.replace('/(tabs)');
         return;
       }
-
-      /* otherwise → route to shared confirm-code screen */
       if (nextStep?.signUpStep === 'CONFIRM_SIGN_UP') {
-        router.replace({
-          pathname: './confirm-code',
-          params: { username, password, role: selectedRole, fromSignup: '1' },
-        });
+        router.replace({ pathname: './confirm-code', params: { username, password, role: selectedRole, fromSignup: '1' } });
       }
-    } catch (e: any) {
-      setErrorMessage(e?.message ?? 'Sign-up error');
-    }
+    } catch (e: any) { setErrorMessage(e?.message ?? 'Sign-up error'); }
   };
 
   /* ───── UI ───── */
@@ -127,11 +177,24 @@ export default function SignUp() {
     <View style={styles.container}>
       <Text style={styles.title}>Sign Up</Text>
 
-      {/* REGISTER */}
       {step === 'REGISTER' && (
         <>
           <Text style={styles.label}>Username</Text>
-          <TextInput value={username} onChangeText={setUsername} style={styles.input} autoCapitalize="none" />
+          <TextInput
+            value={username}
+            onChangeText={setUsername}
+            onBlur={() => checkUsernameAvailability(username)}
+            style={[styles.input, usernameAvailable === false && styles.inputError]}
+            autoCapitalize="none"
+          />
+          {username && usernameAvailable === false && (
+            <Text style={styles.suggestion}>
+              {usernameSuggestion ? `Username already taken try: “${usernameSuggestion}”` : 'Username already taken'}
+            </Text>
+          )}
+          {username && usernameAvailable === true && (
+            <Text style={[styles.suggestion, { color: 'green' }]}>Username available ✓</Text>
+          )}
 
           <Text style={styles.label}>Password</Text>
           <View>
@@ -147,7 +210,6 @@ export default function SignUp() {
               <Ionicons name={isPasswordVisible ? 'eye' : 'eye-off'} size={24} color="#4F4F4F" />
             </TouchableOpacity>
           </View>
-
           {isPasswordFocused && (
             <View style={{ marginBottom: 10 }}>
               {[
@@ -184,7 +246,7 @@ export default function SignUp() {
             onChangeText={handleBirthdayInput}
             style={[
               styles.input,
-              !isAtLeast21(mdyToDash(birthday)) && birthday.length === 10 ? styles.inputError : null,
+              !isAtLeast21(mdyToDash(birthday)) && birthday.length === 10 && styles.inputError,
             ]}
             keyboardType="numeric"
             placeholder="MM/DD/YYYY"
@@ -203,7 +265,6 @@ export default function SignUp() {
         </>
       )}
 
-      {/* ROLE SELECTION */}
       {step === 'ROLE_SELECTION' && (
         <View>
           <Text style={styles.roleTitle}>Select Your Role</Text>
@@ -217,11 +278,7 @@ export default function SignUp() {
               style={[styles.roleOption, selectedRole === role && styles.selectedRoleOption]}
               onPress={() => setSelectedRole(role)}
             >
-              <Ionicons
-                name={role === 'EventAttendee' ? 'people' : role === 'PersonalUse' ? 'home' : 'briefcase'}
-                size={32}
-                color="#CE975E"
-              />
+              <Ionicons name={role === 'EventAttendee' ? 'people' : role === 'PersonalUse' ? 'home' : 'briefcase'} size={32} color="#CE975E" />
               <View style={styles.roleTextContainer}>
                 <Text style={styles.roleText}>{role.replace(/([A-Z])/g, ' $1').trim()}</Text>
                 <Text style={styles.roleDescription}>
@@ -241,13 +298,10 @@ export default function SignUp() {
         </View>
       )}
 
-      {/* back link */}
       <View style={styles.signUpContainer}>
         <Text style={styles.signUpText}>
           Already have an account?{' '}
-          <Text style={styles.signUpLink} onPress={() => router.replace('/auth/sign-in')}>
-            Sign In
-          </Text>
+          <Text style={styles.signUpLink} onPress={() => router.replace('/auth/sign-in')}>Sign In</Text>
         </Text>
       </View>
     </View>
@@ -261,6 +315,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 16, color: '#fff', marginTop: 10 },
   input: { backgroundColor: '#141414', marginVertical: 8, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, color: '#DFDCD9' },
   inputError: { borderColor: 'red', borderWidth: 1 },
+  suggestion: { fontSize: 12, color: '#4F4F4F', marginTop: -4, marginBottom: 4 },
   button: { backgroundColor: '#CE975E', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginTop: 20 },
   buttonText: { color: '#DFDCD9', fontSize: 18, fontWeight: 'bold' },
   error: { color: 'red', marginTop: 8 },
