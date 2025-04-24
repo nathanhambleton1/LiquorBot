@@ -28,6 +28,7 @@ import {
   TextInput,
   Modal,
   Switch,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
@@ -67,6 +68,8 @@ const SLOT_CONFIG_TOPIC = 'liquorbot/liquorbot001/slot-config';
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
+
+const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 // --------------------------- TYPES ---------------------------
 type Drink = {
@@ -112,6 +115,7 @@ interface DrinkItemProps {
   drink: Drink;
   isExpanded: boolean;
   isLiked: boolean;
+  isMakeable: boolean;
   toggleFavorite: (id: number) => Promise<void>;
   onExpand: (id: number) => void;
   onCollapse: () => void;
@@ -128,6 +132,7 @@ function DrinkItem({
   drink,
   isExpanded,
   isLiked,
+  isMakeable,
   toggleFavorite,
   onExpand,
   onCollapse,
@@ -138,6 +143,20 @@ function DrinkItem({
   const [quantity, setQuantity] = useState(1);
   const { isConnected, forceDisconnect } = useLiquorBot();
   const [logging, setLogging] = useState(false); // prevent double-taps
+  const [statusAnim] = useState(new Animated.Value(0));
+  const [statusType, setStatusType] = useState<'success' | 'error' | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string>('');
+
+  const triggerStatus = (type: 'success' | 'error', message: string) => {
+    setStatusType(type);
+    setStatusMessage(message);
+    statusAnim.setValue(1);
+    Animated.timing(statusAnim, {
+      toValue: 0,
+      duration: 5000,
+      useNativeDriver: false,
+    }).start(() => setStatusType(null));
+  };
 
   const parsedIngredients = parseIngredientString(
     drink.ingredients ?? '',
@@ -181,7 +200,7 @@ function DrinkItem({
   }
 
   async function handlePourDrink() {
-    if (logging) return;
+    if (logging || !isMakeable) return;
     try {
       if (!isConnected) {
         console.warn('LiquorBot is not connected. Aborting.');
@@ -201,12 +220,14 @@ function DrinkItem({
                 (await getCurrentUser())?.username ?? null,
               );
               setLogging(false);
+              triggerStatus('success', 'Pour successful!');
             }
           },
           error: () => {
             sub.unsubscribe();
             forceDisconnect();
             setLogging(false);
+            triggerStatus('error', 'Previous pour failed. Please check your connection and try again.');
           },
         });
       await pubsub.publish({
@@ -218,11 +239,13 @@ function DrinkItem({
           sub.unsubscribe();
           forceDisconnect();
           setLogging(false);
+          triggerStatus('error', 'Previous pour failed. Please check your connection and try again.');
         }
       }, 2000);
     } catch (err) {
       console.error(err);
       setLogging(false);
+      triggerStatus('error', 'Previous pour failed. Please check your connection and try again.');
     }
   }
 
@@ -309,15 +332,39 @@ function DrinkItem({
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          style={styles.button}
+        <AnimatedTouchable
+          style={[
+            styles.button,
+            statusType && {
+              backgroundColor: statusAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [
+                  '#CE975E',
+                  statusType === 'error' ? '#D9534F' : '#63d44a',
+                ],
+              }),
+            },
+            (!isMakeable || logging) && styles.disabledButton,
+          ]}
           onPress={handlePourDrink}
-          disabled={logging}
+          disabled={logging || !isMakeable}
         >
-          <Text style={styles.buttonText}>
-            {logging ? 'Pouring…' : 'Pour Drink'}
+          <View style={styles.buttonContent}>
+            <Text style={[styles.buttonText, (!isMakeable || logging) && styles.disabledButtonText]}>
+              {!isMakeable
+                ? 'Missing Ingredients'
+                : logging
+                ? 'Pouring…'
+                : 'Pour Drink'}
+            </Text>
+            {logging && <ActivityIndicator size="small" color="#FFFFFF" style={styles.spinner} />}
+          </View>
+        </AnimatedTouchable>
+        {statusType && (
+          <Text style={[styles.statusMessage, statusType === 'error' ? styles.errorText : styles.successText]}>
+            {statusMessage}
           </Text>
-        </TouchableOpacity>
+        )}
       </Animated.View>
     );
   }
@@ -381,6 +428,15 @@ export default function MenuScreen() {
   const [userID, setUserID] = useState<string | null>(null);
   const [likedDrinks, setLikedDrinks] = useState<number[]>([]);
   const [customFetched, setCustomFetched] = useState(false);
+
+  // is a drink makeable?
+  const isDrinkMakeable = (drink: Drink) => {
+    if (!drink.ingredients || loadedIds.length === 0) return false;
+    const needed = drink.ingredients
+      .split(',')
+      .map((c) => parseInt(c.split(':')[0], 10));
+    return needed.every((id) => loadedIds.includes(id));
+  };
 
   // glow anim for status dot
   const glowAnim = useRef(new Animated.Value(1)).current;
@@ -563,14 +619,8 @@ export default function MenuScreen() {
 
   /* ---------------------- FILTER LOGIC ---------------------- */
   const loadedIds = slots.filter((id) => id > 0);
-  const canMake = (drink: Drink) => {
-    if (!onlyMakeable) return true;
-    if (!drink.ingredients || loadedIds.length === 0) return false;
-    const needed = drink.ingredients
-      .split(',')
-      .map((c) => parseInt(c.split(':')[0], 10));
-    return needed.every((id) => loadedIds.includes(id));
-  };
+  const canMake = (drink: Drink) =>
+    onlyMakeable ? isDrinkMakeable(drink) : true;
 
   let filteredDrinks = drinks.filter(
     (d) =>
@@ -709,6 +759,7 @@ export default function MenuScreen() {
               onCollapse={() => setExpandedDrink(null)}
               allIngredients={allIngredients}
               onExpandedLayout={handleExpandedLayout}
+              isMakeable={isDrinkMakeable(drink)}
             />
           ))}
         </View>
@@ -1005,6 +1056,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 20,
   },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  spinner: {
+    marginLeft: 10, // Add spacing between text and spinner
+  },
   editIconContainer: {
     position: 'absolute',
     top: 85,
@@ -1019,4 +1078,13 @@ const styles = StyleSheet.create({
   filterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   filterLabel: { color: '#DFDCD9', fontSize: 16, flex: 1, flexWrap: 'wrap' },
   modalCloseButton: { position: 'absolute', top: 15, right: 15 },
+  disabledButton: {
+    backgroundColor: '#4F4F4F',
+  },
+  disabledButtonText: {
+    color: '#9E9E9E',
+  },
+  statusMessage: { textAlign: 'center', fontSize: 10 },
+  errorText: { color: '#D9534F' },
+  successText: { color: '#63d44a' },
 });
