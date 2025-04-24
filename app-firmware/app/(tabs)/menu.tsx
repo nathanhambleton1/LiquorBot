@@ -907,7 +907,6 @@ const styles = StyleSheet.create({
     width: '90%',
     height: 160,
     marginBottom: 10,
-    transform: [{ rotate: '-7deg' }],
   },
   expandedboxText: {
     color: '#DFDCD9',
