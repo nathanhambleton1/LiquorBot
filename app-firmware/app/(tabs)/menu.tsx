@@ -174,7 +174,7 @@ function DrinkItem({
   /* --------------- pour-drink helpers --------------- */
   async function publishDrinkCommand() {
     await pubsub.publish({
-      topics: ['liquorbot/publish'],
+      topics: ['liquorbot/liquorbot001/publish'],
       message: { content: drink.ingredients ?? '' },
     });
     console.log(`Published command="${drink.ingredients}"`);
@@ -209,7 +209,7 @@ function DrinkItem({
       setLogging(true);
       let responded = false;
       const sub = pubsub
-        .subscribe({ topics: ['liquorbot/heartbeat'] })
+        .subscribe({ topics: ['liquorbot/liquorbot001/heartbeat'] })
         .subscribe({
           next: async (resp: any) => {
             if (resp?.content === 'OK') {
@@ -220,7 +220,7 @@ function DrinkItem({
                 (await getCurrentUser())?.username ?? null,
               );
               setLogging(false);
-              triggerStatus('success', 'Pour successful!');
+              triggerStatus('success', 'Pour successful, enjoy!');
             }
           },
           error: () => {
@@ -231,7 +231,7 @@ function DrinkItem({
           },
         });
       await pubsub.publish({
-        topics: ['liquorbot/heartbeat'],
+        topics: ['liquorbot/liquorbot001/heartbeat'],
         message: { content: 'CHECK' },
       });
       setTimeout(() => {
@@ -332,39 +332,53 @@ function DrinkItem({
           </TouchableOpacity>
         </View>
 
-        <AnimatedTouchable
-          style={[
-            styles.button,
-            statusType && {
-              backgroundColor: statusAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [
-                  '#CE975E',
-                  statusType === 'error' ? '#D9534F' : '#63d44a',
-                ],
-              }),
-            },
-            (!isMakeable || logging) && styles.disabledButton,
-          ]}
-          onPress={handlePourDrink}
-          disabled={logging || !isMakeable}
-        >
-          <View style={styles.buttonContent}>
-            <Text style={[styles.buttonText, (!isMakeable || logging) && styles.disabledButtonText]}>
-              {!isMakeable
-                ? 'Missing Ingredients'
-                : logging
-                ? 'Pouring…'
-                : 'Pour Drink'}
+        <View style={styles.buttonArea}>
+          <AnimatedTouchable
+            style={[
+              styles.button,
+              statusType && {
+                backgroundColor: statusAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [
+                    '#CE975E',
+                    statusType === 'error' ? '#D9534F' : '#63d44a',
+                  ],
+                }),
+              },
+              (!isMakeable || logging) && styles.disabledButton,
+            ]}
+            onPress={handlePourDrink}
+            disabled={logging || !isMakeable}
+          >
+            <View style={styles.buttonContent}>
+              <Text style={[
+                styles.buttonText,
+                (!isMakeable || logging) && styles.disabledButtonText,
+              ]}>
+                {!isMakeable
+                  ? 'Missing Ingredients'
+                  : logging
+                  ? 'Pouring…'
+                  : 'Pour Drink'}
+              </Text>
+              {logging && (
+                <ActivityIndicator size="small" color="#FFFFFF" style={styles.spinner} />
+              )}
+            </View>
+          </AnimatedTouchable>
+
+          {/* overlayed status text – does NOT shift layout */}
+          {statusType && (
+            <Text
+              style={[
+                styles.statusMessageOverlay,
+                statusType === 'error' ? styles.errorText : styles.successText,
+              ]}
+            >
+              {statusMessage}
             </Text>
-            {logging && <ActivityIndicator size="small" color="#FFFFFF" style={styles.spinner} />}
-          </View>
-        </AnimatedTouchable>
-        {statusType && (
-          <Text style={[styles.statusMessage, statusType === 'error' ? styles.errorText : styles.successText]}>
-            {statusMessage}
-          </Text>
-        )}
+          )}
+        </View>
       </Animated.View>
     );
   }
@@ -822,253 +836,48 @@ export default function MenuScreen() {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#141414',
-  },
-  headerContainer: {
-    paddingTop: 80,
-    paddingHorizontal: 20,
-    marginBottom: 10,
-  },
-  headerText: {
-    color: '#DFDCD9',
-    fontWeight: 'bold',
-    fontSize: 36,
-    textAlign: 'left',
-  },
-  subHeaderText: {
-    color: '#4F4F4F',
-    fontSize: 20,
-    textAlign: 'left',
-    marginTop: 0,
-  },
-  connectionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  greenDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 5,
-    marginRight: 8,
-    shadowOffset: { width: 0, height: 0 },
-    shadowRadius: 5,
-    shadowOpacity: 0.6,
-    elevation: 5,
-  },
-  horizontalPickerContainer: {
-    alignItems: 'center',
-    borderBottomLeftRadius: 10,
-    borderBottomRightRadius: 10,
-    paddingVertical: 5,
-    marginBottom: -10,
-  },
-  horizontalPicker: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  categoryButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    marginHorizontal: 5,
-  },
-  categoryButtonContent: {
-    alignItems: 'center',
-  },
-  selectedCategoryText: {
-    color: '#CE975E',
-  },
-  underline: {
-    height: 2,
-    backgroundColor: '#CE975E',
-    marginTop: 2,
-    width: '100%',
-  },
-  categoryButtonText: {
-    color: '#4F4F4F',
-  },
-  searchBarContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1F1F1F',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    marginHorizontal: 20,
-    marginVertical: 10,
-    marginBottom: 10,
-  },
-  searchIcon: {
-    marginRight: 10,
-  },
-  searchBar: {
-    flex: 1,
-    color: '#DFDCD9',
-    fontSize: 16,
-    paddingVertical: 10,
-  },
-  scrollContainer: {
-    flexGrow: 1,
-    padding: 20,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  box: {
-    width: '45%',
-    marginBottom: 25,
-    alignItems: 'center',
-    backgroundColor: '#1F1F1F',
-    borderRadius: 10,
-    overflow: 'visible',
-    position: 'relative',
-    paddingVertical: 10,
-  },
-  expandedBox: {
-    width: '100%',
-    height: 500,
-    padding: 20,
-    marginBottom: 25,
-    overflow: 'visible',
-  },
-  favoriteButton: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    zIndex: 2,
-  },
-  expandedFavoriteButton: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    zIndex: 2,
-  },
-  closeButton: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    zIndex: 2,
-  },
-  image: {
-    top: -5,
-    left: -15,
-    width: '90%',
-    height: 160,
-    marginBottom: 10,
-  },
-  expandedboxText: {
-    color: '#DFDCD9',
-    fontSize: 24,
-    marginBottom: 10,
-    textAlign: 'left',
-    alignSelf: 'flex-start',
-  },
-  expandedImage: {
-    marginTop: 0,
-    width: 200, // Increased width
-    height: 200, // Increased height
-    borderRadius: 10,
-    marginLeft: -30, // Moved to the left
-  },
-  expandedcategoryText: {
-    color: '#CE975E',
-    fontSize: 14,
-    textAlign: 'left',
-    alignSelf: 'flex-start',
-  },
-  expandeddescriptionText: {
-    color: '#4F4F4F',
-    fontSize: 14,
-    textAlign: 'left',
-    alignSelf: 'flex-start',
-    marginBottom: 5,
-  },
-  expandedContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  expandedTitleContainer: {
-    flex: 1,
-    marginTop: 50,
-    marginRight: 10,
-    alignSelf: 'flex-start',
-  },
-  expandeddetailContainer: {
-    flex: 1,
-    marginTop: 40,
-    marginRight: 10,
-  },
-  boxText: {
-    color: '#DFDCD9',
-    fontSize: 18,
-    paddingLeft: 10,
-    marginBottom: 0,
-    textAlign: 'left',
-    alignSelf: 'flex-start',
-  },
-  categoryText: {
-    color: '#CE975E',
-    fontSize: 14,
-    marginBottom: 10,
-    paddingLeft: 10,
-    textAlign: 'left',
-    alignSelf: 'flex-start',
-  },
-  quantityContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 20,
-  },
-  quantityButton: {
-    backgroundColor: '#4f4f4f',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 5,
-    alignItems: 'center',
-  },
-  quantityButtonText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-  },
-  quantityText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    marginHorizontal: 20,
-  },
-  button: {
-    backgroundColor: '#CE975E',
-    paddingVertical: 20,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 20,
-    width: '100%',
-    alignSelf: 'center',
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-  },
-  buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  spinner: {
-    marginLeft: 10, // Add spacing between text and spinner
-  },
-  editIconContainer: {
-    position: 'absolute',
-    top: 85,
-    right: 30,
-  },
+  container: { flex: 1, backgroundColor: '#141414' },
+  headerContainer: { paddingTop: 80, paddingHorizontal: 20, marginBottom: 10 },
+  headerText: { color: '#DFDCD9', fontWeight: 'bold', fontSize: 36, textAlign: 'left' },
+  subHeaderText: { color: '#4F4F4F', fontSize: 20, textAlign: 'left', marginTop: 0 },
+  connectionRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
+  greenDot: { width: 8, height: 8, borderRadius: 5, marginRight: 8, shadowOffset: { width: 0, height: 0 }, shadowRadius: 5, shadowOpacity: 0.6, elevation: 5 },
+  horizontalPickerContainer: { alignItems: 'center', borderBottomLeftRadius: 10, borderBottomRightRadius: 10, paddingVertical: 5, marginBottom: -10 },
+  horizontalPicker: { flexDirection: 'row', alignItems: 'center' },
+  categoryButton: { paddingVertical: 10, paddingHorizontal: 15, marginHorizontal: 5 },
+  categoryButtonContent: { alignItems: 'center' },
+  selectedCategoryText: { color: '#CE975E' },
+  underline: { height: 2, backgroundColor: '#CE975E', marginTop: 2, width: '100%' },
+  categoryButtonText: { color: '#4F4F4F' },
+  searchBarContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, paddingHorizontal: 15, marginHorizontal: 20, marginVertical: 10, marginBottom: 10 },
+  searchIcon: { marginRight: 10 },
+  searchBar: { flex: 1, color: '#DFDCD9', fontSize: 16, paddingVertical: 10 },
+  scrollContainer: { flexGrow: 1, padding: 20 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  box: { width: '45%', marginBottom: 25, alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, overflow: 'visible', position: 'relative', paddingVertical: 10 },
+  expandedBox: { width: '100%', height: 500, padding: 20, marginBottom: 25, overflow: 'visible' },
+  favoriteButton: { position: 'absolute', top: 10, right: 10, zIndex: 2 },
+  expandedFavoriteButton: { position: 'absolute', top: 10, right: 10, zIndex: 2 },
+  closeButton: { position: 'absolute', top: 10, left: 10, zIndex: 2 },
+  image: { top: -5, left: -15, width: '90%', height: 160, marginBottom: 10 },
+  expandedboxText: { color: '#DFDCD9', fontSize: 24, marginBottom: 10, textAlign: 'left', alignSelf: 'flex-start' },
+  expandedImage: { marginTop: 0, width: 200, height: 200, borderRadius: 10, marginLeft: -30 },
+  expandedcategoryText: { color: '#CE975E', fontSize: 14, textAlign: 'left', alignSelf: 'flex-start' },
+  expandeddescriptionText: { color: '#4F4F4F', fontSize: 14, textAlign: 'left', alignSelf: 'flex-start', marginBottom: 5 },
+  expandedContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  expandedTitleContainer: { flex: 1, marginTop: 50, marginRight: 10, alignSelf: 'flex-start' },
+  expandeddetailContainer: { flex: 1, marginTop: 40, marginRight: 10 },
+  boxText: { color: '#DFDCD9', fontSize: 18, paddingLeft: 10, marginBottom: 0, textAlign: 'left', alignSelf: 'flex-start' },
+  categoryText: { color: '#CE975E', fontSize: 14, marginBottom: 10, paddingLeft: 10, textAlign: 'left', alignSelf: 'flex-start' },
+  quantityContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20, marginBottom: 20 },
+  quantityButton: { backgroundColor: '#4f4f4f', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 5, alignItems: 'center' },
+  quantityButtonText: { color: '#FFFFFF', fontSize: 20 },
+  quantityText: { color: '#FFFFFF', fontSize: 20, marginHorizontal: 20 },
+  button: { backgroundColor: '#CE975E', paddingVertical: 20, paddingHorizontal: 20, borderRadius: 20, alignItems: 'center', marginTop: 20, marginBottom: 20, width: '100%', alignSelf: 'center' },
+  buttonText: { color: '#FFFFFF', fontSize: 20 },
+  buttonContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  spinner: { marginLeft: 10 },
+  editIconContainer: { position: 'absolute', top: 85, right: 30 },
   loadingScreen: { flex: 1, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center' },
   loadingText: { color: '#DFDCD9', fontSize: 18 },
   filterIcon: { marginLeft: 10 },
@@ -1078,13 +887,11 @@ const styles = StyleSheet.create({
   filterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   filterLabel: { color: '#DFDCD9', fontSize: 16, flex: 1, flexWrap: 'wrap' },
   modalCloseButton: { position: 'absolute', top: 15, right: 15 },
-  disabledButton: {
-    backgroundColor: '#4F4F4F',
-  },
-  disabledButtonText: {
-    color: '#9E9E9E',
-  },
+  disabledButton: { backgroundColor: '#4F4F4F' },
+  disabledButtonText: { color: '#9E9E9E' },
   statusMessage: { textAlign: 'center', fontSize: 10 },
   errorText: { color: '#D9534F' },
   successText: { color: '#63d44a' },
+  buttonArea: { width: '100%', alignItems: 'center', position: 'relative' },
+  statusMessageOverlay: { position: 'absolute', top: '100%', marginTop: -12, fontSize: 10, textAlign: 'center' },
 });

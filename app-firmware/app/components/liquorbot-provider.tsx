@@ -45,7 +45,7 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Subscribe to liquorbot/heartbeat
-    const subscription = pubsub.subscribe({ topics: 'liquorbot/heartbeat' }).subscribe({
+    const subscription = pubsub.subscribe({ topics: 'liquorbot/liquorbot001/heartbeat' }).subscribe({
       next: (data) => {
         setLastHeartbeat(Date.now());
       },
