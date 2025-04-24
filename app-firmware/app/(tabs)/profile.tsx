@@ -14,6 +14,7 @@ import {
   PanResponder,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useFocusEffect } from '@react-navigation/native';
 
 // Sub‑popups
 import EditProfilePopup from '../components/profile/EditProfilePopup';
@@ -90,6 +91,13 @@ export default function ProfileScreen() {
   const [popup, setPopup] = useState<PopupMeta | null>(null);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
   const { signOut } = useAuthenticator((ctx: any) => [ctx.user]);
+
+  // Reset popup state when navigating to the profile tab
+  useFocusEffect(
+    React.useCallback(() => {
+      setPopup(null); // Close any open popup
+    }, [])
+  );
 
   // ─────────────────────── INITIAL LOAD ────────────────────────────────────
   useEffect(() => {
@@ -253,7 +261,7 @@ export default function ProfileScreen() {
       case 'Liked Drinks':
         return <LikedDrinksPopup drinks={likedDrinks} />;
       case 'Pour History':
-          return <PourHistoryPopup events={pourHistory} onClear={clearPourHistory} />;
+        return <PourHistoryPopup />;
       case 'Settings':
         return <SettingsPopup />;
       case 'Help':
