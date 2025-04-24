@@ -8,6 +8,69 @@ type GeneratedMutation<InputType, OutputType> = string & {
   __generatedMutationOutput: OutputType;
 };
 
+export const createPouredDrink = /* GraphQL */ `mutation CreatePouredDrink(
+  $input: CreatePouredDrinkInput!
+  $condition: ModelPouredDrinkConditionInput
+) {
+  createPouredDrink(input: $input, condition: $condition) {
+    id
+    userID
+    drinkID
+    drinkName
+    volume
+    timestamp
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.CreatePouredDrinkMutationVariables,
+  APITypes.CreatePouredDrinkMutation
+>;
+export const updatePouredDrink = /* GraphQL */ `mutation UpdatePouredDrink(
+  $input: UpdatePouredDrinkInput!
+  $condition: ModelPouredDrinkConditionInput
+) {
+  updatePouredDrink(input: $input, condition: $condition) {
+    id
+    userID
+    drinkID
+    drinkName
+    volume
+    timestamp
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.UpdatePouredDrinkMutationVariables,
+  APITypes.UpdatePouredDrinkMutation
+>;
+export const deletePouredDrink = /* GraphQL */ `mutation DeletePouredDrink(
+  $input: DeletePouredDrinkInput!
+  $condition: ModelPouredDrinkConditionInput
+) {
+  deletePouredDrink(input: $input, condition: $condition) {
+    id
+    userID
+    drinkID
+    drinkName
+    volume
+    timestamp
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.DeletePouredDrinkMutationVariables,
+  APITypes.DeletePouredDrinkMutation
+>;
 export const createLikedDrink = /* GraphQL */ `mutation CreateLikedDrink(
   $input: CreateLikedDrinkInput!
   $condition: ModelLikedDrinkConditionInput

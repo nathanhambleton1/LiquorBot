@@ -2,20 +2,25 @@
 /* eslint-disable */
 //  This file was automatically generated and should not be edited.
 
-export type CreateLikedDrinkInput = {
+export type CreatePouredDrinkInput = {
   id?: string | null,
-  userID?: string | null,
-  drinkID?: number | null,
-  createdAt?: string | null,
+  userID: string,
+  drinkID: number,
+  drinkName?: string | null,
+  volume?: number | null,
+  timestamp: string,
 };
 
-export type ModelLikedDrinkConditionInput = {
+export type ModelPouredDrinkConditionInput = {
   userID?: ModelIDInput | null,
   drinkID?: ModelIntInput | null,
+  drinkName?: ModelStringInput | null,
+  volume?: ModelFloatInput | null,
+  timestamp?: ModelStringInput | null,
+  and?: Array< ModelPouredDrinkConditionInput | null > | null,
+  or?: Array< ModelPouredDrinkConditionInput | null > | null,
+  not?: ModelPouredDrinkConditionInput | null,
   createdAt?: ModelStringInput | null,
-  and?: Array< ModelLikedDrinkConditionInput | null > | null,
-  or?: Array< ModelLikedDrinkConditionInput | null > | null,
-  not?: ModelLikedDrinkConditionInput | null,
   updatedAt?: ModelStringInput | null,
   owner?: ModelStringInput | null,
 };
@@ -86,6 +91,62 @@ export type ModelStringInput = {
   attributeExists?: boolean | null,
   attributeType?: ModelAttributeTypes | null,
   size?: ModelSizeInput | null,
+};
+
+export type ModelFloatInput = {
+  ne?: number | null,
+  eq?: number | null,
+  le?: number | null,
+  lt?: number | null,
+  ge?: number | null,
+  gt?: number | null,
+  between?: Array< number | null > | null,
+  attributeExists?: boolean | null,
+  attributeType?: ModelAttributeTypes | null,
+};
+
+export type PouredDrink = {
+  __typename: "PouredDrink",
+  id: string,
+  userID: string,
+  drinkID: number,
+  drinkName?: string | null,
+  volume?: number | null,
+  timestamp: string,
+  createdAt: string,
+  updatedAt: string,
+  owner?: string | null,
+};
+
+export type UpdatePouredDrinkInput = {
+  id: string,
+  userID?: string | null,
+  drinkID?: number | null,
+  drinkName?: string | null,
+  volume?: number | null,
+  timestamp?: string | null,
+};
+
+export type DeletePouredDrinkInput = {
+  id: string,
+};
+
+export type CreateLikedDrinkInput = {
+  id?: string | null,
+  userID?: string | null,
+  drinkID?: number | null,
+  createdAt?: string | null,
+};
+
+export type ModelLikedDrinkConditionInput = {
+  userID?: ModelIDInput | null,
+  drinkID?: ModelIntInput | null,
+  createdAt?: ModelStringInput | null,
+  and?: Array< ModelLikedDrinkConditionInput | null > | null,
+  or?: Array< ModelLikedDrinkConditionInput | null > | null,
+  not?: ModelLikedDrinkConditionInput | null,
+  updatedAt?: ModelStringInput | null,
+  owner?: ModelStringInput | null,
 };
 
 export type LikedDrink = {
@@ -209,6 +270,27 @@ export type DeleteUserProfileInput = {
   id: string,
 };
 
+export type ModelPouredDrinkFilterInput = {
+  id?: ModelIDInput | null,
+  userID?: ModelIDInput | null,
+  drinkID?: ModelIntInput | null,
+  drinkName?: ModelStringInput | null,
+  volume?: ModelFloatInput | null,
+  timestamp?: ModelStringInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  and?: Array< ModelPouredDrinkFilterInput | null > | null,
+  or?: Array< ModelPouredDrinkFilterInput | null > | null,
+  not?: ModelPouredDrinkFilterInput | null,
+  owner?: ModelStringInput | null,
+};
+
+export type ModelPouredDrinkConnection = {
+  __typename: "ModelPouredDrinkConnection",
+  items:  Array<PouredDrink | null >,
+  nextToken?: string | null,
+};
+
 export type ModelLikedDrinkFilterInput = {
   id?: ModelIDInput | null,
   userID?: ModelIDInput | null,
@@ -265,14 +347,17 @@ export type ModelUserProfileConnection = {
   nextToken?: string | null,
 };
 
-export type ModelSubscriptionLikedDrinkFilterInput = {
+export type ModelSubscriptionPouredDrinkFilterInput = {
   id?: ModelSubscriptionIDInput | null,
   userID?: ModelSubscriptionIDInput | null,
   drinkID?: ModelSubscriptionIntInput | null,
+  drinkName?: ModelSubscriptionStringInput | null,
+  volume?: ModelSubscriptionFloatInput | null,
+  timestamp?: ModelSubscriptionStringInput | null,
   createdAt?: ModelSubscriptionStringInput | null,
   updatedAt?: ModelSubscriptionStringInput | null,
-  and?: Array< ModelSubscriptionLikedDrinkFilterInput | null > | null,
-  or?: Array< ModelSubscriptionLikedDrinkFilterInput | null > | null,
+  and?: Array< ModelSubscriptionPouredDrinkFilterInput | null > | null,
+  or?: Array< ModelSubscriptionPouredDrinkFilterInput | null > | null,
   owner?: ModelStringInput | null,
 };
 
@@ -318,6 +403,29 @@ export type ModelSubscriptionStringInput = {
   notIn?: Array< string | null > | null,
 };
 
+export type ModelSubscriptionFloatInput = {
+  ne?: number | null,
+  eq?: number | null,
+  le?: number | null,
+  lt?: number | null,
+  ge?: number | null,
+  gt?: number | null,
+  between?: Array< number | null > | null,
+  in?: Array< number | null > | null,
+  notIn?: Array< number | null > | null,
+};
+
+export type ModelSubscriptionLikedDrinkFilterInput = {
+  id?: ModelSubscriptionIDInput | null,
+  userID?: ModelSubscriptionIDInput | null,
+  drinkID?: ModelSubscriptionIntInput | null,
+  createdAt?: ModelSubscriptionStringInput | null,
+  updatedAt?: ModelSubscriptionStringInput | null,
+  and?: Array< ModelSubscriptionLikedDrinkFilterInput | null > | null,
+  or?: Array< ModelSubscriptionLikedDrinkFilterInput | null > | null,
+  owner?: ModelStringInput | null,
+};
+
 export type ModelSubscriptionCustomRecipeFilterInput = {
   id?: ModelSubscriptionIDInput | null,
   name?: ModelSubscriptionStringInput | null,
@@ -340,6 +448,66 @@ export type ModelSubscriptionUserProfileFilterInput = {
   and?: Array< ModelSubscriptionUserProfileFilterInput | null > | null,
   or?: Array< ModelSubscriptionUserProfileFilterInput | null > | null,
   owner?: ModelStringInput | null,
+};
+
+export type CreatePouredDrinkMutationVariables = {
+  input: CreatePouredDrinkInput,
+  condition?: ModelPouredDrinkConditionInput | null,
+};
+
+export type CreatePouredDrinkMutation = {
+  createPouredDrink?:  {
+    __typename: "PouredDrink",
+    id: string,
+    userID: string,
+    drinkID: number,
+    drinkName?: string | null,
+    volume?: number | null,
+    timestamp: string,
+    createdAt: string,
+    updatedAt: string,
+    owner?: string | null,
+  } | null,
+};
+
+export type UpdatePouredDrinkMutationVariables = {
+  input: UpdatePouredDrinkInput,
+  condition?: ModelPouredDrinkConditionInput | null,
+};
+
+export type UpdatePouredDrinkMutation = {
+  updatePouredDrink?:  {
+    __typename: "PouredDrink",
+    id: string,
+    userID: string,
+    drinkID: number,
+    drinkName?: string | null,
+    volume?: number | null,
+    timestamp: string,
+    createdAt: string,
+    updatedAt: string,
+    owner?: string | null,
+  } | null,
+};
+
+export type DeletePouredDrinkMutationVariables = {
+  input: DeletePouredDrinkInput,
+  condition?: ModelPouredDrinkConditionInput | null,
+};
+
+export type DeletePouredDrinkMutation = {
+  deletePouredDrink?:  {
+    __typename: "PouredDrink",
+    id: string,
+    userID: string,
+    drinkID: number,
+    drinkName?: string | null,
+    volume?: number | null,
+    timestamp: string,
+    createdAt: string,
+    updatedAt: string,
+    owner?: string | null,
+  } | null,
 };
 
 export type CreateLikedDrinkMutationVariables = {
@@ -519,6 +687,50 @@ export type DeleteUserProfileMutation = {
   } | null,
 };
 
+export type GetPouredDrinkQueryVariables = {
+  id: string,
+};
+
+export type GetPouredDrinkQuery = {
+  getPouredDrink?:  {
+    __typename: "PouredDrink",
+    id: string,
+    userID: string,
+    drinkID: number,
+    drinkName?: string | null,
+    volume?: number | null,
+    timestamp: string,
+    createdAt: string,
+    updatedAt: string,
+    owner?: string | null,
+  } | null,
+};
+
+export type ListPouredDrinksQueryVariables = {
+  filter?: ModelPouredDrinkFilterInput | null,
+  limit?: number | null,
+  nextToken?: string | null,
+};
+
+export type ListPouredDrinksQuery = {
+  listPouredDrinks?:  {
+    __typename: "ModelPouredDrinkConnection",
+    items:  Array< {
+      __typename: "PouredDrink",
+      id: string,
+      userID: string,
+      drinkID: number,
+      drinkName?: string | null,
+      volume?: number | null,
+      timestamp: string,
+      createdAt: string,
+      updatedAt: string,
+      owner?: string | null,
+    } | null >,
+    nextToken?: string | null,
+  } | null,
+};
+
 export type GetLikedDrinkQueryVariables = {
   id: string,
 };
@@ -640,6 +852,66 @@ export type ListUserProfilesQuery = {
       owner?: string | null,
     } | null >,
     nextToken?: string | null,
+  } | null,
+};
+
+export type OnCreatePouredDrinkSubscriptionVariables = {
+  filter?: ModelSubscriptionPouredDrinkFilterInput | null,
+  owner?: string | null,
+};
+
+export type OnCreatePouredDrinkSubscription = {
+  onCreatePouredDrink?:  {
+    __typename: "PouredDrink",
+    id: string,
+    userID: string,
+    drinkID: number,
+    drinkName?: string | null,
+    volume?: number | null,
+    timestamp: string,
+    createdAt: string,
+    updatedAt: string,
+    owner?: string | null,
+  } | null,
+};
+
+export type OnUpdatePouredDrinkSubscriptionVariables = {
+  filter?: ModelSubscriptionPouredDrinkFilterInput | null,
+  owner?: string | null,
+};
+
+export type OnUpdatePouredDrinkSubscription = {
+  onUpdatePouredDrink?:  {
+    __typename: "PouredDrink",
+    id: string,
+    userID: string,
+    drinkID: number,
+    drinkName?: string | null,
+    volume?: number | null,
+    timestamp: string,
+    createdAt: string,
+    updatedAt: string,
+    owner?: string | null,
+  } | null,
+};
+
+export type OnDeletePouredDrinkSubscriptionVariables = {
+  filter?: ModelSubscriptionPouredDrinkFilterInput | null,
+  owner?: string | null,
+};
+
+export type OnDeletePouredDrinkSubscription = {
+  onDeletePouredDrink?:  {
+    __typename: "PouredDrink",
+    id: string,
+    userID: string,
+    drinkID: number,
+    drinkName?: string | null,
+    volume?: number | null,
+    timestamp: string,
+    createdAt: string,
+    updatedAt: string,
+    owner?: string | null,
   } | null,
 };
 

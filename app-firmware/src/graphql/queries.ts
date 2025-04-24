@@ -8,6 +8,50 @@ type GeneratedQuery<InputType, OutputType> = string & {
   __generatedQueryOutput: OutputType;
 };
 
+export const getPouredDrink = /* GraphQL */ `query GetPouredDrink($id: ID!) {
+  getPouredDrink(id: $id) {
+    id
+    userID
+    drinkID
+    drinkName
+    volume
+    timestamp
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetPouredDrinkQueryVariables,
+  APITypes.GetPouredDrinkQuery
+>;
+export const listPouredDrinks = /* GraphQL */ `query ListPouredDrinks(
+  $filter: ModelPouredDrinkFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listPouredDrinks(filter: $filter, limit: $limit, nextToken: $nextToken) {
+    items {
+      id
+      userID
+      drinkID
+      drinkName
+      volume
+      timestamp
+      createdAt
+      updatedAt
+      owner
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListPouredDrinksQueryVariables,
+  APITypes.ListPouredDrinksQuery
+>;
 export const getLikedDrink = /* GraphQL */ `query GetLikedDrink($id: ID!) {
   getLikedDrink(id: $id) {
     id

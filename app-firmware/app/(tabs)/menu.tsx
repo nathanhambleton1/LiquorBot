@@ -2,13 +2,15 @@
 // File: menu.tsx
 // Description: Displays the drink menu for the LiquorBot app, including drink
 //              details, categories, search / filter, and IoT integration for
-//              pouring drinks.  Adds a “make‑able” filter toggle that limits
+//              pouring drinks.  Adds a “make-able” filter toggle that limits
 //              the list to drinks that can be prepared with the ingredients
 //              currently loaded on the ESP32 (pulled via MQTT) **and now
 //              injects the user’s CustomRecipe items pulled from the GraphQL
-//              API so they show up alongside built‑in drinks.**
+//              API so they show up alongside built-in drinks.  *NEW:* every
+//              successful pour is persisted to the PouredDrink model so it can
+//              be shown in the pour-history popup.
 // Author: Nathan Hambleton
-// Updated: Apr 19 2025 – Show user‑created drinks on the menu
+// Updated: Apr 24 2025 – log pours via createPouredDrink
 // -----------------------------------------------------------------------------
 import { useState, useEffect, useRef } from 'react';
 import {
@@ -30,20 +32,21 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 
-// Amplify & PubSub
+// Amplify & PubSub
 import { Amplify } from 'aws-amplify';
 import { PubSub } from '@aws-amplify/pubsub';
 import config from '../../src/amplifyconfiguration.json';
 
-// GraphQL & Auth
+// GraphQL & Auth
 import { generateClient } from 'aws-amplify/api';
 import {
   createLikedDrink,
   deleteLikedDrink,
+  createPouredDrink,      // 👈 NEW
 } from '../../src/graphql/mutations';
 import {
   listLikedDrinks,
-  listCustomRecipes,     // 👈 NEW
+  listCustomRecipes,
 } from '../../src/graphql/queries';
 import { getCurrentUser } from 'aws-amplify/auth';
 import { getUrl } from 'aws-amplify/storage';
@@ -96,13 +99,13 @@ function parseIngredientString(
     const amount = parseFloat(amountStr);
     const priority = parseInt(priorityStr, 10);
     const ingObj = allIngredients.find((ing) => ing.id === id);
-    const name = ingObj ? ingObj.name : `Ingredient #${id}`;
+    const name = ingObj ? ingObj.name : `Ingredient #${id}`;
     return { id, name, amount, priority };
   });
 }
 
 /* -------------------------------------------------------------------------- */
-/*                              SINGLE DRINK CARD                             */
+/*                              SINGLE DRINK CARD                             */
 /* -------------------------------------------------------------------------- */
 
 interface DrinkItemProps {
@@ -134,6 +137,7 @@ function DrinkItem({
   const [animValue] = useState(new Animated.Value(isExpanded ? 1 : 0));
   const [quantity, setQuantity] = useState(1);
   const { isConnected, forceDisconnect } = useLiquorBot();
+  const [logging, setLogging] = useState(false); // prevent double-taps
 
   const parsedIngredients = parseIngredientString(
     drink.ingredients ?? '',
@@ -148,50 +152,77 @@ function DrinkItem({
     }).start();
   }, [isExpanded]);
 
-  /* --------------- pour‑drink helpers (unchanged) --------------- */
+  /* --------------- pour-drink helpers --------------- */
   async function publishDrinkCommand() {
-    try {
-      await pubsub.publish({
-        topics: ['liquorbot/publish'],
-        message: { content: drink.ingredients ?? '' },
-      });
-      console.log(`Published command="${drink.ingredients}"`);
-    } catch (error) {
-      console.error('Error publishing PubSub message:', error);
-    }
+    await pubsub.publish({
+      topics: ['liquorbot/publish'],
+      message: { content: drink.ingredients ?? '' },
+    });
+    console.log(`Published command="${drink.ingredients}"`);
   }
+
+  // 👇 NEW – log to GraphQL
+  async function logPouredDrink(userID: string | null) {
+    if (!userID) return;
+    await client.graphql({
+      query: createPouredDrink,
+      variables: {
+        input: {
+          userID,
+          drinkID: drink.id,
+          drinkName: drink.name,
+          volume: quantity,
+          timestamp: new Date().toISOString(),
+        },
+      },
+      authMode: 'userPool',
+    });
+    console.log('PouredDrink stored.');
+  }
+
   async function handlePourDrink() {
+    if (logging) return;
     try {
       if (!isConnected) {
-        console.warn('LiquorBot is not connected. Aborting.');
+        console.warn('LiquorBot is not connected. Aborting.');
         return;
       }
+      setLogging(true);
       let responded = false;
       const sub = pubsub
         .subscribe({ topics: ['liquorbot/heartbeat'] })
         .subscribe({
-          next: (resp: any) => {
+          next: async (resp: any) => {
             if (resp?.content === 'OK') {
               responded = true;
               sub.unsubscribe();
-              publishDrinkCommand();
+              await publishDrinkCommand();
+              await logPouredDrink(
+                (await getCurrentUser())?.username ?? null,
+              );
+              setLogging(false);
             }
           },
           error: () => {
             sub.unsubscribe();
             forceDisconnect();
+            setLogging(false);
           },
         });
       await pubsub.publish({
         topics: ['liquorbot/heartbeat'],
         message: { content: 'CHECK' },
       });
-      setTimeout(
-        () => !responded && (sub.unsubscribe(), forceDisconnect()),
-        2000,
-      );
+      setTimeout(() => {
+        if (!responded) {
+          sub.unsubscribe();
+          forceDisconnect();
+          setLogging(false);
+        }
+      }, 2000);
     } catch (err) {
       console.error(err);
+      setLogging(false);
     }
   }
 
@@ -217,7 +248,7 @@ function DrinkItem({
           },
         ]}
       >
-        {/* close & heart buttons */}
+        {/* close & heart buttons */}
         <TouchableOpacity onPress={onCollapse} style={styles.closeButton}>
           <Ionicons name="close" size={24} color="#DFDCD9" />
         </TouchableOpacity>
@@ -232,7 +263,7 @@ function DrinkItem({
           />
         </TouchableOpacity>
 
-        {/* content */}
+        {/* content */}
         <View style={styles.expandedContent}>
           <View style={styles.expandedTitleContainer}>
             <Text style={styles.expandedboxText}>{drink.name}</Text>
@@ -244,7 +275,7 @@ function DrinkItem({
         <View style={styles.expandeddetailContainer}>
           {parsedIngredients.length === 0 ? (
             <Text style={styles.expandeddescriptionText}>
-              No ingredients found.
+              No ingredients found.
             </Text>
           ) : (
             <Text style={styles.expandeddescriptionText}>
@@ -252,7 +283,7 @@ function DrinkItem({
               {parsedIngredients
                 .map((item, i) =>
                   i === parsedIngredients.length - 1 && i !== 0
-                    ? `and ${item.name}`
+                    ? `and ${item.name}`
                     : item.name,
                 )
                 .join(', ')}
@@ -261,7 +292,7 @@ function DrinkItem({
           )}
         </View>
 
-        {/* qty + button */}
+        {/* qty + button */}
         <View style={styles.quantityContainer}>
           <TouchableOpacity
             onPress={() => setQuantity((q) => Math.max(1, q - 1))}
@@ -278,8 +309,14 @@ function DrinkItem({
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.button} onPress={handlePourDrink}>
-          <Text style={styles.buttonText}>Pour Drink</Text>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handlePourDrink}
+          disabled={logging}
+        >
+          <Text style={styles.buttonText}>
+            {logging ? 'Pouring…' : 'Pour Drink'}
+          </Text>
         </TouchableOpacity>
       </Animated.View>
     );

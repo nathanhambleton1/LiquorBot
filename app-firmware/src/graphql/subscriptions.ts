@@ -8,6 +8,69 @@ type GeneratedSubscription<InputType, OutputType> = string & {
   __generatedSubscriptionOutput: OutputType;
 };
 
+export const onCreatePouredDrink = /* GraphQL */ `subscription OnCreatePouredDrink(
+  $filter: ModelSubscriptionPouredDrinkFilterInput
+  $owner: String
+) {
+  onCreatePouredDrink(filter: $filter, owner: $owner) {
+    id
+    userID
+    drinkID
+    drinkName
+    volume
+    timestamp
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnCreatePouredDrinkSubscriptionVariables,
+  APITypes.OnCreatePouredDrinkSubscription
+>;
+export const onUpdatePouredDrink = /* GraphQL */ `subscription OnUpdatePouredDrink(
+  $filter: ModelSubscriptionPouredDrinkFilterInput
+  $owner: String
+) {
+  onUpdatePouredDrink(filter: $filter, owner: $owner) {
+    id
+    userID
+    drinkID
+    drinkName
+    volume
+    timestamp
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnUpdatePouredDrinkSubscriptionVariables,
+  APITypes.OnUpdatePouredDrinkSubscription
+>;
+export const onDeletePouredDrink = /* GraphQL */ `subscription OnDeletePouredDrink(
+  $filter: ModelSubscriptionPouredDrinkFilterInput
+  $owner: String
+) {
+  onDeletePouredDrink(filter: $filter, owner: $owner) {
+    id
+    userID
+    drinkID
+    drinkName
+    volume
+    timestamp
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnDeletePouredDrinkSubscriptionVariables,
+  APITypes.OnDeletePouredDrinkSubscription
+>;
 export const onCreateLikedDrink = /* GraphQL */ `subscription OnCreateLikedDrink(
   $filter: ModelSubscriptionLikedDrinkFilterInput
   $owner: String
