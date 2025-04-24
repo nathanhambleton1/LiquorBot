@@ -111,7 +111,7 @@ export default function ConfirmCode() {
 
 const styles = StyleSheet.create({
   container:{ flex:1, backgroundColor:'#000', justifyContent:'center', padding:24 },
-  title:{ fontSize:48, color:'#fff', marginBottom:24, fontWeight:'bold' },
+  title:{ fontSize:42, color:'#fff', marginBottom:24, fontWeight:'bold' },
   label:{ fontSize:16, color:'#fff', marginTop:10 },
   input:{ backgroundColor:'#141414', marginVertical:12, paddingHorizontal:16, paddingVertical:12, borderRadius:8, fontSize:16, color:'#DFDCD9' },
   button:{ backgroundColor:'#CE975E', paddingVertical:12, borderRadius:8, alignItems:'center', marginTop:20 },
