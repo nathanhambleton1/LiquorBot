@@ -209,7 +209,7 @@ function DrinkItem({
       setLogging(true);
       let responded = false;
       const sub = pubsub
-        .subscribe({ topics: ['liquorbot/liquorbot001/heartbeat'] })
+        .subscribe({ topics: ['liquorbot/liquorbot001/heartbeat_check'] })
         .subscribe({
           next: async (resp: any) => {
             if (resp?.content === 'OK') {
@@ -231,7 +231,7 @@ function DrinkItem({
           },
         });
       await pubsub.publish({
-        topics: ['liquorbot/liquorbot001/heartbeat'],
+        topics: ['liquorbot/liquorbot001/heartbeat_check'],
         message: { content: 'CHECK' },
       });
       setTimeout(() => {
