@@ -916,10 +916,11 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   expandedImage: {
-    marginTop: 20,
-    width: 150,
-    height: 150,
+    marginTop: 0,
+    width: 200, // Increased width
+    height: 200, // Increased height
     borderRadius: 10,
+    marginLeft: -30, // Moved to the left
   },
   expandedcategoryText: {
     color: '#CE975E',
