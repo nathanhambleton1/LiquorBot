@@ -17,8 +17,8 @@
 #define AWS_IOT_ENDPOINT "a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com"
 
 // MQTT topics
-#define AWS_RECEIVE_TOPIC "liquorbot/publish"
-#define AWS_PUBLISH_TOPIC "liquorbot/receive"
+#define AWS_RECEIVE_TOPIC "liquorbot/liquorbot001/publish"
+#define AWS_PUBLISH_TOPIC "liquorbot/liquorbot001/receive"
 
 #include <Arduino.h>
 

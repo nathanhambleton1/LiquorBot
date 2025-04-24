@@ -26,6 +26,7 @@ PubSubClient mqttClient(secureClient);
  * - AWS_RECEIVE_TOPIC: for old "drink commands" 
  * - "liquorbot/heartbeat": for heartbeat
  * - "liquorbot/liquorbot001/slot-config": for new slot config commands
+ * - "liquorbot/liquorbot001/heartbeat_check": for check messages
  */
 static const char* SLOT_CONFIG_TOPIC = "liquorbot/liquorbot001/slot-config";
 
@@ -65,11 +66,14 @@ void setupAWS() {
             // 1) Subscribe to the command topic for drink instructions
             mqttClient.subscribe(AWS_RECEIVE_TOPIC);
 
-            // 2) Also subscribe to 'liquorbot/heartbeat' so we can respond to "CHECK"
-            mqttClient.subscribe("liquorbot/heartbeat");
+            // 2) Also subscribe to 'liquorbot/liquorbot001/heartbeat' so we can respond to "CHECK"
+            mqttClient.subscribe("liquorbot/liquorbot001/heartbeat");
 
             // 3) Subscribe to slot-config messages from the app
             mqttClient.subscribe(SLOT_CONFIG_TOPIC);
+
+            // 4) Subscribe to new heartbeat_check topic for check messages
+            mqttClient.subscribe("liquorbot/liquorbot001/heartbeat_check");
 
         } else {
             Serial.print("AWS IoT connection failed, rc=");
@@ -95,42 +99,45 @@ void processAWSMessages() {
  *  - "liquorbot/heartbeat"
  *  - AWS_RECEIVE_TOPIC (old drink commands)
  *  - SLOT_CONFIG_TOPIC (new slot config commands)
+ *  - "liquorbot/liquorbot001/heartbeat_check" (check messages)
  */
 void receiveData(char* topic, byte* payload, unsigned int length) {
     String message = String((char*)payload).substring(0, length);
     String topicStr = String(topic);
 
-    // 1) If we got the heartbeat topic
-    if (topicStr.equals("liquorbot/heartbeat")) {
+    // For heartbeat messages: only log receipt
+    if (topicStr.equals("liquorbot/liquorbot001/heartbeat")) {
+        // ignore heartbeat messages
+    }
+    // Handle check messages on dedicated topic
+    else if (topicStr.equals("liquorbot/liquorbot001/heartbeat_check")) {
         StaticJsonDocument<128> doc; 
         DeserializationError err = deserializeJson(doc, message);
-
         if (!err) {
             const char* content = doc["content"];
             if (content && String(content).equals("CHECK")) {
-                sendData("liquorbot/heartbeat", "{\"content\": \"OK\"}");
-                Serial.println("Responded to CHECK with OK");
-            } else if (content && !String(content).equals("heartbeat")) {
-                Serial.println("Heartbeat message recognized but 'content' is not 'CHECK'.");
+                sendData("liquorbot/liquorbot001/heartbeat_check", "{\"content\": \"OK\"}");
+                Serial.println("Responded to CHECK with OK on heartbeat_check topic");
+            } else {
+                Serial.println("Received heartbeat_check message but content is not CHECK.");
             }
         } else {
-            Serial.println("Received invalid JSON in heartbeat topic, ignoring.");
+            Serial.println("Received invalid JSON in heartbeat_check topic, ignoring.");
         }
     }
-
-    // 2) If it's the old "AWS_RECEIVE_TOPIC" for drink instructions
+    // Old drink commands
     else if (topicStr.equals(AWS_RECEIVE_TOPIC)) {
         // Assume the message is a "drink command", parse & dispense
         auto parsedCommand = parseDrinkCommand(message);
         dispenseDrink(parsedCommand);
     }
 
-    // 3) If it's the new slot config topic
+    // Slot config messages
     else if (topicStr.equals(SLOT_CONFIG_TOPIC)) {
         handleSlotConfigMessage(message);
     }
 
-    // 4) Otherwise, unrecognized topic
+    // Unrecognized topic
     else {
         Serial.println("Received message on an unrecognized topic, ignoring.");
     }
@@ -220,7 +227,7 @@ void sendData(const String& topic, const String& message) {
  * Send a heartbeat JSON message. Called every 10s by the main loop.
  */
 void sendHeartbeat() {
-    const String heartbeatTopic = "liquorbot/heartbeat";
+    const String heartbeatTopic = "liquorbot/liquorbot001/heartbeat";
     // Using valid JSON so the app won't parse-error
     const String heartbeatMessage = "{\"msg\": \"heartbeat\"}";
     sendData(heartbeatTopic, heartbeatMessage);
