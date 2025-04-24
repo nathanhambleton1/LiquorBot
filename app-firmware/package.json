@@ -28,6 +28,7 @@
     "@react-native-picker/picker": "^2.11.0",
     "@react-navigation/bottom-tabs": "^6.5.15",
     "@react-navigation/native": "^6.1.12",
+    "@shopify/react-native-skia": "^1.12.4",
     "aws-amplify": "^6.14.2",
     "expo": "~52.0.40",
     "expo-blur": "~14.0.3",

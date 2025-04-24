@@ -201,52 +201,58 @@ function DrinkItem({
 
   async function handlePourDrink() {
     if (logging || !isMakeable) return;
-    try {
-      if (!isConnected) {
-        console.warn('LiquorBot is not connected. Aborting.');
-        return;
-      }
-      setLogging(true);
-      let responded = false;
-      const sub = pubsub
-        .subscribe({ topics: ['liquorbot/liquorbot001/heartbeat_check'] })
-        .subscribe({
-          next: async (resp: any) => {
-            if (resp?.content === 'OK') {
-              responded = true;
-              sub.unsubscribe();
-              await publishDrinkCommand();
-              await logPouredDrink(
-                (await getCurrentUser())?.username ?? null,
-              );
-              setLogging(false);
-              triggerStatus('success', 'Pour successful, enjoy!');
-            }
-          },
-          error: () => {
-            sub.unsubscribe();
-            forceDisconnect();
-            setLogging(false);
-            triggerStatus('error', 'Previous pour failed. Please check your connection and try again.');
-          },
-        });
-      await pubsub.publish({
-        topics: ['liquorbot/liquorbot001/heartbeat_check'],
-        message: { content: 'CHECK' },
-      });
-      setTimeout(() => {
-        if (!responded) {
+    if (!isConnected) { console.warn('LiquorBot is not connected.'); return; }
+  
+    setLogging(true);
+  
+    let responded = false;                          // <-- single flag
+    let timer: ReturnType<typeof setTimeout>;       // <-- timer handle
+    let sub: any;                                   // <-- will hold our sub object
+
+    // 1.  Subscribe
+    sub = pubsub.subscribe({ topics: ['liquorbot/liquorbot001/heartbeat_check'] })
+      .subscribe({
+        next: async (resp: any) => {
+          const payload  = (resp as any)?.value ?? resp;
+          const content  = payload?.content ?? payload;
+          console.log('Heartbeat check');
+          if (content !== 'OK') return;             // ignore echo or junk
+  
+          responded = true;
+          clearTimeout(timer);
+          sub.unsubscribe();
+          
+          await publishDrinkCommand();
+          console.log(`Pouring ${drink.name} (${quantity})`);
+          await logPouredDrink((await getCurrentUser())?.username ?? null);
+  
+          setLogging(false);
+          triggerStatus('success', 'Pour successful, enjoy!');
+        },
+        error: () => {
+          clearTimeout(timer);
           sub.unsubscribe();
           forceDisconnect();
           setLogging(false);
-          triggerStatus('error', 'Previous pour failed. Please check your connection and try again.');
-        }
-      }, 2000);
-    } catch (err) {
-      console.error(err);
-      setLogging(false);
-      triggerStatus('error', 'Previous pour failed. Please check your connection and try again.');
-    }
+          triggerStatus('error', 'Connection lost – please try again.');
+        },
+      });
+      
+    // 2.  Send heartbeat *after* we’re listening
+    await pubsub.publish({
+      topics: ['liquorbot/liquorbot001/heartbeat_check'],
+      message: { content: 'CHECK' },
+    });
+  
+    // 3.  Fail-safe timeout
+    timer = setTimeout(() => {
+      if (!responded) {
+        sub.unsubscribe();
+        forceDisconnect();
+        setLogging(false);
+        triggerStatus('error', 'No response from LiquorBot – try again.');
+      }
+    }, 5000);
   }
 
   const handleToggleLike = () => toggleFavorite(drink.id);
@@ -424,7 +430,7 @@ export default function MenuScreen() {
   const [loading, setLoading] = useState(true);
 
   // category & search
-  const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey']; // “Custom” drinks still appear under “All”
+  const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey'];
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
 
