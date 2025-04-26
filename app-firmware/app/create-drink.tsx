@@ -1,90 +1,73 @@
 // -----------------------------------------------------------------------------
-// File: create-drink.tsx  (IMAGE-BUILDER REFACTOR – pre-rendered colours)
-// Description: Custom-drink creator with dynamic ingredient rows **plus**
-//              a modal “drink image builder” that composites a pre-coloured
-//              glass PNG with an optional garnish.  The composite is exported
-//              to PNG, uploaded to S3 via Amplify Storage, and the returned key
-//              is stored in the CustomRecipe record.
+// File: create-drink.tsx
+// Description: Create **or** edit a custom recipe.  When navigated to with
+//              `?edit=1&recipeId=…&name=…&desc=…&ingredients=…&imageKey=…`
+//              the form auto-populates and Save performs an update instead of a
+//              create.  Image logic keeps the original drink image unless the
+//              builder is used to generate a new one.
 // Author: Nathan Hambleton
-// Updated: April 25 2025 – replaces colour overlay with 25 assets, modal UI
+// Updated: Apr 26 2025 – edit-mode support
 // -----------------------------------------------------------------------------
+
 import React, {
   useState,
   useEffect,
   useMemo,
-  useRef,
   useCallback,
 } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Modal,
-  FlatList,
-  Platform,
-  KeyboardAvoidingView,
-  Image,
-  Dimensions,
+  View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView,
+  Modal, FlatList, Platform, KeyboardAvoidingView, Image, Dimensions,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 
 import { Amplify } from 'aws-amplify';
 import { getUrl, uploadData } from 'aws-amplify/storage';
 import { generateClient } from 'aws-amplify/api';
-import { createCustomRecipe } from '../src/graphql/mutations';
+import { createCustomRecipe, updateCustomRecipe } from '../src/graphql/mutations';
 import config from '../src/amplifyconfiguration.json';
 
-// ---- Skia ----
+// ---- Skia --------------------------------------------------
 import {
-  Canvas,
-  useImage,
-  Image as SkiaImage,
+  Canvas, useImage, Image as SkiaImage,
 } from '@shopify/react-native-skia';
 import { Skia } from '@shopify/react-native-skia';
 
 Amplify.configure(config);
+const client = generateClient();
 
-// ---------- CONSTANTS ----------
-// 5 × 5 = 25 colourised glass assets
+/* ═════════════  STATIC ASSETS  ═════════════ */
 const GLASS_COLOUR_ASSETS: any[][] = [
-  // rocks
-  [
+  [ // rocks
     require('../assets/images/glasses/rocks_red.png'),
     require('../assets/images/glasses/rocks_yellow.png'),
     require('../assets/images/glasses/rocks_orange.png'),
     require('../assets/images/glasses/rocks_green.png'),
     require('../assets/images/glasses/rocks_blue.png'),
   ],
-  // highball
-  [
+  [ // highball
     require('../assets/images/glasses/highball_red.png'),
     require('../assets/images/glasses/highball_yellow.png'),
     require('../assets/images/glasses/highball_orange.png'),
     require('../assets/images/glasses/highball_green.png'),
     require('../assets/images/glasses/highball_blue.png'),
   ],
-  // martini
-  [
+  [ // martini
     require('../assets/images/glasses/martini_red.png'),
     require('../assets/images/glasses/martini_yellow.png'),
     require('../assets/images/glasses/martini_orange.png'),
     require('../assets/images/glasses/martini_green.png'),
     require('../assets/images/glasses/martini_blue.png'),
   ],
-  // coupe
-  [
+  [ // coupe
     require('../assets/images/glasses/coupe_red.png'),
     require('../assets/images/glasses/coupe_yellow.png'),
     require('../assets/images/glasses/coupe_orange.png'),
     require('../assets/images/glasses/coupe_green.png'),
     require('../assets/images/glasses/coupe_blue.png'),
   ],
-  // margarita
-  [
+  [ // margarita
     require('../assets/images/glasses/margarita_red.png'),
     require('../assets/images/glasses/margarita_yellow.png'),
     require('../assets/images/glasses/margarita_orange.png'),
@@ -101,8 +84,6 @@ const GLASS_PLACEHOLDERS = [
   require('../assets/images/glasses/margarita.png'),
 ];
 
-const PLACEHOLDER_IMAGE = require('../assets/images/glasses/rocks.png');
-
 const GARNISH_ASSETS = [
   require('../assets/images/garnishes/lime.png'),
   require('../assets/images/garnishes/cherry.png'),
@@ -110,476 +91,351 @@ const GARNISH_ASSETS = [
   require('../assets/images/garnishes/umbrella.png'),
 ];
 
-// Per-glass default garnish rectangle – tweak these on your side ✨
+const PLACEHOLDER_IMAGE = require('../assets/images/glasses/rocks.png');
+const DRINK_COLOURS = ['#d72638', '#f5be41', '#e97451', '#57c84d', '#1e90ff'];
 const GARNISH_PLACEMENTS = [
   { x: 180, y: 50, width: 50, height: 50 }, // rocks
   { x: 180, y: 40, width: 50, height: 50 }, // highball
   { x: 140, y: 10, width: 40, height: 40 }, // martini
   { x: 160, y: 20, width: 45, height: 45 }, // coupe
-  { x: 140, y: 0, width: 45, height: 45 },  // margarita
+  { x: 140, y:  0, width: 45, height: 45 }, // margarita
 ];
 
-// Swatch colours (purely for UI)
-const DRINK_COLOURS = ['#d72638', '#f5be41', '#e97451', '#57c84d', '#1e90ff'];
-
-// ---------- TYPES ----------
+/* ═════════════  TYPES  ═════════════ */
 interface Ingredient {
-  id: number;
-  name: string;
-  type: 'Alcohol' | 'Mixer' | 'Sour' | 'Sweet' | 'Misc';
-  description: string;
+  id: number; name: string; type: 'Alcohol'|'Mixer'|'Sour'|'Sweet'|'Misc'; description: string;
 }
-interface RecipeRow {
-  id: number;
-  volume: number;
-  priority: number;
-}
-interface DrinkMeta {
-  id: number;
-  name: string;
-}
+interface RecipeRow { id: number; volume: number; priority: number; }
+interface DrinkMeta  { id: number; name: string; }
 
-// Canvas dims
-const CANVAS_W = 300;
-const CANVAS_H = 300;
-const THUMB = 70;
+const CANVAS_W = 300, CANVAS_H = 300, THUMB = 70;
 
+/* ═════════════  COMPONENT  ═════════════ */
 export default function CreateDrinkScreen() {
   const router = useRouter();
-  const client = generateClient();
+  const params = useLocalSearchParams<{
+    edit?: string; recipeId?: string; name?: string;
+    desc?: string; ingredients?: string; imageKey?: string;
+  }>();
 
-  // ---------------- Drink meta ----------------
-  const [drinkName, setDrinkName] = useState('');
-  const [allDrinks, setAllDrinks] = useState<DrinkMeta[]>([]);
+  const isEditing = params.edit === '1';
+  const recipeId  = params.recipeId ?? '';
+
+  /* ----------- state: meta ----------- */
+  const [drinkName, setDrinkName]         = useState<string>(isEditing ? String(params.name ?? '') : '');
+  const [allDrinks, setAllDrinks]         = useState<DrinkMeta[]>([]);
   const [loadingDrinks, setLoadingDrinks] = useState(true);
 
-  // ---------------- Ingredients ---------------
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  /* ----------- state: ingredients & rows ----------- */
+  const [ingredients, setIngredients]     = useState<Ingredient[]>([]);
   const [loadingIngredients, setLoadingIngredients] = useState(false);
 
-  // ---------------- Rows ----------------------
-  const [rows, setRows] = useState<RecipeRow[]>([
-    { id: 0, volume: 1.5, priority: 1 },
-  ]);
+  const [rows, setRows] = useState<RecipeRow[]>(() => {
+    if (!isEditing || !params.ingredients) return [{ id: 0, volume: 1.5, priority: 1 }];
+    return [
+      ...String(params.ingredients)
+        .split(',')
+        .filter(Boolean)
+        .map((c) => {
+          const [id, vol, pri] = c.split(':');
+          return { id: Number(id), volume: Number(vol), priority: Number(pri ?? 1) };
+        }),
+      { id: 0, volume: 1.5, priority: 1 },
+    ];
+  });
 
-  // ---------------- Picker modal --------------
+  /* ----------- state: search & picker ----------- */
   const [pickerVisible, setPickerVisible] = useState(false);
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const categories = ['All', 'Alcohol', 'Mixer', 'Sour', 'Sweet', 'Misc'];
+  const [editingIndex, setEditingIndex]   = useState<number|null>(null);
+  const [searchQuery, setSearchQuery]     = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<'All'|'Alcohol'|'Mixer'|'Sour'|'Sweet'|'Misc'>('All');
+  const categories = ['All','Alcohol','Mixer','Sour','Sweet','Misc'] as const;
 
-  // ---------------- Priority info -------------
-  const [showPriorityInfoIndex, setShowPriorityInfoIndex] =
-    useState<number | null>(null);
+  /* ----------- state: priority bubble ----------- */
+  const [showPriorityInfoIndex, setShowPriorityInfoIndex] = useState<number|null>(null);
 
-  // ---------------- Image builder -------------
+  /* ----------- state: image builder ----------- */
   const [builderVisible, setBuilderVisible] = useState(false);
-  const [glassIdx, setGlassIdx] = useState(0);
-  const [colourIdx, setColourIdx] = useState(0);
-  const [garnishIdx, setGarnishIdx] = useState<number | null>(null);
+  const [glassIdx,   setGlassIdx]   = useState(0);
+  const [colourIdx,  setColourIdx]  = useState(0);
+  const [garnishIdx, setGarnishIdx] = useState<number|null>(null);
   const [imageConfigured, setImageConfigured] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting]   = useState(false);
 
-  // Skia images
-  const baseImage = useImage(GLASS_COLOUR_ASSETS[glassIdx][colourIdx]);
-  const garnishImage = useImage(
-    garnishIdx !== null ? GARNISH_ASSETS[garnishIdx] : undefined,
+  /* ----------- edit-mode existing image ----------- */
+  const [existingImageKey] = useState<string|null>(
+    isEditing && params.imageKey ? String(params.imageKey) : null
   );
+  const [existingImageUrl, setExistingImageUrl] = useState<string|null>(null);
 
-  // ---------- FETCH DATA ----------
+  /* ----------- Skia images ----------- */
+  const baseImage   = useImage(GLASS_COLOUR_ASSETS[glassIdx][colourIdx]);
+  const garnishImage= useImage(garnishIdx!==null ? GARNISH_ASSETS[garnishIdx] : undefined);
+
+  /* ═════════════  DATA LOAD  ═════════════ */
   useEffect(() => {
-    // Ingredient list
-    (async () => {
+    (async () => {                      // ingredient list
       setLoadingIngredients(true);
       try {
         const { url } = await getUrl({ key: 'drinkMenu/ingredients.json' });
         const list: Ingredient[] = await (await fetch(url)).json();
-        list.sort((a, b) => a.name.localeCompare(b.name));
+        list.sort((a,b)=>a.name.localeCompare(b.name));
         setIngredients(list);
-      } catch (err) {
-        console.error('Error loading ingredients:', err);
-      } finally {
-        setLoadingIngredients(false);
-      }
+      } finally { setLoadingIngredients(false); }
     })();
 
-    // Drinks (dup-name check)
-    (async () => {
+    (async () => {                      // drink names (dup-check)
       setLoadingDrinks(true);
       try {
         const { url } = await getUrl({ key: 'drinkMenu/drinks.json' });
-        const list: DrinkMeta[] = await (await fetch(url)).json();
-        setAllDrinks(list);
-      } catch (err) {
-        console.error('Error loading drinks:', err);
-      } finally {
-        setLoadingDrinks(false);
-      }
+        setAllDrinks(await (await fetch(url)).json());
+      } finally { setLoadingDrinks(false); }
     })();
   }, []);
 
-  // ---------- NAME-CONFLICT CHECK ----------
-  const matchingDrink = useMemo(() => {
-    if (drinkName.trim() === '') return null;
-    const lc = drinkName.trim().toLowerCase();
-    return allDrinks.find((d) => d.name.toLowerCase() === lc) ?? null;
-  }, [drinkName, allDrinks]);
+  /* -------- existing image URL (edit mode) -------- */
+  useEffect(() => {
+    if (!existingImageKey) return;
+    (async () => {
+      try {
+        const { url } = await getUrl({ key: existingImageKey });
+        setExistingImageUrl(url.toString());
+      } catch { /* ignore */ }
+    })();
+  }, [existingImageKey]);
 
-  // ---------- HELPERS ----------
-  const ingName = (id: number) =>
-    id ? ingredients.find((i) => i.id === id)?.name ?? '' : '';
+  /* ═════════════  HELPERS  ═════════════ */
+  const ingName = (id:number) => id ? ingredients.find(i=>i.id===id)?.name ?? '' : '';
 
   const filteredIngredients = ingredients
-    .filter((i) => i.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    .filter((i) => selectedCategory === 'All' || i.type === selectedCategory);
+    .filter(i=>i.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .filter(i=>selectedCategory==='All' || i.type===selectedCategory);
 
-  // ---------- ROW ACTIONS ---------- (unchanged)
-  const openPicker = (idx: number) => {
-    setEditingIndex(idx);
-    setPickerVisible(true);
-  };
-  const assignIngredient = (ingredientId: number) => {
-    if (editingIndex === null) return;
-    const next = [...rows];
-    next[editingIndex].id = ingredientId;
-    if (editingIndex === rows.length - 1)
-      next.push({ id: 0, volume: 1.5, priority: 1 });
-    setRows(next);
-    setPickerVisible(false);
-    setSearchQuery('');
-  };
-  const removeRow = (idx: number) => {
-    const next = rows.filter((_, i) => i !== idx);
-    setRows(next.length ? next : [{ id: 0, volume: 1.5, priority: 1 }]);
-  };
-  const adjustVol = (idx: number, d: number) =>
-    setRows((p) =>
-      p.map((r, i) =>
-        i === idx ? { ...r, volume: Math.max(0, Number((r.volume + d).toFixed(2))) } : r,
-      ),
-    );
-  const setVolDirect = (idx: number, txt: string) => {
-    const num = parseFloat(txt);
-    if (!isNaN(num)) {
-      setRows((p) => p.map((r, i) => (i === idx ? { ...r, volume: num } : r)));
-    }
-  };
-  const adjustPriority = (idx: number, d: number) =>
-    setRows((p) =>
-      p.map((r, i) =>
-        i === idx
-          ? { ...r, priority: Math.min(9, Math.max(1, r.priority + d)) }
-          : r,
-      ),
-    );
+  const matchingDrink = useMemo(() => {
+    if (drinkName.trim()==='') return null;
+    const lc = drinkName.trim().toLowerCase();
+    return allDrinks.find(d=>d.name.toLowerCase()===lc) ?? null;
+  }, [drinkName, allDrinks]);
 
-  // ---------- IMAGE EXPORT & UPLOAD ----------
-  const exportAndUploadImage = useCallback(async (): Promise<string | null> => {
+  /* ═════════════  ROW ACTIONS  ═════════════ */
+  const openPicker = (idx:number) => { setEditingIndex(idx); setPickerVisible(true); };
+
+  const assignIngredient = (ingredientId:number) => {
+    if (editingIndex===null) return;
+    const next=[...rows]; next[editingIndex].id = ingredientId;
+    if (editingIndex===rows.length-1) next.push({ id:0, volume:1.5, priority:1 });
+    setRows(next); setPickerVisible(false); setSearchQuery('');
+  };
+
+  const removeRow   = (idx:number) => {
+    const next = rows.filter((_,i)=>i!==idx);
+    setRows(next.length ? next : [{ id:0, volume:1.5, priority:1 }]);
+  };
+
+  const adjustVol   = (idx:number, d:number) => setRows(p=>
+    p.map((r,i)=>i===idx ? {...r, volume:Math.max(0, +(r.volume+d).toFixed(2))}:r));
+
+  const setVolDirect= (idx:number, txt:string) => {
+    const num=parseFloat(txt); if (!isNaN(num))
+      setRows(p=>p.map((r,i)=>i===idx?{...r, volume:num}:r));
+  };
+
+  const adjustPriority = (idx:number, d:number) => setRows(p=>
+    p.map((r,i)=>i===idx?{...r,priority:Math.min(9,Math.max(1,r.priority+d))}:r));
+
+  /* ═════════════  IMAGE EXPORT  ═════════════ */
+  const exportAndUploadImage = useCallback(async ():Promise<string|null>=>{
     if (!baseImage) return null;
-    try {
+    try{
       setExporting(true);
-      const surface = Skia.Surface.MakeOffscreen(CANVAS_W, CANVAS_H);
-      if (!surface) throw new Error('Failed to create surface');
-      const ctx = surface.getCanvas();
-      const imgPaint = Skia.Paint();
+      const surface=Skia.Surface.MakeOffscreen(CANVAS_W,CANVAS_H);
+      if(!surface)throw new Error('Surface fail');
+      const ctx=surface.getCanvas(), paint=Skia.Paint();
 
-      // Draw pre-coloured glass
-      ctx.drawImageRect(
-        baseImage,
-        { x: 0, y: 0, width: baseImage.width(), height: baseImage.height() },
-        { x: 0, y: 0, width: CANVAS_W, height: CANVAS_H },
-        imgPaint,
-      );
+      ctx.drawImageRect(baseImage,{x:0,y:0,width:baseImage.width(),height:baseImage.height()},
+        {x:0,y:0,width:CANVAS_W,height:CANVAS_H},paint);
 
-      // Garnish (optional)
-      if (garnishImage) {
-        const gp = GARNISH_PLACEMENTS[glassIdx];
-        ctx.drawImageRect(
-          garnishImage,
-          { x: 0, y: 0, width: garnishImage.width(), height: garnishImage.height() },
-          gp,
-          imgPaint,
-        );
+      if(garnishImage){
+        const gp=GARNISH_PLACEMENTS[glassIdx];
+        ctx.drawImageRect(garnishImage,{x:0,y:0,width:garnishImage.width(),height:garnishImage.height()},gp,paint);
       }
-
-      const pngBytes = surface.makeImageSnapshot().encodeToBytes();
-      const key = `drinkImages/${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}.png`;
-
-      await uploadData({
-        key,
-        data: new Uint8Array(pngBytes),
-        options: { contentType: 'image/png' },
-      }).result;
-
+      const pngBytes=surface.makeImageSnapshot().encodeToBytes();
+      const key=`drinkImages/${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
+      await uploadData({key,data:new Uint8Array(pngBytes),options:{contentType:'image/png'}}).result;
       return key;
-    } catch (err) {
-      console.error('Image export/upload failed:', err);
-      return null;
-    } finally {
-      setExporting(false);
-    }
-  }, [baseImage, garnishImage, glassIdx]);
+    }catch(e){console.error(e); return null;}
+    finally{setExporting(false);}
+  },[baseImage,garnishImage,glassIdx]);
 
-  // ---------- SAVE ----------
+  /* ═════════════  SAVE  ═════════════ */
   const handleSave = async () => {
-    const ingredientsInput = rows
-      .filter((r) => r.id !== 0)
-      .map(({ id, volume, priority }) => ({
-        ingredientID: String(id),
-        amount: volume,
-        priority,
+    const ingredientsInput = rows.filter(r=>r.id!==0)
+      .map(({id,volume,priority})=>({
+        ingredientID:String(id), amount:volume, priority,
       }));
-    if (ingredientsInput.length === 0) {
-      alert('Add at least one ingredient.');
-      return;
-    }
+    if(!ingredientsInput.length){ alert('Add at least one ingredient.'); return; }
 
-    // decide which image to save: built or placeholder
-    let imageKey: string | null = null;
-    if (imageConfigured) {
+    /* decide image */
+    let imageKey:string|null=null;
+    if(imageConfigured){
       imageKey = await exportAndUploadImage();
-    } else {
-      // upload local placeholder to S3
+    }else if(existingImageKey){               // keep original
+      imageKey = existingImageKey;
+    }else{                                    // upload placeholder
       const { uri } = Image.resolveAssetSource(PLACEHOLDER_IMAGE);
-      const resp = await fetch(uri);
-      const buffer = await resp.arrayBuffer();
-      const key = `drinkImages/${Date.now()}-placeholder.png`;
-      await uploadData({
-        key,
-        data: new Uint8Array(buffer),
-        options: { contentType: 'image/png' },
-      }).result;
+      const buf = await (await fetch(uri)).arrayBuffer();
+      const key=`drinkImages/${Date.now()}-placeholder.png`;
+      await uploadData({ key, data:new Uint8Array(buf), options:{ contentType:'image/png'} }).result;
       imageKey = key;
     }
-    if (!imageKey) {
-      alert('Could not generate drink image.');
-      return;
-    }
+    if(!imageKey){ alert('Could not save image'); return; }
 
-    try {
-      await client.graphql({
-        query: createCustomRecipe,
-        variables: {
-          input: {
-            name: drinkName.trim(),
-            // @ts-ignore – add “image” to schema first
-            image: imageKey,
-            ingredients: ingredientsInput,
-          },
-        },
-        authMode: 'userPool',
-      });
+    try{
+      if(isEditing){
+        await client.graphql({
+          query:updateCustomRecipe,
+          variables:{ input:{
+            id:recipeId,
+            name:drinkName.trim(),
+            image:imageKey,
+            ingredients:ingredientsInput,
+          }},
+          authMode:'userPool',
+        });
+      }else{
+        await client.graphql({
+          query:createCustomRecipe,
+          variables:{ input:{
+            name:drinkName.trim(),
+            image:imageKey,
+            ingredients:ingredientsInput,
+          }},
+          authMode:'userPool',
+        });
+      }
       router.back();
-    } catch (err) {
-      console.error('Save failed:', err);
-      alert('Save failed – see console.');
-    }
+    }catch(e){ console.error('Save failed',e); alert('Save failed – see console.'); }
   };
 
-  /* ────────────────────────────  UI  ──────────────────────────── */
+  /* ═════════════  PREVIEW THUMB  ═════════════ */
   const previewCanvas = imageConfigured ? (
     <Canvas style={styles.previewCanvasSmall}>
-      {baseImage && (
-        <SkiaImage
-          image={baseImage}
-          x={0}
-          y={0}
-          width={THUMB}
-          height={THUMB}
-        />
-      )}
-      {garnishImage && (
-        <SkiaImage
-          image={garnishImage}
-          x={THUMB * 0.6}
-          y={THUMB * 0.1}
-          width={THUMB * 0.4}
-          height={THUMB * 0.4}
-        />
-      )}
+      {baseImage   && <SkiaImage image={baseImage} x={0} y={0} width={THUMB} height={THUMB}/>}
+      {garnishImage&& <SkiaImage image={garnishImage} x={THUMB*0.6} y={THUMB*0.1} width={THUMB*0.4} height={THUMB*0.4}/>}
     </Canvas>
-  ) : (
-    <Image
-      source={PLACEHOLDER_IMAGE}
-      style={styles.previewCanvasSmall}
-      resizeMode="contain"
-    />
+  ) : existingImageUrl ? (
+    <Image source={{uri:existingImageUrl}} style={styles.previewCanvasSmall} resizeMode="contain"/>
+  ):(
+    <Image source={PLACEHOLDER_IMAGE} style={styles.previewCanvasSmall} resizeMode="contain"/>
   );
 
+  /* ═════════════  UI  ═════════════ */
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      {/* Close */}
-      <TouchableOpacity
-        style={styles.closeButton}
-        onPress={() => router.push('/menu')}
-      >
-        <Ionicons name="close" size={30} color="#DFDCD9" />
+    <KeyboardAvoidingView style={styles.container}
+      behavior={Platform.OS==='ios'?'padding':undefined}>
+      {/* close */}
+      <TouchableOpacity style={styles.closeButton} onPress={()=>router.push('/menu')}>
+        <Ionicons name="close" size={30} color="#DFDCD9"/>
       </TouchableOpacity>
 
-      <Text style={styles.headerText}>Custom Drink</Text>
+      <Text style={styles.headerText}>{isEditing?'Edit Drink':'Custom Drink'}</Text>
 
-      <ScrollView
-        contentContainerStyle={styles.contentContainer}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ---------- IMAGE BUILDER ENTRY ---------- */}
+      <ScrollView contentContainerStyle={styles.contentContainer}
+        keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
+        {/* image builder entry */}
         <View style={styles.imageBuilderEntry}>
           {previewCanvas}
-          <TouchableOpacity
-            style={styles.buildBtn}
-            onPress={() => setBuilderVisible(true)}
-          >
-            <Text style={styles.buildBtnText}>
-              {imageConfigured ? 'Edit Image' : 'Build Image'}
-            </Text>
+          <TouchableOpacity style={styles.buildBtn} onPress={()=>setBuilderVisible(true)}>
+            <Text style={styles.buildBtnText}>{imageConfigured?'Edit Image':'Build Image'}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* ---------- DRINK NAME ---------- */}
+        {/* name */}
         <View style={styles.formGroup}>
           <Text style={styles.label}>Drink Name</Text>
           <TextInput
-            style={[styles.input, styles.drinkNameInput]}
-            placeholder="e.g., Vodka Cranberry"
-            placeholderTextColor="#4F4F4F"
-            value={drinkName}
-            onChangeText={setDrinkName}
-          />
-          {matchingDrink && (
-            <Text style={styles.nameHint}>
-              Heads up — “{matchingDrink.name}” already exists.
-            </Text>
+            style={[styles.input,styles.drinkNameInput]}
+            placeholder="e.g. Vodka Cranberry" placeholderTextColor="#4F4F4F"
+            value={drinkName} onChangeText={setDrinkName}/>
+          {matchingDrink && !isEditing && (
+            <Text style={styles.nameHint}>Heads up — “{matchingDrink.name}” already exists.</Text>
           )}
         </View>
 
-        {/* INGREDIENT ROWS */}
+        {/* ingredient rows */}
         <View style={styles.ingredientsSection}>
           <Text style={styles.label}>Ingredients</Text>
 
-          {rows.map((row, idx) => (
+          {rows.map((row,idx)=>(
             <View key={idx} style={styles.rowContainer}>
-              {/* Select box */}
+              {/* select box */}
               <View style={styles.ingredientRow}>
-                <TouchableOpacity
-                  style={styles.ingredientBox}
-                  onPress={() => openPicker(idx)}
-                >
-                  <Text
-                    style={[
+                <TouchableOpacity style={styles.ingredientBox} onPress={()=>openPicker(idx)}>
+                  <Text style={[
                       styles.ingredientBoxText,
-                      row.id !== 0 && styles.ingredientBoxTextSelected,
-                    ]}
-                  >
-                    {ingName(row.id) || 'Select Ingredient'}
+                      row.id!==0 && styles.ingredientBoxTextSelected,
+                    ]}>
+                    {ingName(row.id)||'Select Ingredient'}
                   </Text>
-                  <Ionicons
-                    name={row.id === 0 ? 'add' : 'pencil'}
-                    size={16}
-                    color="#808080"
-                    style={{ marginLeft: 8 }}
-                  />
+                  <Ionicons name={row.id===0?'add':'pencil'} size={16} color="#808080" style={{marginLeft:8}}/>
                 </TouchableOpacity>
-                {/* Delete */}
-                <TouchableOpacity
-                  onPress={() => removeRow(idx)}
-                  style={styles.deleteBtn}
-                >
-                  <Ionicons name="close" size={22} color="#d44a4a" />
+                <TouchableOpacity onPress={()=>removeRow(idx)} style={styles.deleteBtn}>
+                  <Ionicons name="close" size={22} color="#d44a4a"/>
                 </TouchableOpacity>
               </View>
 
-              {/* Volume + Priority */}
+              {/* vol + priority */}
               <View style={styles.volumeRow}>
+                {/* volume */}
                 <View style={styles.volumeGroup}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <TouchableOpacity
-                      onPress={() => adjustVol(idx, -0.25)}
-                      style={styles.volBtn}
-                    >
-                      <Ionicons name="remove" size={18} color="#DFDCD9" />
+                  <View style={{flexDirection:'row',alignItems:'center'}}>
+                    <TouchableOpacity onPress={()=>adjustVol(idx,-0.25)} style={styles.volBtn}>
+                      <Ionicons name="remove" size={18} color="#DFDCD9"/>
                     </TouchableOpacity>
                     <TextInput
-                      style={styles.volumeInput}
-                      keyboardType="decimal-pad"
-                      value={row.volume.toFixed(2)}
-                      onChangeText={(txt) => setVolDirect(idx, txt)}
-                      maxLength={5}
-                    />
-                    <TouchableOpacity
-                      onPress={() => adjustVol(idx, 0.25)}
-                      style={styles.volBtn}
-                    >
-                      <Ionicons name="add" size={18} color="#DFDCD9" />
+                      style={styles.volumeInput} keyboardType="decimal-pad"
+                      value={row.volume.toFixed(2)} onChangeText={txt=>setVolDirect(idx,txt)}
+                      maxLength={5}/>
+                    <TouchableOpacity onPress={()=>adjustVol(idx,0.25)} style={styles.volBtn}>
+                      <Ionicons name="add" size={18} color="#DFDCD9"/>
                     </TouchableOpacity>
                   </View>
                   <Text style={styles.counterLabel}>Volume in oz</Text>
                 </View>
+                {/* priority */}
                 <View style={styles.priorityGroup}>
                   <View style={styles.priorityContainer}>
-                    <TouchableOpacity
-                      onPress={() => adjustPriority(idx, -1)}
-                      style={styles.priBtn}
-                    >
-                      <Ionicons name="chevron-down" size={18} color="#DFDCD9" />
+                    <TouchableOpacity onPress={()=>adjustPriority(idx,-1)} style={styles.priBtn}>
+                      <Ionicons name="chevron-down" size={18} color="#DFDCD9"/>
                     </TouchableOpacity>
                     <Text style={styles.priorityValue}>{row.priority}</Text>
-                    <TouchableOpacity
-                      onPress={() => adjustPriority(idx, 1)}
-                      style={styles.priBtn}
-                    >
-                      <Ionicons name="chevron-up" size={18} color="#DFDCD9" />
+                    <TouchableOpacity onPress={()=>adjustPriority(idx,1)} style={styles.priBtn}>
+                      <Ionicons name="chevron-up" size={18} color="#DFDCD9"/>
                     </TouchableOpacity>
                   </View>
                   <Text style={styles.counterLabel}>Priority</Text>
                 </View>
 
-                {/* Info icon inline with counters */}
-                <TouchableOpacity
-                  onPress={() => setShowPriorityInfoIndex(idx)}
-                  style={styles.infoBtn}
-                >
-                  <Ionicons
-                    name="information-circle-outline"
-                    size={24} // Increased size
-                    color="#4f4f4f" // Changed color to gray
-                    marginLeft={10} // Added margin to separate from the counter
-                    marginBottom={18} // Added margin to separate from the counter
-                  />
+                <TouchableOpacity onPress={()=>setShowPriorityInfoIndex(idx)} style={styles.infoBtn}>
+                  <Ionicons name="information-circle-outline" size={24} color="#4F4F4F"
+                    style={{marginLeft:10,marginBottom:18}}/>
                 </TouchableOpacity>
               </View>
             </View>
           ))}
 
-          <TouchableOpacity
-            onPress={() =>
-              setRows((p) => [...p, { id: 0, volume: 1.5, priority: 1 }])
-            }
-          >
-            <Text style={styles.addIngredientText}>
-              + Add another ingredient
-            </Text>
+          <TouchableOpacity onPress={()=>setRows(p=>[...p,{id:0,volume:1.5,priority:1}])}>
+            <Text style={styles.addIngredientText}>+ Add another ingredient</Text>
           </TouchableOpacity>
         </View>
 
-        {/* ---------- SAVE ---------- */}
+        {/* save */}
         <TouchableOpacity
-          style={[
-            styles.saveButton,
-            (drinkName.trim() === '' || exporting) && { opacity: 0.4 },
-          ]}
-          disabled={drinkName.trim() === '' || exporting}
-          onPress={handleSave}
-        >
-          <Text style={styles.saveButtonText}>
-            {exporting ? 'Saving…' : 'Save Drink'}
-          </Text>
+          style={[styles.saveButton,(drinkName.trim()===''||exporting)&&{opacity:0.4}]}
+          disabled={drinkName.trim()===''||exporting}
+          onPress={handleSave}>
+          <Text style={styles.saveButtonText}>{exporting?'Saving…': (isEditing?'Update Drink':'Save Drink')}</Text>
         </TouchableOpacity>
       </ScrollView>
 

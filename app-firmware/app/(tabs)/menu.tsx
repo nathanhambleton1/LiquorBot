@@ -98,6 +98,9 @@ type Drink = {
   description?: string;
   image: string;
   ingredients?: string; // “id:amount:priority,id:amount:priority,…”
+  isCustom?: boolean;      // flag that this came from CustomRecipe
+  recipeId?: string;       // real GraphQL id (needed for update)
+  imageKey?: string | null // S3 key for the saved drink image
 };
 
 type BaseIngredient = { id: number; name: string; type: string };
@@ -181,6 +184,8 @@ function DrinkItem({
     drink.ingredients ?? '',
     allIngredients,
   );
+
+  const router = useRouter();
 
   useEffect(() => {
     Animated.timing(animValue, {
@@ -310,6 +315,27 @@ function DrinkItem({
             color={isLiked ? '#CE975E' : '#4F4F4F'}
           />
         </TouchableOpacity>
+
+        {drink.isCustom && (
+          <TouchableOpacity
+            onPress={() =>
+              router.push({
+                pathname: '/create-drink',
+                params: {
+                  edit: '1',
+                  recipeId: drink.recipeId,
+                  name: drink.name,
+                  desc: drink.description ?? '',
+                  ingredients: drink.ingredients ?? '',
+                  imageKey: drink.imageKey ?? '',
+                },
+              })
+            }
+            style={styles.editButton}
+          >
+            <Ionicons name="pencil-outline" size={24} color="#DFDCD9" />
+          </TouchableOpacity>
+        )}
 
         {/* content */}
         <View style={styles.expandedContent}>
@@ -605,6 +631,9 @@ export default function MenuScreen() {
               description: item.description ?? '',
               image: imageUrl,
               ingredients: ingredientsString,
+              isCustom: true,
+              recipeId: item.id,
+              imageKey: item.image ?? null,
             };
           }),
         );
@@ -941,4 +970,5 @@ const styles = StyleSheet.create({
   successText: { color: '#63d44a' },
   buttonArea: { width: '100%', alignItems: 'center', position: 'relative' },
   statusMessageOverlay: { position: 'absolute', top: '100%', marginTop: -12, fontSize: 10, textAlign: 'center' },
+  editButton: { position: 'absolute', top: 10, left: 45, zIndex: 2 },
 });
