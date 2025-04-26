@@ -336,11 +336,29 @@ export default function CreateDrinkScreen() {
       alert('Add at least one ingredient.');
       return;
     }
-    const imageKey = await exportAndUploadImage();
+
+    // decide which image to save: built or placeholder
+    let imageKey: string | null = null;
+    if (imageConfigured) {
+      imageKey = await exportAndUploadImage();
+    } else {
+      // upload local placeholder to S3
+      const { uri } = Image.resolveAssetSource(PLACEHOLDER_IMAGE);
+      const resp = await fetch(uri);
+      const buffer = await resp.arrayBuffer();
+      const key = `drinkImages/${Date.now()}-placeholder.png`;
+      await uploadData({
+        key,
+        data: new Uint8Array(buffer),
+        options: { contentType: 'image/png' },
+      }).result;
+      imageKey = key;
+    }
     if (!imageKey) {
       alert('Could not generate drink image.');
       return;
     }
+
     try {
       await client.graphql({
         query: createCustomRecipe,
@@ -362,36 +380,33 @@ export default function CreateDrinkScreen() {
   };
 
   /* ────────────────────────────  UI  ──────────────────────────── */
-  const previewCanvas = (
+  const previewCanvas = imageConfigured ? (
     <Canvas style={styles.previewCanvasSmall}>
-      {imageConfigured ? (
-        <>
-          {baseImage && (
-            <SkiaImage
-              image={baseImage}
-              x={0}
-              y={0}
-              width={THUMB}
-              height={THUMB}
-            />
-          )}
-          {garnishImage && (
-            <SkiaImage
-              image={garnishImage}
-              x={THUMB * 0.6}
-              y={THUMB * 0.1}
-              width={THUMB * 0.4}
-              height={THUMB * 0.4}
-            />
-          )}
-        </>
-      ) : (
-        <Image
-          source={PLACEHOLDER_IMAGE}
-          style={{ width: THUMB, height: THUMB, resizeMode: 'contain' }}
+      {baseImage && (
+        <SkiaImage
+          image={baseImage}
+          x={0}
+          y={0}
+          width={THUMB}
+          height={THUMB}
+        />
+      )}
+      {garnishImage && (
+        <SkiaImage
+          image={garnishImage}
+          x={THUMB * 0.6}
+          y={THUMB * 0.1}
+          width={THUMB * 0.4}
+          height={THUMB * 0.4}
         />
       )}
     </Canvas>
+  ) : (
+    <Image
+      source={PLACEHOLDER_IMAGE}
+      style={styles.previewCanvasSmall}
+      resizeMode="contain"
+    />
   );
 
   return (
