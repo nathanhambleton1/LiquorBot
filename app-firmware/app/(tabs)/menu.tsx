@@ -541,35 +541,48 @@ export default function MenuScreen() {
           authMode: 'userPool', // owner‑based auth will return only the user’s items
         });
 
-        const custom: Drink[] =
-          res.data?.listCustomRecipes?.items?.map(
-            (item: any, idx: number): Drink => {
-              // Keep IDs unique by offsetting into a high range
-              const numericId = 1_000_000 + idx;
+        const placeholder =
+          'https://d3jj0su0y4d6lr.cloudfront.net/placeholder_drink.png';
 
-              // Convert {ingredientID, amount, priority}[] → "id:amt:prio,id:amt:prio"
-              const ingredientsString = Array.isArray(item.ingredients)
-                ? item.ingredients
-                    .map(
-                      (ri: any) =>
-                        `${Number(ri.ingredientID)}:${Number(
-                          ri.amount,
-                        )}:${Number(ri.priority ?? 1)}`,
-                    )
-                    .join(',')
-                : '';
+        const items = res.data?.listCustomRecipes?.items ?? [];
 
-              return {
-                id: numericId,
-                name: item.name ?? `Custom #${idx + 1}`,
-                category: 'Custom',
-                description: item.description ?? '',
-                image:
-                  'https://d3jj0su0y4d6lr.cloudfront.net/placeholder_drink.png', // fallback image
-                ingredients: ingredientsString,
-              };
-            },
-          ) ?? [];
+        const custom: Drink[] = await Promise.all(
+          items.map(async (item: any, idx: number): Promise<Drink> => {
+            const numericId = 1_000_000 + idx;
+
+            // turn Array<{ingredientID,amount,priority}> → "id:amt:prio,…"
+            const ingredientsString = Array.isArray(item.ingredients)
+              ? item.ingredients
+                  .map(
+                    (ri: any) =>
+                      `${Number(ri.ingredientID)}:${Number(ri.amount)}:${Number(
+                        ri.priority ?? 1,
+                      )}`,
+                  )
+                  .join(',')
+              : '';
+
+            // resolve image key to a URL
+            let imageUrl = placeholder;
+            if (item.image) {
+              try {
+                const { url } = await getUrl({ key: item.image });
+                imageUrl = url.toString();
+              } catch (e) {
+                console.warn('Could not fetch custom drink image', e);
+              }
+            }
+
+            return {
+              id: numericId,
+              name: item.name ?? `Custom #${idx + 1}`,
+              category: 'Custom',
+              description: item.description ?? '',
+              image: imageUrl,
+              ingredients: ingredientsString,
+            };
+          }),
+        );
 
         // Merge without clobbering earlier fetch results
         setDrinks((prev) => [...prev, ...custom]);

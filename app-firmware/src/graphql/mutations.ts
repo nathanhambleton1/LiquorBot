@@ -140,6 +140,7 @@ export const createCustomRecipe = /* GraphQL */ `mutation CreateCustomRecipe(
       __typename
     }
     createdAt
+    image
     updatedAt
     owner
     __typename
@@ -164,6 +165,7 @@ export const updateCustomRecipe = /* GraphQL */ `mutation UpdateCustomRecipe(
       __typename
     }
     createdAt
+    image
     updatedAt
     owner
     __typename
@@ -188,6 +190,7 @@ export const deleteCustomRecipe = /* GraphQL */ `mutation DeleteCustomRecipe(
       __typename
     }
     createdAt
+    image
     updatedAt
     owner
     __typename

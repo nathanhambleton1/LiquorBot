@@ -102,6 +102,7 @@ export const getCustomRecipe = /* GraphQL */ `query GetCustomRecipe($id: ID!) {
       __typename
     }
     createdAt
+    image
     updatedAt
     owner
     __typename
@@ -122,6 +123,7 @@ export const listCustomRecipes = /* GraphQL */ `query ListCustomRecipes(
       name
       description
       createdAt
+      image
       updatedAt
       owner
       __typename

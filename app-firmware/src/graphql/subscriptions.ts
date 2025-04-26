@@ -140,6 +140,7 @@ export const onCreateCustomRecipe = /* GraphQL */ `subscription OnCreateCustomRe
       __typename
     }
     createdAt
+    image
     updatedAt
     owner
     __typename
@@ -164,6 +165,7 @@ export const onUpdateCustomRecipe = /* GraphQL */ `subscription OnUpdateCustomRe
       __typename
     }
     createdAt
+    image
     updatedAt
     owner
     __typename
@@ -188,6 +190,7 @@ export const onDeleteCustomRecipe = /* GraphQL */ `subscription OnDeleteCustomRe
       __typename
     }
     createdAt
+    image
     updatedAt
     owner
     __typename

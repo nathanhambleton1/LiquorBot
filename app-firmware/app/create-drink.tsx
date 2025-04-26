@@ -1,13 +1,20 @@
 // -----------------------------------------------------------------------------
-// File: create-drink.tsx
-// Description: Custom‑drink creator with dynamic ingredient rows, delete buttons,
-//              per‑ingredient volume & priority controls, and smart name‑collision
-//              hinting against drinks.json already stored on S3.
+// File: create-drink.tsx  (IMAGE-BUILDER REFACTOR – pre-rendered colours)
+// Description: Custom-drink creator with dynamic ingredient rows **plus**
+//              a modal “drink image builder” that composites a pre-coloured
+//              glass PNG with an optional garnish.  The composite is exported
+//              to PNG, uploaded to S3 via Amplify Storage, and the returned key
+//              is stored in the CustomRecipe record.
 // Author: Nathan Hambleton
-// Updated: April 17 2025
+// Updated: April 25 2025 – replaces colour overlay with 25 assets, modal UI
 // -----------------------------------------------------------------------------
-
-import React, { useState, useEffect, useMemo } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useCallback,
+} from 'react';
 import {
   View,
   Text,
@@ -19,17 +26,101 @@ import {
   FlatList,
   Platform,
   KeyboardAvoidingView,
+  Image,
+  Dimensions,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 
 import { Amplify } from 'aws-amplify';
-import { getUrl } from 'aws-amplify/storage';
+import { getUrl, uploadData } from 'aws-amplify/storage';
 import { generateClient } from 'aws-amplify/api';
 import { createCustomRecipe } from '../src/graphql/mutations';
 import config from '../src/amplifyconfiguration.json';
 
+// ---- Skia ----
+import {
+  Canvas,
+  useImage,
+  Image as SkiaImage,
+} from '@shopify/react-native-skia';
+import { Skia } from '@shopify/react-native-skia';
+
 Amplify.configure(config);
+
+// ---------- CONSTANTS ----------
+// 5 × 5 = 25 colourised glass assets
+const GLASS_COLOUR_ASSETS: any[][] = [
+  // rocks
+  [
+    require('../assets/images/glasses/rocks_red.png'),
+    require('../assets/images/glasses/rocks_yellow.png'),
+    require('../assets/images/glasses/rocks_orange.png'),
+    require('../assets/images/glasses/rocks_green.png'),
+    require('../assets/images/glasses/rocks_blue.png'),
+  ],
+  // highball
+  [
+    require('../assets/images/glasses/highball_red.png'),
+    require('../assets/images/glasses/highball_yellow.png'),
+    require('../assets/images/glasses/highball_orange.png'),
+    require('../assets/images/glasses/highball_green.png'),
+    require('../assets/images/glasses/highball_blue.png'),
+  ],
+  // martini
+  [
+    require('../assets/images/glasses/martini_red.png'),
+    require('../assets/images/glasses/martini_yellow.png'),
+    require('../assets/images/glasses/martini_orange.png'),
+    require('../assets/images/glasses/martini_green.png'),
+    require('../assets/images/glasses/martini_blue.png'),
+  ],
+  // coupe
+  [
+    require('../assets/images/glasses/coupe_red.png'),
+    require('../assets/images/glasses/coupe_yellow.png'),
+    require('../assets/images/glasses/coupe_orange.png'),
+    require('../assets/images/glasses/coupe_green.png'),
+    require('../assets/images/glasses/coupe_blue.png'),
+  ],
+  // margarita
+  [
+    require('../assets/images/glasses/margarita_red.png'),
+    require('../assets/images/glasses/margarita_yellow.png'),
+    require('../assets/images/glasses/margarita_orange.png'),
+    require('../assets/images/glasses/margarita_green.png'),
+    require('../assets/images/glasses/margarita_blue.png'),
+  ],
+];
+
+const GLASS_PLACEHOLDERS = [
+  require('../assets/images/glasses/rocks.png'),
+  require('../assets/images/glasses/highball.png'),
+  require('../assets/images/glasses/martini.png'),
+  require('../assets/images/glasses/coupe.png'),
+  require('../assets/images/glasses/margarita.png'),
+];
+
+const PLACEHOLDER_IMAGE = require('../assets/images/glasses/rocks.png');
+
+const GARNISH_ASSETS = [
+  require('../assets/images/garnishes/lime.png'),
+  require('../assets/images/garnishes/cherry.png'),
+  require('../assets/images/garnishes/orange.png'),
+  require('../assets/images/garnishes/umbrella.png'),
+];
+
+// Per-glass default garnish rectangle – tweak these on your side ✨
+const GARNISH_PLACEMENTS = [
+  { x: 180, y: 50, width: 50, height: 50 }, // rocks
+  { x: 180, y: 40, width: 50, height: 50 }, // highball
+  { x: 140, y: 10, width: 40, height: 40 }, // martini
+  { x: 160, y: 20, width: 45, height: 45 }, // coupe
+  { x: 140, y: 0, width: 45, height: 45 },  // margarita
+];
+
+// Swatch colours (purely for UI)
+const DRINK_COLOURS = ['#d72638', '#f5be41', '#e97451', '#57c84d', '#1e90ff'];
 
 // ---------- TYPES ----------
 interface Ingredient {
@@ -38,50 +129,67 @@ interface Ingredient {
   type: 'Alcohol' | 'Mixer' | 'Sour' | 'Sweet' | 'Misc';
   description: string;
 }
-
 interface RecipeRow {
   id: number;
-  volume: number;   // oz
-  priority: number; // 1‑9
+  volume: number;
+  priority: number;
 }
-
 interface DrinkMeta {
   id: number;
   name: string;
 }
 
-// ---------- MAIN ----------
+// Canvas dims
+const CANVAS_W = 300;
+const CANVAS_H = 300;
+const THUMB = 70;
+
 export default function CreateDrinkScreen() {
   const router = useRouter();
   const client = generateClient();
-  // Drink name
-  const [drinkName, setDrinkName] = useState('');
 
-  // Existing drinks from drinks.json
+  // ---------------- Drink meta ----------------
+  const [drinkName, setDrinkName] = useState('');
   const [allDrinks, setAllDrinks] = useState<DrinkMeta[]>([]);
   const [loadingDrinks, setLoadingDrinks] = useState(true);
 
-  // Ingredient catalogue
+  // ---------------- Ingredients ---------------
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [loadingIngredients, setLoadingIngredients] = useState(false);
 
-  // Form rows
+  // ---------------- Rows ----------------------
   const [rows, setRows] = useState<RecipeRow[]>([
     { id: 0, volume: 1.5, priority: 1 },
   ]);
 
-  // Picker modal
+  // ---------------- Picker modal --------------
   const [pickerVisible, setPickerVisible] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const categories = ['All', 'Alcohol', 'Mixer', 'Sour', 'Sweet', 'Misc'];
 
-  const [showPriorityInfoIndex, setShowPriorityInfoIndex] = useState<number | null>(null);
+  // ---------------- Priority info -------------
+  const [showPriorityInfoIndex, setShowPriorityInfoIndex] =
+    useState<number | null>(null);
+
+  // ---------------- Image builder -------------
+  const [builderVisible, setBuilderVisible] = useState(false);
+  const [glassIdx, setGlassIdx] = useState(0);
+  const [colourIdx, setColourIdx] = useState(0);
+  const [garnishIdx, setGarnishIdx] = useState<number | null>(null);
+  const [imageConfigured, setImageConfigured] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  // Skia images
+  const baseImage = useImage(GLASS_COLOUR_ASSETS[glassIdx][colourIdx]);
+  const garnishImage = useImage(
+    garnishIdx !== null ? GARNISH_ASSETS[garnishIdx] : undefined,
+  );
 
   // ---------- FETCH DATA ----------
   useEffect(() => {
-    // Ingredients first
+    // Ingredient list
     (async () => {
       setLoadingIngredients(true);
       try {
@@ -96,7 +204,7 @@ export default function CreateDrinkScreen() {
       }
     })();
 
-    // Drinks meta (name check)
+    // Drinks (dup-name check)
     (async () => {
       setLoadingDrinks(true);
       try {
@@ -104,14 +212,14 @@ export default function CreateDrinkScreen() {
         const list: DrinkMeta[] = await (await fetch(url)).json();
         setAllDrinks(list);
       } catch (err) {
-        console.error('Error loading drinks list:', err);
+        console.error('Error loading drinks:', err);
       } finally {
         setLoadingDrinks(false);
       }
     })();
   }, []);
 
-  // ---------- NAME‑CONFLICT CHECK ----------
+  // ---------- NAME-CONFLICT CHECK ----------
   const matchingDrink = useMemo(() => {
     if (drinkName.trim() === '') return null;
     const lc = drinkName.trim().toLowerCase();
@@ -126,12 +234,11 @@ export default function CreateDrinkScreen() {
     .filter((i) => i.name.toLowerCase().includes(searchQuery.toLowerCase()))
     .filter((i) => selectedCategory === 'All' || i.type === selectedCategory);
 
-  // ---------- ROW ACTIONS ----------
+  // ---------- ROW ACTIONS ---------- (unchanged)
   const openPicker = (idx: number) => {
     setEditingIndex(idx);
     setPickerVisible(true);
   };
-
   const assignIngredient = (ingredientId: number) => {
     if (editingIndex === null) return;
     const next = [...rows];
@@ -142,80 +249,151 @@ export default function CreateDrinkScreen() {
     setPickerVisible(false);
     setSearchQuery('');
   };
-
   const removeRow = (idx: number) => {
     const next = rows.filter((_, i) => i !== idx);
     setRows(next.length ? next : [{ id: 0, volume: 1.5, priority: 1 }]);
   };
-
-  const adjustVol = (idx: number, delta: number) =>
+  const adjustVol = (idx: number, d: number) =>
     setRows((p) =>
       p.map((r, i) =>
-        i === idx
-          ? { ...r, volume: Math.max(0, Number((r.volume + delta).toFixed(2))) }
-          : r,
+        i === idx ? { ...r, volume: Math.max(0, Number((r.volume + d).toFixed(2))) } : r,
       ),
     );
-
   const setVolDirect = (idx: number, txt: string) => {
     const num = parseFloat(txt);
     if (!isNaN(num)) {
-      setRows((p) =>
-        p.map((r, i) => (i === idx ? { ...r, volume: num } : r)),
-      );
+      setRows((p) => p.map((r, i) => (i === idx ? { ...r, volume: num } : r)));
     }
   };
-
-  const adjustPriority = (idx: number, delta: number) =>
+  const adjustPriority = (idx: number, d: number) =>
     setRows((p) =>
       p.map((r, i) =>
         i === idx
-          ? {
-              ...r,
-              priority: Math.min(9, Math.max(1, r.priority + delta)),
-            }
+          ? { ...r, priority: Math.min(9, Math.max(1, r.priority + d)) }
           : r,
       ),
     );
 
+  // ---------- IMAGE EXPORT & UPLOAD ----------
+  const exportAndUploadImage = useCallback(async (): Promise<string | null> => {
+    if (!baseImage) return null;
+    try {
+      setExporting(true);
+      const surface = Skia.Surface.MakeOffscreen(CANVAS_W, CANVAS_H);
+      if (!surface) throw new Error('Failed to create surface');
+      const ctx = surface.getCanvas();
+      const imgPaint = Skia.Paint();
+
+      // Draw pre-coloured glass
+      ctx.drawImageRect(
+        baseImage,
+        { x: 0, y: 0, width: baseImage.width(), height: baseImage.height() },
+        { x: 0, y: 0, width: CANVAS_W, height: CANVAS_H },
+        imgPaint,
+      );
+
+      // Garnish (optional)
+      if (garnishImage) {
+        const gp = GARNISH_PLACEMENTS[glassIdx];
+        ctx.drawImageRect(
+          garnishImage,
+          { x: 0, y: 0, width: garnishImage.width(), height: garnishImage.height() },
+          gp,
+          imgPaint,
+        );
+      }
+
+      const pngBytes = surface.makeImageSnapshot().encodeToBytes();
+      const key = `drinkImages/${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}.png`;
+
+      await uploadData({
+        key,
+        data: new Uint8Array(pngBytes),
+        options: { contentType: 'image/png' },
+      }).result;
+
+      return key;
+    } catch (err) {
+      console.error('Image export/upload failed:', err);
+      return null;
+    } finally {
+      setExporting(false);
+    }
+  }, [baseImage, garnishImage, glassIdx]);
+
   // ---------- SAVE ----------
   const handleSave = async () => {
-    // Build ingredient list
     const ingredientsInput = rows
-      .filter(r => r.id !== 0)
+      .filter((r) => r.id !== 0)
       .map(({ id, volume, priority }) => ({
-        ingredientID: String(id),   // GraphQL expects ID = string
-        amount: volume,             // Float
-        priority,                   // Int
+        ingredientID: String(id),
+        amount: volume,
+        priority,
       }));
-  
     if (ingredientsInput.length === 0) {
-      alert('Add at least one ingredient before saving.');
+      alert('Add at least one ingredient.');
       return;
     }
-  
+    const imageKey = await exportAndUploadImage();
+    if (!imageKey) {
+      alert('Could not generate drink image.');
+      return;
+    }
     try {
       await client.graphql({
         query: createCustomRecipe,
         variables: {
           input: {
             name: drinkName.trim(),
-            // description field is optional in the schema; add one if you have a UI input
-            ingredients: ingredientsInput,   // ← array (after schema tweak)
+            // @ts-ignore – add “image” to schema first
+            image: imageKey,
+            ingredients: ingredientsInput,
           },
         },
-        authMode: 'userPool',   // omit or change if you use API key / IAM
+        authMode: 'userPool',
       });
-  
-      // success ‑ go back to menu
       router.back();
-    } catch (error) {
-      console.error('Failed to save drink:', error);
-      alert('Something went wrong while saving. Check the console for details.');
+    } catch (err) {
+      console.error('Save failed:', err);
+      alert('Save failed – see console.');
     }
   };
 
-  // ---------- UI ----------
+  /* ────────────────────────────  UI  ──────────────────────────── */
+  const previewCanvas = (
+    <Canvas style={styles.previewCanvasSmall}>
+      {imageConfigured ? (
+        <>
+          {baseImage && (
+            <SkiaImage
+              image={baseImage}
+              x={0}
+              y={0}
+              width={THUMB}
+              height={THUMB}
+            />
+          )}
+          {garnishImage && (
+            <SkiaImage
+              image={garnishImage}
+              x={THUMB * 0.6}
+              y={THUMB * 0.1}
+              width={THUMB * 0.4}
+              height={THUMB * 0.4}
+            />
+          )}
+        </>
+      ) : (
+        <Image
+          source={PLACEHOLDER_IMAGE}
+          style={{ width: THUMB, height: THUMB, resizeMode: 'contain' }}
+        />
+      )}
+    </Canvas>
+  );
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -229,16 +407,29 @@ export default function CreateDrinkScreen() {
         <Ionicons name="close" size={30} color="#DFDCD9" />
       </TouchableOpacity>
 
-      <Text style={styles.headerText}>Custom Drink</Text>
+      <Text style={styles.headerText}>Custom Drink</Text>
 
       <ScrollView
         contentContainerStyle={styles.contentContainer}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* DRINK NAME */}
+        {/* ---------- IMAGE BUILDER ENTRY ---------- */}
+        <View style={styles.imageBuilderEntry}>
+          {previewCanvas}
+          <TouchableOpacity
+            style={styles.buildBtn}
+            onPress={() => setBuilderVisible(true)}
+          >
+            <Text style={styles.buildBtnText}>
+              {imageConfigured ? 'Edit Image' : 'Build Image'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ---------- DRINK NAME ---------- */}
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Drink Name</Text>
+          <Text style={styles.label}>Drink Name</Text>
           <TextInput
             style={[styles.input, styles.drinkNameInput]}
             placeholder="e.g., Vodka Cranberry"
@@ -248,8 +439,7 @@ export default function CreateDrinkScreen() {
           />
           {matchingDrink && (
             <Text style={styles.nameHint}>
-              Heads up — “{matchingDrink.name}” already exists in the menu. Feel
-              free to check it out or continue creating your own version.
+              Heads up — “{matchingDrink.name}” already exists.
             </Text>
           )}
         </View>
@@ -363,18 +553,145 @@ export default function CreateDrinkScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* SAVE */}
+        {/* ---------- SAVE ---------- */}
         <TouchableOpacity
           style={[
             styles.saveButton,
-            drinkName.trim() === '' && { opacity: 0.4 },
+            (drinkName.trim() === '' || exporting) && { opacity: 0.4 },
           ]}
-          disabled={drinkName.trim() === ''}
+          disabled={drinkName.trim() === '' || exporting}
           onPress={handleSave}
         >
-          <Text style={styles.saveButtonText}>Save Drink</Text>
+          <Text style={styles.saveButtonText}>
+            {exporting ? 'Saving…' : 'Save Drink'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* ---------- IMAGE BUILDER MODAL ---------- */}
+      <Modal
+        visible={builderVisible}
+        animationType="slide"
+        onRequestClose={() => setBuilderVisible(false)}
+      >
+        <View style={styles.builderModal}>
+          {/* Header */}
+          <TouchableOpacity
+            style={styles.modalCloseButton}
+            onPress={() => setBuilderVisible(false)}
+          >
+            <Ionicons name="chevron-down" size={30} color="#DFDCD9" />
+          </TouchableOpacity>
+          <Text style={styles.modalHeaderText}>Build Image</Text>
+
+          {/* Preview */}
+          <Canvas style={styles.previewCanvas}>
+            {baseImage && (
+              <SkiaImage
+                image={baseImage}
+                x={0}
+                y={0}
+                width={CANVAS_W}
+                height={CANVAS_H}
+              />
+            )}
+            {garnishImage && (
+              <SkiaImage
+                image={garnishImage}
+                {...GARNISH_PLACEMENTS[glassIdx]}
+              />
+            )}
+          </Canvas>
+
+          {/* Combined Selection Boxes */}
+          <View style={styles.selectionContainer}>
+            {/* Glass picker */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.selectorRow}
+            >
+              {GLASS_COLOUR_ASSETS.map((_, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  onPress={() => setGlassIdx(idx)}
+                  style={[
+                    styles.selectorThumb,
+                    glassIdx === idx && styles.selectedThumb,
+                  ]}
+                >
+                  <Image
+                    source={GLASS_PLACEHOLDERS[idx]}   // ← always the empty glass
+                    style={styles.thumbImage}
+                  />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Colour picker */}
+            <View style={styles.selectorRow}>
+              {DRINK_COLOURS.map((c, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  onPress={() => setColourIdx(idx)}
+                  style={[
+                    styles.colourSwatchContainer,
+                    colourIdx === idx && styles.selectedColourSwatchContainer,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.colourSwatch,
+                      { backgroundColor: c },
+                      colourIdx === idx && styles.selectedColourSwatch,
+                    ]}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Garnish picker */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.selectorRow}
+            >
+              {GARNISH_ASSETS.map((src, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  onPress={() => setGarnishIdx(idx)}
+                  style={[
+                    styles.selectorThumb,
+                    garnishIdx === idx && styles.selectedThumb,
+                  ]}
+                >
+                  <Image source={src} style={styles.garnishThumb} />
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                onPress={() => setGarnishIdx(null)}
+                style={[
+                  styles.selectorThumb,
+                  garnishIdx === null && styles.selectedThumb,
+                ]}
+              >
+                <Ionicons name="ban" size={28} color="#4F4F4F" />
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+
+          {/* Done */}
+          <TouchableOpacity
+            style={styles.doneBtn}
+            onPress={() => {
+              setImageConfigured(true);
+              setBuilderVisible(false);
+            }}
+          >
+            <Text style={styles.doneBtnText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
 
       {/* INGREDIENT PICKER MODAL */}
       <Modal
@@ -511,7 +828,9 @@ export default function CreateDrinkScreen() {
   );
 }
 
-// ---------- STYLES ----------
+/* ────────────────────────────  STYLES  ──────────────────────────── */
+const { width: SCREEN_W } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -523,7 +842,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 55,
     left: 20,
-    zIndex: 999,
+    zIndex: 10,
     padding: 10,
   },
   headerText: {
@@ -534,21 +853,111 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   contentContainer: { paddingVertical: 20 },
-  formGroup: { marginBottom: 20 },
-  label: { color: '#DFDCD9', marginBottom: 5, fontSize: 16 },
-  input: {
-    backgroundColor: '#1F1F1F',
-    color: '#DFDCD9',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16,
+
+  /* ---------- image-builder entry ---------- */
+  imageBuilderEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 25,
   },
+  previewCanvasSmall: {
+    width: THUMB,
+    height: THUMB,
+    backgroundColor: 'transparent',
+    borderRadius: 8,
+  },
+  buildBtn: {
+    marginLeft: 15,
+    backgroundColor: '#1F1F1F',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  buildBtnText: { color: '#DFDCD9', fontSize: 16 },
+
+  /* ---------- builder modal ---------- */
+  builderModal: {
+    flex: 1,
+    backgroundColor: '#141414',
+    padding: 20,
+  },
+  modalCloseButton: { position: 'absolute', top: 30, left: 20, zIndex: 10 },
+  modalHeaderText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#DFDCD9',
+    textAlign: 'center',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  previewCanvas: {
+    width: CANVAS_W,
+    height: CANVAS_H,
+    alignSelf: 'center',
+    borderRadius: 10,
+    backgroundColor: 'transparent',
+    marginTop: 30,
+  },
+  selectorRow: {
+    flexDirection: 'row',
+    marginTop: 30,
+  },
+  selectorThumb: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: '#1F1F1F',
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  selectedThumb: {
+    borderWidth: 2,
+    borderColor: '#CE975E',
+  },
+  thumbImage: { width: 40, height: 40, resizeMode: 'contain' },
+  garnishThumb: { width: 40, height: 40, resizeMode: 'contain' },
+  colourSwatchContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  selectedColourSwatchContainer: {
+    borderWidth: 2,
+    borderColor: '#CE975E', // Gold border
+  },
+  colourSwatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  selectedColourSwatch: {
+    width: 24, // Smaller size for selected color
+    height: 24,
+    borderRadius: 12,
+  },
+  doneBtn: {
+    marginTop: 50,
+    backgroundColor: '#CE975E',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  doneBtnText: { color: '#141414', fontSize: 16, fontWeight: 'bold' },
   drinkNameInput: {
     borderWidth: 2,
     borderColor: '#CE975E', // Gold border
   },
   nameHint: { color: '#4F4F4F', fontSize: 12, marginTop: 5 },
+  selectionContainer: {
+    alignItems: 'center', // Center align items horizontally
+    justifyContent: 'center', // Center align items vertically
+    marginTop: 20, // Optional: Add spacing above the container
+  },
   // rows
   ingredientsSection: { marginBottom: 30 },
   rowContainer: { marginBottom: 20 },
@@ -633,15 +1042,6 @@ const styles = StyleSheet.create({
   saveButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
   // modal
   modalContainer: { flex: 1, backgroundColor: '#141414', padding: 20 },
-  modalCloseButton: { position: 'absolute', top: 30, left: 20, zIndex: 10 },
-  modalHeaderText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#DFDCD9',
-    textAlign: 'center',
-    marginTop: 10,
-    marginBottom: -20,
-  },
   horizontalPickerContainer: { alignItems: 'center', paddingVertical: 5 },
   horizontalPicker: { flexDirection: 'row', alignItems: 'center' },
   categoryButton: {
@@ -716,5 +1116,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 20,
     fontStyle: 'italic',
+  },
+  formGroup: {                     // <<  NEW
+    marginBottom: 20,
+  },
+  label: {                         // <<  NEW
+    color: '#DFDCD9',
+    marginBottom: 5,
+    fontSize: 16,
+  },
+  input: {                         // <<  NEW
+    backgroundColor: '#1F1F1F',
+    color: '#DFDCD9',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    fontSize: 16,
   },
 });
