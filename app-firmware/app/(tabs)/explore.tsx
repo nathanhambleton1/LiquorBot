@@ -1,54 +1,38 @@
 // -----------------------------------------------------------------------------
-// File: explore.tsx
-// Description: “Explore” page – showcases themed *Recipe Books* (ingredient
-//              load-outs) that unlock sets of cocktails.  Books are generated
-//              dynamically from drinks.json + ingredients.json and rendered
-//              as scrollable cards that open a modal with details.
-// Author: Nathan Hambleton
-// Updated: Apr 26 2025 – infinite-loop drink carousel + auto-scroll
+// File:   explore.tsx
+// Purpose: Explore page – themed Recipe Books (≤20 % overlap per *section*),
+//          per-account persistence, manual refresh button.
 // -----------------------------------------------------------------------------
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Dimensions,
-  Modal,
-  FlatList,
-  Animated,
-  Easing,
-  Platform,
-  UIManager,
-  ActivityIndicator,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions,
+  Modal, FlatList, Animated, Easing, Platform, UIManager, ActivityIndicator,
+  NativeScrollEvent, NativeSyntheticEvent,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Amplify } from 'aws-amplify';
 import { getUrl } from 'aws-amplify/storage';
+import { getCurrentUser } from '@aws-amplify/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import config from '../../src/amplifyconfiguration.json';
 
 Amplify.configure(config);
-if (Platform.OS === 'android') {
+if (Platform.OS === 'android')
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
-}
 
-/* ------------------------------ TYPES ------------------------------ */
+/* -------------------------------------------------------------------------- */
+/*                                TYPES                                       */
+/* -------------------------------------------------------------------------- */
 type Drink = {
   id: number;
   name: string;
   category: string;
   description?: string;
   image: string;
-  ingredients?: string; // “id:amt:prio,…”
+  ingredients?: string;              // “id:amt:prio,…”
 };
-
 type Ingredient = { id: number; name: string; type: string };
-
 type RecipeBook = {
   id: string;
   name: string;
@@ -58,153 +42,178 @@ type RecipeBook = {
   image: string;
 };
 
-/* --------------------------- CONSTANTS ----------------------------- */
+/* -------------------------------------------------------------------------- */
+/*                               CONSTANTS                                    */
+/* -------------------------------------------------------------------------- */
 const MAX_INGS      = 15;
 const MIN_DRINKS    = 3;
-const CAROUSEL_LOOP = 30;     // duplicate list this many times = “infinite”
-const ITEM_W        = 112;    // drink image width + right-margin
-const AUTO_SPEED    = 36;     // px per second (increased for faster scrolling)
+const OVERLAP_CAP   = 0.20;   // per-section
+const CAROUSEL_LOOP = 30;
+const ITEM_W        = 112;
+const AUTO_SPEED    = 36;
 const placeholder   =
   'https://d3jj0su0y4d6lr.cloudfront.net/placeholder_drink.png';
 
-/* --------------------- INFINITE DRINK CAROUSEL --------------------- */
-function InfiniteDrinkCarousel({ drinks }: { drinks: Drink[] }) {
-    if (drinks.length === 0) return null;
-  
-    const data = useMemo(
-      () => Array.from({ length: CAROUSEL_LOOP }).flatMap(() => drinks),
-      [drinks]
-    );
-  
-    /* refs ------------------------------------------------------------ */
-    const listRef     = useRef<FlatList>(null);
-    const offsetRef   = useRef(0);
-    const valRef      = useRef(new Animated.Value(0)).current; // ticker value
-    const loopRef     = useRef<Animated.CompositeAnimation | null>(null);
-    const resumeTO    = useRef<NodeJS.Timeout | null>(null);   // resume timer
-  
-    /* initial centering ---------------------------------------------- */
-    useEffect(() => {
-      const mid = Math.floor(data.length / 2);
-      requestAnimationFrame(() =>
-        listRef.current?.scrollToIndex({ index: mid, animated: false })
-      );
-    }, [data]);
-  
-    /* helper: start / stop loop -------------------------------------- */
-    const startLoop = () => {
-      loopRef.current = Animated.loop(
-        Animated.timing(valRef, {
-          toValue: 1,
-          duration: 1000,
-          easing: Easing.linear,
-          useNativeDriver: false,
-        })
-      );
-      loopRef.current.start();
-    };
-    const stopLoop = () => loopRef.current?.stop();
-  
-    /* auto-scroll driver --------------------------------------------- */
-    useEffect(() => {
-      startLoop();
-      const id = valRef.addListener(() => {
-        offsetRef.current += AUTO_SPEED / 60;
-        listRef.current?.scrollToOffset({
-          offset: offsetRef.current,
-          animated: false,
-        });
-      });
-      return () => {
-        valRef.removeListener(id);
-        stopLoop();
-      };
-    }, []);
-  
-    /* keep pointer centred ------------------------------------------- */
-    const handleScroll = ({
-      nativeEvent: { contentOffset },
-    }: NativeSyntheticEvent<NativeScrollEvent>) => {
-      offsetRef.current = contentOffset.x;
-  
-      const total = data.length * ITEM_W;
-      const pad   = drinks.length * ITEM_W;
-  
-      if (contentOffset.x < pad) {
-        offsetRef.current += pad * (CAROUSEL_LOOP / 2);
-        listRef.current?.scrollToOffset({ offset: offsetRef.current, animated: false });
-      } else if (contentOffset.x > total - pad) {
-        offsetRef.current -= pad * (CAROUSEL_LOOP / 2);
-        listRef.current?.scrollToOffset({ offset: offsetRef.current, animated: false });
+/* ------------------- tiny helpers ------------------- */
+const shuffle = <T,>(arr: T[]) => {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+const parseIngIds = (d: Drink) =>
+  d.ingredients
+    ? d.ingredients.split(',').map((c) => +c.split(':')[0]).filter(Number.isFinite)
+    : [];
+
+/* -------------------------------------------------------------------------- */
+/*                      PER-SECTION book builder (≤20 % overlap)              */
+/* -------------------------------------------------------------------------- */
+function buildBookDistinct(
+  pool: Drink[],
+  sectionUsed: Set<number>,
+  id: string,
+  name: string,
+  desc: string
+): RecipeBook | null {
+  if (!pool.length) return null;
+
+  const uniquePool = pool.filter((d) => !sectionUsed.has(d.id));
+  const dupPool    = pool.filter((d) => sectionUsed.has(d.id));
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const ordered = [...shuffle(uniquePool), ...shuffle(dupPool)];
+    const sel: Drink[] = [];
+    const ingSet = new Set<number>();
+
+    for (const d of ordered) {
+      const nextIng = new Set([...ingSet, ...parseIngIds(d)]);
+      if (nextIng.size > MAX_INGS) continue;
+
+      const dupCntIfAdd =
+        (sel.filter((x) => sectionUsed.has(x.id)).length +
+          (sectionUsed.has(d.id) ? 1 : 0));
+      const dupRatio = dupCntIfAdd / (sel.length + 1);
+
+      if (dupRatio <= OVERLAP_CAP) {
+        sel.push(d);
+        nextIng.forEach((id) => ingSet.add(id));
+        if (sel.length >= 8 || ingSet.size >= MAX_INGS) break;
       }
-    };
-  
-    /* pause on touch, resume after user stops ------------------------ */
-    const handleTouchStart = () => {
-      stopLoop();
-      if (resumeTO.current) clearTimeout(resumeTO.current);
-    };
-  
-    const scheduleResume = () => {
-      if (resumeTO.current) clearTimeout(resumeTO.current);
-      resumeTO.current = setTimeout(() => {
-        valRef.setValue(0); // reset ticker
-        startLoop();
-      }, 500); // resume after 1.2 s of inactivity
-    };
-  
-    /* renderer -------------------------------------------------------- */
-    const renderItem = ({ item }: { item: Drink }) => (
-      <View style={styles.modalDrink}>
-        <Image source={{ uri: item.image }} style={styles.modalDrinkImg} />
-        <Text style={styles.modalDrinkName}>{item.name}</Text>
-      </View>
-    );
-  
-    return (
-      <FlatList
-        ref={listRef}
-        data={data}
-        keyExtractor={(_, i) => String(i)}
-        renderItem={renderItem}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        getItemLayout={(_, i) => ({ length: ITEM_W, offset: i * ITEM_W, index: i })}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        /* user-interaction callbacks */
-        onTouchStart={handleTouchStart}
-        onScrollEndDrag={scheduleResume}
-        onMomentumScrollEnd={scheduleResume}
-        contentContainerStyle={{ paddingHorizontal: 0 }}
-      />
-    );
+    }
+
+    if (sel.length >= MIN_DRINKS) {
+      sel.forEach((d) => sectionUsed.add(d.id));
+      return {
+        id,
+        name,
+        description: desc,
+        drinks: sel,
+        ingredientIds: [...ingSet],
+        image: sel[0]?.image ?? placeholder,
+      };
+    }
+  }
+  return null;
 }
 
-/* ------------------------ BOOK  MODAL ------------------------------ */
+/* -------------------------------------------------------------------------- */
+/*                INFINITE DRINK CAROUSEL  (unchanged apart from key tweaks)  */
+/* -------------------------------------------------------------------------- */
+function InfiniteDrinkCarousel({ drinks }: { drinks: Drink[] }) {
+  if (!drinks.length) return null;
+  const data   = useMemo(() => Array.from({ length: CAROUSEL_LOOP }).flatMap(() => drinks), [drinks]);
+  const list   = useRef<FlatList>(null);
+  const offset = useRef(0);
+  const tick   = useRef(new Animated.Value(0)).current;
+  const loop   = useRef<Animated.CompositeAnimation | null>(null);
+  const resume = useRef<NodeJS.Timeout | null>(null);
+
+  const start = () => {
+    loop.current = Animated.loop(
+      Animated.timing(tick, { toValue: 1, duration: 1000, easing: Easing.linear, useNativeDriver: false })
+    );
+    loop.current.start();
+  };
+  const stop = () => loop.current?.stop();
+
+  useEffect(() => {
+    list.current?.scrollToIndex({ index: Math.floor(data.length / 2), animated: false });
+    start();
+    const id = tick.addListener(() => {
+      offset.current += AUTO_SPEED / 60;
+      list.current?.scrollToOffset({ offset: offset.current, animated: false });
+    });
+    return () => { tick.removeListener(id); stop(); };
+  }, [data]);
+
+  const wrap = ({ nativeEvent: { contentOffset } }: NativeSyntheticEvent<NativeScrollEvent>) => {
+    offset.current = contentOffset.x;
+    const pad = drinks.length * ITEM_W;
+    const total = data.length * ITEM_W;
+    if (contentOffset.x < pad) {
+      offset.current += pad * (CAROUSEL_LOOP / 2);
+      list.current?.scrollToOffset({ offset: offset.current, animated: false });
+    } else if (contentOffset.x > total - pad) {
+      offset.current -= pad * (CAROUSEL_LOOP / 2);
+      list.current?.scrollToOffset({ offset: offset.current, animated: false });
+    }
+  };
+
+  const pause = () => { stop(); if (resume.current) clearTimeout(resume.current); };
+  const onEnd = () => {
+    if (resume.current) clearTimeout(resume.current);
+    resume.current = setTimeout(() => { tick.setValue(0); start(); }, 500);
+  };
+
+  return (
+    <FlatList
+      ref={list}
+      data={data}
+      keyExtractor={(_, i) => String(i)}
+      horizontal
+      renderItem={({ item }) => (
+        <View style={styles.modalDrink}>
+          <Image source={{ uri: item.image }} style={styles.modalDrinkImg} />
+          <Text style={styles.modalDrinkName}>{item.name}</Text>
+        </View>
+      )}
+      getItemLayout={(_, i) => ({ length: ITEM_W, offset: i * ITEM_W, index: i })}
+      showsHorizontalScrollIndicator={false}
+      onScroll={wrap}
+      scrollEventThrottle={16}
+      onTouchStart={pause}
+      onScrollEndDrag={onEnd}
+      onMomentumScrollEnd={onEnd}
+    />
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*                            UI bits (modal/card)                            */
+/* -------------------------------------------------------------------------- */
 interface BookModalProps {
   book: RecipeBook | null;
   visible: boolean;
   onClose: () => void;
   ingredientMap: Map<number, Ingredient>;
 }
-function BookModal({ book, visible, onClose, ingredientMap }: BookModalProps) {
+const BookModal = ({ book, visible, onClose, ingredientMap }: BookModalProps) => {
   if (!book) return null;
-
   return (
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <TouchableOpacity onPress={onClose} style={styles.modalClose}>
+          <TouchableOpacity style={styles.modalClose} onPress={onClose}>
             <Ionicons name="close" size={26} color="#DFDCD9" />
           </TouchableOpacity>
-
           <Text style={styles.modalTitle}>{book.name}</Text>
           <Text style={styles.modalSubtitle}>{book.description}</Text>
 
           <Text style={styles.sectionHeader}>Included Drinks</Text>
           {book.drinks.length <= 3 ? (
-            /* static row when ≤3 drinks */
             <View style={{ flexDirection: 'row' }}>
               {book.drinks.map((d) => (
                 <View key={d.id} style={styles.modalDrink}>
@@ -214,135 +223,112 @@ function BookModal({ book, visible, onClose, ingredientMap }: BookModalProps) {
               ))}
             </View>
           ) : (
-            /* infinite looping carousel */
             <InfiniteDrinkCarousel drinks={book.drinks} />
           )}
 
-          <Text style={[styles.sectionHeader, { marginTop: 20 }]}>
-            Ingredients to Load
-          </Text>
-          <View style={styles.ingList}>
-            {book.ingredientIds.map((id) => (
-              <Text key={id} style={styles.ingItem}>
-                • {ingredientMap.get(id)?.name ?? `#${id}`}
-              </Text>
-            ))}
-          </View>
+          <Text style={[styles.sectionHeader, { marginTop: 20 }]}>Ingredients to Load</Text>
+          {book.ingredientIds.map((id) => (
+            <Text key={id} style={styles.ingItem}>
+              • {ingredientMap.get(id)?.name ?? `#${id}`}
+            </Text>
+          ))}
         </View>
       </View>
     </Modal>
   );
-}
+};
 
-/* ----------------------------- CARD ------------------------------- */
 interface BookCardProps { book: RecipeBook; onPress: () => void }
-function BookCard({ book, onPress }: BookCardProps) {
-  return (
-    <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={styles.bookTile}>
-      <View style={styles.bookCard}>
-        <Image source={{ uri: book.image }} style={styles.bookImage} />
-        <View style={styles.bookOverlay} />
-        <Text style={styles.bookTitle}>{book.name}</Text>
-        <Text style={styles.bookSubtitle}>
-          {book.drinks.length} drinks · {book.ingredientIds.length} ingredients
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
+const BookCard = ({ book, onPress }: BookCardProps) => (
+  <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={styles.bookTile}>
+    <View style={styles.bookCard}>
+      <Image source={{ uri: book.image }} style={styles.bookImage} />
+      <View style={styles.bookOverlay} />
+      <Text style={styles.bookTitle}>{book.name}</Text>
+      <Text style={styles.bookSubtitle}>
+        {book.drinks.length} drinks · {book.ingredientIds.length} ingredients
+      </Text>
+    </View>
+  </TouchableOpacity>
+);
 
-/* ------------------------- MAIN EXPLORE TAB ------------------------ */
+/* -------------------------------------------------------------------------- */
+/*                           MAIN EXPLORE SCREEN                              */
+/* -------------------------------------------------------------------------- */
 export default function ExploreScreen() {
-  const [drinks,      setDrinks]      = useState<Drink[]>([]);
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [activeBook,  setActiveBook]  = useState<RecipeBook | null>(null);
-  const [modalVis,    setModalVis]    = useState(false);
-
-  /* ---------- fetch data ---------- */
-  useEffect(() => {
-    (async () => {
-      try {
-        const [drUrl, ingUrl] = await Promise.all([
-          getUrl({ key: 'drinkMenu/drinks.json' }),
-          getUrl({ key: 'drinkMenu/ingredients.json' }),
-        ]);
-        const [drRes, ingRes] = await Promise.all([fetch(drUrl.url), fetch(ingUrl.url)]);
-        setDrinks(await drRes.json());
-        setIngredients(await ingRes.json());
-      } catch (e) { console.error(e); } finally { setLoading(false); }
-    })();
-  }, []);
-
+  const [drinks,         setDrinks]   = useState<Drink[]>([]);
+  const [ingredients,    setIngs]     = useState<Ingredient[]>([]);
+  const [userId,         setUserId]   = useState('anon');   // “anon” for guests
+  const [books,          setBooks]    = useState<[string, RecipeBook[]][] | null>(null);
+  const [loading,        setLoading]  = useState(true);
+  const [modalBook,      setModal]    = useState<RecipeBook | null>(null);
+  const [modalVis,       setModalVis] = useState(false);
   const ingredientMap = useMemo(() => {
     const m = new Map<number, Ingredient>();
-    ingredients.forEach((ing) => m.set(ing.id, ing));
+    ingredients.forEach((i) => m.set(i.id, i));
     return m;
   }, [ingredients]);
 
-  /* ---------- build recipe books ---------- */
-  const booksByCategory = useMemo(() => {
-    if (!drinks.length) return [];
+  /* 1. fetch drinks + ingredients */
+  useEffect(() => {
+    (async () => {
+      try {
+        const [dUrl, iUrl] = await Promise.all([
+          getUrl({ key: 'drinkMenu/drinks.json' }),
+          getUrl({ key: 'drinkMenu/ingredients.json' }),
+        ]);
+        const [dRes, iRes] = await Promise.all([fetch(dUrl.url), fetch(iUrl.url)]);
+        setDrinks(await dRes.json());
+        setIngs(await iRes.json());
+      } catch (e) { console.error(e); }
+    })();
+  }, []);
 
-    const ingIds = (d: Drink) =>
-      d.ingredients
-        ? d.ingredients.split(',').map((c) => parseInt(c.split(':')[0], 10)).filter(Number.isFinite)
-        : [];
+  /* 2. fetch current user id */
+  useEffect(() => {
+    (async () => {
+      try {
+        const { username } = await getCurrentUser();
+        setUserId(username || 'anon');
+      } catch { /* guest */ }
+    })();
+  }, []);
 
-    const catMap = new Map<string, Drink[]>();
-    drinks.forEach((d) => {
-      const key = d.category?.trim() || 'Mixed & Themed';
-      if (!catMap.has(key)) catMap.set(key, []);
-      catMap.get(key)!.push(d);
-    });
+  /* 3. load from cache or generate */
+  useEffect(() => {
+    if (!drinks.length || !ingredients.length || !userId) return;
 
-    const result: [string, RecipeBook[]][] = [];
-    catMap.forEach((catDrinks, cat) => {
-      const books: RecipeBook[] = [];
-      let working: Drink[]   = [];
-      let ingSet  = new Set<number>();
-
-      const flush = (idx: number) => {
-        if (working.length >= MIN_DRINKS) {
-          books.push({
-            id: `${cat.toLowerCase().replace(/\s+/g, '_')}_${idx}`,
-            name: `${cat} #${idx + 1}`,
-            description: `Load-out for ${cat.toLowerCase()} cocktails.`,
-            drinks: working,
-            ingredientIds: Array.from(ingSet),
-            image: working[0]?.image ?? placeholder,
-          });
-        } else if (books.length) {
-          // merge leftovers forward
-          const prev = books[books.length - 1];
-          const merged = new Set([...prev.ingredientIds, ...ingSet]);
-          if (merged.size <= MAX_INGS) {
-            prev.drinks.push(...working);
-            prev.ingredientIds = Array.from(merged);
-          }
+    const storageKey = `exploreBooks_${userId}`;
+    (async () => {
+      try {
+        const cached = await AsyncStorage.getItem(storageKey);
+        if (cached) {
+          setBooks(JSON.parse(cached));
+          setLoading(false);
+          return;
         }
-        working = [];
-        ingSet  = new Set();
-      };
+      } catch { /* ignore parse errors */ }
 
-      catDrinks.forEach((drink) => {
-        const ids = ingIds(drink);
-        const union = new Set([...ingSet, ...ids]);
-        if (union.size > MAX_INGS) flush(books.length);
-        ids.forEach((id) => ingSet.add(id));
-        working.push(drink);
-      });
-      flush(books.length);
+      const built = generateBooks(drinks, ingredientMap);
+      setBooks(built);
+      setLoading(false);
+      try { await AsyncStorage.setItem(storageKey, JSON.stringify(built)); } catch {}
+    })();
+  }, [drinks, ingredients, userId]);
 
-      const valid = books.filter((b) => b.drinks.length >= MIN_DRINKS);
-      if (valid.length) result.push([cat, valid]);
-    });
+  /* ---------------- refresh handler ---------------- */
+  const handleRefresh = useCallback(async () => {
+    setLoading(true);
+    setBooks(null);
+    try { await AsyncStorage.removeItem(`exploreBooks_${userId}`); } catch {}
+    const rebuilt = generateBooks(drinks, ingredientMap);
+    setBooks(rebuilt);
+    setLoading(false);
+    try { await AsyncStorage.setItem(`exploreBooks_${userId}`, JSON.stringify(rebuilt)); } catch {}
+  }, [drinks, ingredientMap, userId]);
 
-    return result.sort((a, b) => a[0].localeCompare(b[0]));
-  }, [drinks]);
-
-  /* ---------- render ---------- */
-  if (loading) {
+  /* ---------------- UI ---------------- */
+  if (loading || !books) {
     return (
       <View style={styles.loadingScreen}>
         <ActivityIndicator size="large" color="#CE975E" />
@@ -354,22 +340,28 @@ export default function ExploreScreen() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.header}>Explore</Text>
+        {/* Header row with refresh button */}
+        <View style={styles.headerRow}>
+          <Text style={styles.header}>Explore</Text>
+          <TouchableOpacity onPress={handleRefresh} style={styles.refreshButton}>
+            <Ionicons name="refresh" size={26} color="#CE975E" />
+          </TouchableOpacity>
+        </View>
 
-        {booksByCategory.map(([cat, books]) => (
-          <View key={cat}>
+        {books.map(([sec, list]) => (
+          <View key={sec}>
             <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>{cat}</Text>
+              <Text style={styles.sectionTitle}>{sec}</Text>
             </View>
 
             <FlatList
               horizontal
-              data={books}
+              data={list}
               keyExtractor={(b) => b.id}
               renderItem={({ item }) => (
                 <BookCard
                   book={item}
-                  onPress={() => { setActiveBook(item); setModalVis(true); }}
+                  onPress={() => { setModal(item); setModalVis(true); }}
                 />
               )}
               showsHorizontalScrollIndicator={false}
@@ -380,7 +372,7 @@ export default function ExploreScreen() {
       </ScrollView>
 
       <BookModal
-        book={activeBook}
+        book={modalBook}
         visible={modalVis}
         onClose={() => setModalVis(false)}
         ingredientMap={ingredientMap}
@@ -389,37 +381,172 @@ export default function ExploreScreen() {
   );
 }
 
-/* ------------------------------ STYLES ----------------------------- */
+/* -------------------------------------------------------------------------- */
+/*              generateBooks – builds all three sections once                */
+/* -------------------------------------------------------------------------- */
+function generateBooks(
+    drinks: Drink[],
+    ingredientMap: Map<number, Ingredient>
+    ): [string, RecipeBook[]][] {
+    /* ---------- helper for spirit name ---------- */
+    const spiritOf = (d: Drink) => {
+        for (const id of parseIngIds(d)) {
+        const i = ingredientMap.get(id);
+        if (i?.type?.toLowerCase() === 'spirit') return i.name.toLowerCase();
+        }
+        return null;
+    };
+
+  /* 1 ▸ Starter Kits */
+  const starterLabels = ['vodka', 'rum', 'tequila', 'gin', 'whiskey'];
+  const starterUsed   = new Set<number>();
+  const starterBooks: RecipeBook[] = [];
+
+  starterLabels.forEach((spirit) => {
+    const pool = drinks.filter((d) => spiritOf(d)?.includes(spirit));
+    const b = buildBookDistinct(
+      pool,
+      starterUsed,
+      `starter_${spirit}`,
+      `${spirit[0].toUpperCase()}${spirit.slice(1)} Starter Kit`,
+      `Load-out for all things ${spirit}.`
+    );
+    if (b) starterBooks.push(b);
+  });
+  while (starterBooks.length < 10) {
+    const extra = buildBookDistinct(
+      drinks,
+      starterUsed,
+      `starter_extra_${starterBooks.length}`,
+      `Starter Mix #${starterBooks.length + 1}`,
+      'Additional starter kit.'
+    );
+    if (!extra) break;
+    starterBooks.push(extra);
+  }
+
+  /* 2 ▸ Bartender Favorites (by category label) */
+  const favUsed  = new Set<number>();
+  const favBooks: RecipeBook[] = [];
+  const catMap = new Map<string, Drink[]>();
+  drinks.forEach((d) => {
+    const key = d.category?.trim() || 'Misc';
+    (catMap.get(key) ?? catMap.set(key, []).get(key)!)?.push(d);
+  });
+  catMap.forEach((pool, cat) => {
+    const b = buildBookDistinct(
+      pool,
+      favUsed,
+      `fav_${cat.toLowerCase().replace(/\s+/g, '_')}`,
+      `${cat} Picks`,
+      `Popular ${cat.toLowerCase()} cocktails.`
+    );
+    if (b) favBooks.push(b);
+  });
+  while (favBooks.length < 4) {
+    const extra = buildBookDistinct(
+      drinks,
+      favUsed,
+      `fav_auto_${favBooks.length}`,
+      `Fan Favourites #${favBooks.length + 1}`,
+      'Randomly generated favourites.'
+    );
+    if (!extra) break;
+    favBooks.push(extra);
+  }
+
+  /* 3 ▸ Party Packs – must include ≥3 spirit bases */
+    const partyBooks: RecipeBook[] = [];
+    const names      = shuffle([
+    'Game-Night Mix', 'Game-Day Pack', 'Brunch Favorites',
+    'Late-Night Blend', 'Party Essentials', 'Classics Party Pack',
+    ]);
+
+    const spiritSet = (list: Drink[]) =>
+    new Set(list.map(spiritOf).filter(Boolean) as string[]);
+
+    let idx = 0, attempts = 0, bestSoFar: RecipeBook | null = null;
+
+    while (partyBooks.length < 4 && attempts < 30) {
+    /* NEW — fresh “used” set so packs can overlap each other */
+    const b = buildBookDistinct(
+        drinks,
+        new Set<number>(),                      // ← was partyUsed
+        `party_${idx}`,
+        names[idx % names.length],
+        'Mixed-spirit party load-out.',
+    );
+
+    attempts++;
+    idx++;
+
+    if (!b) break;                            // nothing buildable this round
+
+    const bases = spiritSet(b.drinks);
+
+    /* keep track of the most diverse pack seen */
+    if (!bestSoFar || bases.size > spiritSet(bestSoFar.drinks).size)
+        bestSoFar = b;
+
+    /* skip packs that don’t hit the ≥3-spirit rule */
+    if (bases.size < 3) continue;
+
+    partyBooks.push(b);
+    }
+
+    /* guarantee 1 pack, then try to grow to at least 3 */
+    if (partyBooks.length === 0 && bestSoFar) partyBooks.push(bestSoFar);
+    while (partyBooks.length < 3) {
+    const extra = buildBookDistinct(
+        drinks,
+        new Set<number>(),                      // ← fresh again
+        `party_auto_${partyBooks.length}`,
+        `Party Mix #${partyBooks.length + 1}`,
+        'Extra party load-out.',
+    );
+    if (!extra || spiritSet(extra.drinks).size < 3) break;
+    partyBooks.push(extra);
+    }
+    return [
+        ['Starter Kits',        starterBooks],
+        ['Bartender Favorites', favBooks],
+        ['Party Packs',         partyBooks],
+      ];
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                   STYLES                                   */
+/* -------------------------------------------------------------------------- */
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_W = SCREEN_WIDTH * 0.55;
-const CARD_H = CARD_W * 0.68;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#141414' },
   scroll:    { paddingBottom: 100 },
-  header:    {
-    color: '#DFDCD9', fontSize: 36, fontWeight: 'bold',
-    paddingTop: 80, paddingHorizontal: 20, marginBottom: 10,
-  },
+
+  /* header + refresh */
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between',
+               alignItems: 'center', paddingHorizontal: 20,
+               paddingTop: 80, marginBottom: 10 },
+  header:    { color: '#DFDCD9', fontSize: 36, fontWeight: 'bold' },
+  refreshButton: { padding: 6 },
 
   /* section */
-  sectionRow:   { flexDirection: 'row', justifyContent: 'space-between',
-                  alignItems: 'center', paddingHorizontal: 20,
-                  marginTop: 12, marginBottom: 4 },
+  sectionRow:   { flexDirection: 'row', alignItems: 'center',
+                  paddingHorizontal: 20, marginTop: 12, marginBottom: 4 },
   sectionTitle: { color: '#DFDCD9', fontSize: 24, fontWeight: '600' },
 
-  /* cards */
+  /* card row */
   booksRow: { paddingLeft: 20, paddingVertical: 10, paddingRight: 10 },
   bookTile: {
     marginRight: 14, borderRadius: 12, backgroundColor: '#1F1F1F', padding: 10,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
   },
-  bookCard:   { width: CARD_W, height: CARD_H, borderRadius: 8,
+  bookCard:   { width: CARD_W, height: CARD_W * 0.68, borderRadius: 8,
                 overflow: 'hidden', backgroundColor: '#1F1F1F' },
   bookImage:  { width: '100%', height: '100%', resizeMode: 'contain' },
-  bookOverlay:{ ...StyleSheet.absoluteFillObject,
-                backgroundColor: 'rgba(0,0,0,0.35)' },
+  bookOverlay:{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
   bookTitle:  { position: 'absolute', bottom: 40, left: 12, right: 12,
                 color: '#DFDCD9', fontSize: 20, fontWeight: '600' },
   bookSubtitle:{ position: 'absolute', bottom: 18, left: 12, right: 12,
@@ -436,17 +563,14 @@ const styles = StyleSheet.create({
   modalContent:{ width: '100%', backgroundColor: '#1F1F1F',
                  borderRadius: 12, padding: 20 },
   modalClose:  { position: 'absolute', top: 15, right: 15, zIndex: 2 },
-  modalTitle:  { color: '#DFDCD9', fontSize: 24,
-                 fontWeight: '600', marginBottom: 4 },
+  modalTitle:  { color: '#DFDCD9', fontSize: 24, fontWeight: '600', marginBottom: 4 },
   modalSubtitle:{ color: '#4F4F4F', marginBottom: 16 },
   sectionHeader:{ color: '#CE975E', fontSize: 18, marginBottom: 8 },
 
   modalDrink:     { marginRight: 12, width: 100 },
-  modalDrinkImg:  { width: 100, height: 100,
-                    borderRadius: 8, marginBottom: 4, backgroundColor: 'transparent' },
+  modalDrinkImg:  { width: 100, height: 100, borderRadius: 8, marginBottom: 4,
+                    backgroundColor: 'transparent' },
   modalDrinkName: { color: '#DFDCD9', fontSize: 12, textAlign: 'center' },
 
-  ingList: { marginTop: 4 },
   ingItem: { color: '#DFDCD9', fontSize: 14, marginBottom: 2 },
 });
-/* -------------------------------------------------------------------------- */
