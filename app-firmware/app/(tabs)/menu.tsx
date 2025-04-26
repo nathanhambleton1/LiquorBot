@@ -44,11 +44,10 @@ import { generateClient } from 'aws-amplify/api';
 import {
   createLikedDrink,
   deleteLikedDrink,
-  createPouredDrink,      // 👈 NEW
+  createPouredDrink,
 } from '../../src/graphql/mutations';
 import {
   listLikedDrinks,
-  listCustomRecipes,
 } from '../../src/graphql/queries';
 import { getCurrentUser } from 'aws-amplify/auth';
 import { getUrl } from 'aws-amplify/storage';
@@ -71,6 +70,25 @@ if (Platform.OS === 'android') {
 }
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
+
+const LIST_CUSTOM_RECIPES_WITH_ING = /* GraphQL */ `
+  query ListCustomRecipes {
+    listCustomRecipes {
+      items {
+        id
+        name
+        description
+        image
+        ingredients {
+          ingredientID
+          amount
+          priority
+        }
+        createdAt
+      }
+    }
+  }
+`;
 
 // --------------------------- TYPES ---------------------------
 type Drink = {
@@ -352,21 +370,24 @@ function DrinkItem({
                   ],
                 }),
               },
-              (!isMakeable || logging) && styles.disabledButton,
+              (!isMakeable || logging || !isConnected) && styles.disabledButton,
             ]}
             onPress={handlePourDrink}
-            disabled={logging || !isMakeable}
+            disabled={logging || !isMakeable || !isConnected}
           >
             <View style={styles.buttonContent}>
               <Text style={[
                 styles.buttonText,
-                (!isMakeable || logging) && styles.disabledButtonText,
+                (!isMakeable || logging || !isConnected) && styles.disabledButtonText,
               ]}>
-                {!isMakeable
-                  ? 'Missing Ingredients'
-                  : logging
-                  ? 'Pouring…'
-                  : 'Pour Drink'}
+                { !isConnected
+                    ? 'Check Connection'
+                    : !isMakeable
+                    ? 'Missing Ingredients'
+                    : logging
+                    ? 'Pouring…'
+                    : 'Pour Drink'
+                }
               </Text>
               {logging && (
                 <ActivityIndicator size="small" color="#FFFFFF" style={styles.spinner} />
@@ -544,30 +565,27 @@ export default function MenuScreen() {
     (async () => {
       try {
         const res = await client.graphql({
-          query: listCustomRecipes,
+          query: LIST_CUSTOM_RECIPES_WITH_ING,
           authMode: 'userPool', // owner‑based auth will return only the user’s items
         });
 
         const placeholder =
           'https://d3jj0su0y4d6lr.cloudfront.net/placeholder_drink.png';
 
-        const items = res.data?.listCustomRecipes?.items ?? [];
+        const items = ('data' in res && res.data?.listCustomRecipes?.items) ?? [];
 
         const custom: Drink[] = await Promise.all(
           items.map(async (item: any, idx: number): Promise<Drink> => {
             const numericId = 1_000_000 + idx;
 
             // turn Array<{ingredientID,amount,priority}> → "id:amt:prio,…"
-            const ingredientsString = Array.isArray(item.ingredients)
+            const ingArr: any[] = Array.isArray(item.ingredients)
               ? item.ingredients
-                  .map(
-                    (ri: any) =>
-                      `${Number(ri.ingredientID)}:${Number(ri.amount)}:${Number(
-                        ri.priority ?? 1,
-                      )}`,
-                  )
-                  .join(',')
-              : '';
+              : [];                 // safety – but it will be an array
+
+            const ingredientsString = ingArr
+              .map(ri => `${Number(ri.ingredientID)}:${Number(ri.amount)}:${Number(ri.priority ?? 1)}`)
+              .join(',');
 
             // resolve image key to a URL
             let imageUrl = placeholder;
