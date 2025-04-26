@@ -32,6 +32,7 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native'; // << add
 
 // Amplify & PubSub
 import { Amplify } from 'aws-amplify';
@@ -423,6 +424,7 @@ export default function MenuScreen() {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
   const { isConnected } = useLiquorBot();
+  const isFocused = useIsFocused(); // << add
 
   /* ------------------------- STATE ------------------------- */
   const [drinks, setDrinks] = useState<Drink[]>([]);
@@ -448,6 +450,11 @@ export default function MenuScreen() {
   const [userID, setUserID] = useState<string | null>(null);
   const [likedDrinks, setLikedDrinks] = useState<number[]>([]);
   const [customFetched, setCustomFetched] = useState(false);
+
+  // refetch custom recipes on focus
+  useEffect(() => {
+    if (isFocused) setCustomFetched(false); // << add
+  }, [isFocused]);
 
   // is a drink makeable?
   const isDrinkMakeable = (drink: Drink) => {
@@ -584,8 +591,11 @@ export default function MenuScreen() {
           }),
         );
 
-        // Merge without clobbering earlier fetch results
-        setDrinks((prev) => [...prev, ...custom]);
+        // replace merging logic to avoid duplicates
+        setDrinks((prev) => {
+          const builtOnly = prev.filter((d) => d.category !== 'Custom');
+          return [...builtOnly, ...custom]; // << changed
+        });
         setCustomFetched(true);
       } catch (e) {
         console.error('Error loading custom drinks', e);
