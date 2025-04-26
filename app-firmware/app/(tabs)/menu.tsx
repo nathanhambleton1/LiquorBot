@@ -333,7 +333,7 @@ function DrinkItem({
             }
             style={styles.editButton}
           >
-            <Ionicons name="pencil-outline" size={24} color="#DFDCD9" />
+            <Ionicons name="create-outline" size={24} color="#DFDCD9" />
           </TouchableOpacity>
         )}
 
