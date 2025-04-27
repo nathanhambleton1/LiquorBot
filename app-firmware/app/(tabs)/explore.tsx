@@ -1,12 +1,13 @@
 // -----------------------------------------------------------------------------
 // File:   explore.tsx
-// Purpose: Explore page – themed Recipe Books (≤20 % overlap per *section*),
-//          per-account persistence, manual refresh button.
+// Purpose: Explore page – themed Recipe Books plus “Load to Device” button that
+//          publishes the book’s ingredient IDs to the ESP-32 slot-config topic
+//          (15 slots; 0 = empty) using the same MQTT flow as device-settings.
 // -----------------------------------------------------------------------------
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ImageBackground, Dimensions,
   Modal, FlatList, Animated, Easing, Platform, UIManager, ActivityIndicator,
   NativeScrollEvent, NativeSyntheticEvent,
 } from 'react-native';
@@ -14,15 +15,25 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Amplify } from 'aws-amplify';
 import { getUrl } from 'aws-amplify/storage';
 import { getCurrentUser } from '@aws-amplify/auth';
+import { PubSub } from '@aws-amplify/pubsub';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useLiquorBot } from '../components/liquorbot-provider';
 import config from '../../src/amplifyconfiguration.json';
 
+/* ─────────── Amplify + PubSub bootstrap ─────────── */
 Amplify.configure(config);
+const pubsub = new PubSub({
+  region:   'us-east-1',
+  endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
+});
+
+const SLOT_CONFIG_TOPIC = 'liquorbot/liquorbot001/slot-config';
+
 if (Platform.OS === 'android')
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 
 /* -------------------------------------------------------------------------- */
-/*                                TYPES                                       */
+/*                                  TYPES                                     */
 /* -------------------------------------------------------------------------- */
 type Drink = {
   id: number;
@@ -30,9 +41,11 @@ type Drink = {
   category: string;
   description?: string;
   image: string;
-  ingredients?: string;              // “id:amt:prio,…”
+  ingredients?: string;              // “id:amt:prio, …”
 };
+
 type Ingredient = { id: number; name: string; type: string };
+
 type RecipeBook = {
   id: string;
   name: string;
@@ -43,18 +56,20 @@ type RecipeBook = {
 };
 
 /* -------------------------------------------------------------------------- */
-/*                               CONSTANTS                                    */
+/*                              CONSTANTS                                     */
 /* -------------------------------------------------------------------------- */
 const MAX_INGS      = 15;
 const MIN_DRINKS    = 3;
-const OVERLAP_CAP   = 0.20;   // per-section
+const OVERLAP_CAP   = 0.20;    // per-section
 const CAROUSEL_LOOP = 30;
 const ITEM_W        = 112;
 const AUTO_SPEED    = 36;
-const placeholder   =
+
+/* placeholder for any missing drink artwork */
+const placeholder =
   'https://d3jj0su0y4d6lr.cloudfront.net/placeholder_drink.png';
 
-/* ------------------- tiny helpers ------------------- */
+/* handy helpers */
 const shuffle = <T,>(arr: T[]) => {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -67,9 +82,10 @@ const parseIngIds = (d: Drink) =>
   d.ingredients
     ? d.ingredients.split(',').map((c) => +c.split(':')[0]).filter(Number.isFinite)
     : [];
+const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
 /* -------------------------------------------------------------------------- */
-/*                      PER-SECTION book builder (≤20 % overlap)              */
+/*                     PER-SECTION BOOK-BUILDER (≤20 % overlap)               */
 /* -------------------------------------------------------------------------- */
 function buildBookDistinct(
   pool: Drink[],
@@ -93,8 +109,7 @@ function buildBookDistinct(
       if (nextIng.size > MAX_INGS) continue;
 
       const dupCntIfAdd =
-        (sel.filter((x) => sectionUsed.has(x.id)).length +
-          (sectionUsed.has(d.id) ? 1 : 0));
+        sel.filter((x) => sectionUsed.has(x.id)).length + (sectionUsed.has(d.id) ? 1 : 0);
       const dupRatio = dupCntIfAdd / (sel.length + 1);
 
       if (dupRatio <= OVERLAP_CAP) {
@@ -120,7 +135,7 @@ function buildBookDistinct(
 }
 
 /* -------------------------------------------------------------------------- */
-/*                INFINITE DRINK CAROUSEL  (unchanged apart from key tweaks)  */
+/*                       INFINITE-SCROLL DRINK CAROUSEL                       */
 /* -------------------------------------------------------------------------- */
 function InfiniteDrinkCarousel({ drinks }: { drinks: Drink[] }) {
   if (!drinks.length) return null;
@@ -151,8 +166,8 @@ function InfiniteDrinkCarousel({ drinks }: { drinks: Drink[] }) {
 
   const wrap = ({ nativeEvent: { contentOffset } }: NativeSyntheticEvent<NativeScrollEvent>) => {
     offset.current = contentOffset.x;
-    const pad = drinks.length * ITEM_W;
-    const total = data.length * ITEM_W;
+    const pad   = drinks.length * ITEM_W;
+    const total = data.length   * ITEM_W;
     if (contentOffset.x < pad) {
       offset.current += pad * (CAROUSEL_LOOP / 2);
       list.current?.scrollToOffset({ offset: offset.current, animated: false });
@@ -192,16 +207,49 @@ function InfiniteDrinkCarousel({ drinks }: { drinks: Drink[] }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                            UI bits (modal/card)                            */
+/*                             MODAL + BOOK CARD                              */
 /* -------------------------------------------------------------------------- */
 interface BookModalProps {
   book: RecipeBook | null;
   visible: boolean;
   onClose: () => void;
   ingredientMap: Map<number, Ingredient>;
+  isConnected: boolean;
+  onApply: (book: RecipeBook) => Promise<void>;
 }
-const BookModal = ({ book, visible, onClose, ingredientMap }: BookModalProps) => {
+
+const BookModal = ({
+  book,
+  visible,
+  onClose,
+  ingredientMap,
+  isConnected,
+  onApply,
+}: BookModalProps) => {
+  const [saving,  setSaving]  = useState(false);
+  const [applied, setApplied] = useState(false);
+  const scale = useRef(new Animated.Value(1)).current;
+
   if (!book) return null;
+
+  const animateSuccess = () =>
+    Animated.sequence([
+      Animated.spring(scale, { toValue: 1.4, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1,   useNativeDriver: true }),
+    ]).start();
+
+  const handleApply = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await onApply(book);
+      setApplied(true);
+      animateSuccess();
+      setTimeout(() => setApplied(false), 2000);
+    } catch (e) { console.error(e); }
+    finally     { setSaving(false); }
+  };
+
   return (
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.modalOverlay}>
@@ -209,6 +257,7 @@ const BookModal = ({ book, visible, onClose, ingredientMap }: BookModalProps) =>
           <TouchableOpacity style={styles.modalClose} onPress={onClose}>
             <Ionicons name="close" size={26} color="#DFDCD9" />
           </TouchableOpacity>
+
           <Text style={styles.modalTitle}>{book.name}</Text>
           <Text style={styles.modalSubtitle}>{book.description}</Text>
 
@@ -226,12 +275,33 @@ const BookModal = ({ book, visible, onClose, ingredientMap }: BookModalProps) =>
             <InfiniteDrinkCarousel drinks={book.drinks} />
           )}
 
-          <Text style={[styles.sectionHeader, { marginTop: 20 }]}>Ingredients to Load</Text>
+          <Text style={[styles.sectionHeader, { marginTop: 20 }]}>
+            Ingredients to Load
+          </Text>
           {book.ingredientIds.map((id) => (
             <Text key={id} style={styles.ingItem}>
               • {ingredientMap.get(id)?.name ?? `#${id}`}
             </Text>
           ))}
+
+          {/* Apply button */}
+          <TouchableOpacity
+            style={[styles.applyBtn, (!isConnected || saving) && { opacity: 0.5 }]}
+            onPress={handleApply}
+            disabled={!isConnected || saving}
+            activeOpacity={0.8}
+          >
+            <Animated.View style={{ transform: [{ scale }] }}>
+              <Ionicons
+                name={applied ? 'checkmark-circle' : 'rocket-outline'}
+                size={24}
+                color={applied ? '#63d44a' : '#141414'}
+              />
+            </Animated.View>
+            <Text style={styles.applyBtnText}>
+              {applied ? 'Loaded!' : saving ? 'Sending…' : 'Load to Device'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -253,23 +323,28 @@ const BookCard = ({ book, onPress }: BookCardProps) => (
 );
 
 /* -------------------------------------------------------------------------- */
-/*                           MAIN EXPLORE SCREEN                              */
+/*                          MAIN EXPLORE SCREEN                               */
 /* -------------------------------------------------------------------------- */
 export default function ExploreScreen() {
-  const [drinks,         setDrinks]   = useState<Drink[]>([]);
-  const [ingredients,    setIngs]     = useState<Ingredient[]>([]);
-  const [userId,         setUserId]   = useState('anon');   // “anon” for guests
-  const [books,          setBooks]    = useState<[string, RecipeBook[]][] | null>(null);
-  const [loading,        setLoading]  = useState(true);
-  const [modalBook,      setModal]    = useState<RecipeBook | null>(null);
-  const [modalVis,       setModalVis] = useState(false);
+  const { isConnected } = useLiquorBot();
+
+  const [drinks,      setDrinks]  = useState<Drink[]>([]);
+  const [ingredients, setIngs]    = useState<Ingredient[]>([]);
+  const [userId,      setUserId]  = useState('anon');
+  const [books,       setBooks]   = useState<[string, RecipeBook[]][]>([]);
+  const [loading,     setLoading] = useState(true);
+
+  const [modalBook, setModal]    = useState<RecipeBook | null>(null);
+  const [modalVis,  setModalVis] = useState(false);
+
+  /* map for quick id→ingredient lookup */
   const ingredientMap = useMemo(() => {
     const m = new Map<number, Ingredient>();
     ingredients.forEach((i) => m.set(i.id, i));
     return m;
   }, [ingredients]);
 
-  /* 1. fetch drinks + ingredients */
+  /* 1 ▸ fetch drinks + ingredients (S3) */
   useEffect(() => {
     (async () => {
       try {
@@ -284,7 +359,7 @@ export default function ExploreScreen() {
     })();
   }, []);
 
-  /* 2. fetch current user id */
+  /* 2 ▸ get current user id */
   useEffect(() => {
     (async () => {
       try {
@@ -294,7 +369,7 @@ export default function ExploreScreen() {
     })();
   }, []);
 
-  /* 3. load from cache or generate */
+  /* 3 ▸ load cached or generate recipe-books */
   useEffect(() => {
     if (!drinks.length || !ingredients.length || !userId) return;
 
@@ -307,7 +382,7 @@ export default function ExploreScreen() {
           setLoading(false);
           return;
         }
-      } catch { /* ignore parse errors */ }
+      } catch { /* ignore */ }
 
       const built = generateBooks(drinks, ingredientMap);
       setBooks(built);
@@ -316,10 +391,10 @@ export default function ExploreScreen() {
     })();
   }, [drinks, ingredients, userId]);
 
-  /* ---------------- refresh handler ---------------- */
+  /* ––––– REFRESH HANDLER ––––– */
   const handleRefresh = useCallback(async () => {
     setLoading(true);
-    setBooks(null);
+    setBooks([]);
     try { await AsyncStorage.removeItem(`exploreBooks_${userId}`); } catch {}
     const rebuilt = generateBooks(drinks, ingredientMap);
     setBooks(rebuilt);
@@ -327,8 +402,40 @@ export default function ExploreScreen() {
     try { await AsyncStorage.setItem(`exploreBooks_${userId}`, JSON.stringify(rebuilt)); } catch {}
   }, [drinks, ingredientMap, userId]);
 
-  /* ---------------- UI ---------------- */
-  if (loading || !books) {
+  /* ––––– SLOT-CONFIG PUBLISHER ––––– */
+  const publishSlotMessage = async (payload: any) => {
+    try {
+      await pubsub.publish({
+        topics: [SLOT_CONFIG_TOPIC],
+        message: payload,
+      });
+    } catch (error) {
+      console.error('Error publishing slot-config message:', error);
+    }
+  };
+
+  const applyBookToDevice = useCallback(async (book: RecipeBook) => {
+    const padded = [...book.ingredientIds];
+    while (padded.length < 15) padded.push(0);
+
+    /* clear → write slots → ask for echo */
+    await publishSlotMessage({ action: 'CLEAR_CONFIG' });
+    await sleep(300);                           // give ESP a breath
+
+    for (let i = 0; i < 15; i++) {
+      await publishSlotMessage({
+        action:       'SET_SLOT',
+        slot:         i + 1,        // ESP is 1-based
+        ingredientId: padded[i],
+      });
+      await sleep(150);             // throttle to avoid lost packets
+    }
+
+    await publishSlotMessage({ action: 'GET_CONFIG' });
+  }, []);
+
+  /* ––––– UI ––––– */
+  if (loading || !books.length) {
     return (
       <View style={styles.loadingScreen}>
         <ActivityIndicator size="large" color="#CE975E" />
@@ -340,13 +447,18 @@ export default function ExploreScreen() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Header row with refresh button */}
-        <View style={styles.headerRow}>
-          <Text style={styles.header}>Explore</Text>
-          <TouchableOpacity onPress={handleRefresh} style={styles.refreshButton}>
-            <Ionicons name="refresh" size={26} color="#CE975E" />
-          </TouchableOpacity>
-        </View>
+        <ImageBackground
+          source={require('../../assets/images/explore.png')}
+          style={styles.exploreImage}
+          resizeMode="cover"
+        >
+          <View style={styles.headerRow}>
+            <Text style={styles.header}>Explore</Text>
+            <TouchableOpacity onPress={handleRefresh} style={styles.refreshButton}>
+              <Ionicons name="refresh" size={26} color="#CE975E" />
+            </TouchableOpacity>
+          </View>
+        </ImageBackground>
 
         {books.map(([sec, list]) => (
           <View key={sec}>
@@ -361,7 +473,10 @@ export default function ExploreScreen() {
               renderItem={({ item }) => (
                 <BookCard
                   book={item}
-                  onPress={() => { setModal(item); setModalVis(true); }}
+                  onPress={() => {
+                    setModal(item);
+                    setModalVis(true);
+                  }}
                 />
               )}
               showsHorizontalScrollIndicator={false}
@@ -376,26 +491,28 @@ export default function ExploreScreen() {
         visible={modalVis}
         onClose={() => setModalVis(false)}
         ingredientMap={ingredientMap}
+        isConnected={isConnected}
+        onApply={applyBookToDevice}
       />
     </View>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/*              generateBooks – builds all three sections once                */
+/*                    generateBooks – builds all sections                     */
 /* -------------------------------------------------------------------------- */
 function generateBooks(
-    drinks: Drink[],
-    ingredientMap: Map<number, Ingredient>
-    ): [string, RecipeBook[]][] {
-    /* ---------- helper for spirit name ---------- */
-    const spiritOf = (d: Drink) => {
-        for (const id of parseIngIds(d)) {
-        const i = ingredientMap.get(id);
-        if (i?.type?.toLowerCase() === 'spirit') return i.name.toLowerCase();
-        }
-        return null;
-    };
+  drinks: Drink[],
+  ingredientMap: Map<number, Ingredient>,
+): [string, RecipeBook[]][] {
+  /* helper to get base spirit */
+  const spiritOf = (d: Drink) => {
+    for (const id of parseIngIds(d)) {
+      const i = ingredientMap.get(id);
+      if (i?.type?.toLowerCase() === 'spirit') return i.name.toLowerCase();
+    }
+    return null;
+  };
 
   /* 1 ▸ Starter Kits */
   const starterLabels = ['vodka', 'rum', 'tequila', 'gin', 'whiskey'];
@@ -405,27 +522,25 @@ function generateBooks(
   starterLabels.forEach((spirit) => {
     const pool = drinks.filter((d) => spiritOf(d)?.includes(spirit));
     const b = buildBookDistinct(
-      pool,
-      starterUsed,
+      pool, starterUsed,
       `starter_${spirit}`,
       `${spirit[0].toUpperCase()}${spirit.slice(1)} Starter Kit`,
-      `Load-out for all things ${spirit}.`
+      `Load-out for all things ${spirit}.`,
     );
     if (b) starterBooks.push(b);
   });
   while (starterBooks.length < 10) {
     const extra = buildBookDistinct(
-      drinks,
-      starterUsed,
+      drinks, starterUsed,
       `starter_extra_${starterBooks.length}`,
       `Starter Mix #${starterBooks.length + 1}`,
-      'Additional starter kit.'
+      'Additional starter kit.',
     );
     if (!extra) break;
     starterBooks.push(extra);
   }
 
-  /* 2 ▸ Bartender Favorites (by category label) */
+  /* 2 ▸ Bartender Favourites */
   const favUsed  = new Set<number>();
   const favBooks: RecipeBook[] = [];
   const catMap = new Map<string, Drink[]>();
@@ -435,83 +550,66 @@ function generateBooks(
   });
   catMap.forEach((pool, cat) => {
     const b = buildBookDistinct(
-      pool,
-      favUsed,
+      pool, favUsed,
       `fav_${cat.toLowerCase().replace(/\s+/g, '_')}`,
       `${cat} Picks`,
-      `Popular ${cat.toLowerCase()} cocktails.`
+      `Popular ${cat.toLowerCase()} cocktails.`,
     );
     if (b) favBooks.push(b);
   });
   while (favBooks.length < 4) {
     const extra = buildBookDistinct(
-      drinks,
-      favUsed,
+      drinks, favUsed,
       `fav_auto_${favBooks.length}`,
       `Fan Favourites #${favBooks.length + 1}`,
-      'Randomly generated favourites.'
+      'Randomly generated favourites.',
     );
     if (!extra) break;
     favBooks.push(extra);
   }
 
-  /* 3 ▸ Party Packs – must include ≥3 spirit bases */
-    const partyBooks: RecipeBook[] = [];
-    const names      = shuffle([
-    'Game-Night Mix', 'Game-Day Pack', 'Brunch Favorites',
+  /* 3 ▸ Party Packs */
+  const partyBooks: RecipeBook[] = [];
+  const names = shuffle([
+    'Game-Night Mix', 'Game-Day Pack', 'Brunch Favourites',
     'Late-Night Blend', 'Party Essentials', 'Classics Party Pack',
-    ]);
+  ]);
 
-    const spiritSet = (list: Drink[]) =>
+  const spiritSet = (list: Drink[]) =>
     new Set(list.map(spiritOf).filter(Boolean) as string[]);
 
-    let idx = 0, attempts = 0, bestSoFar: RecipeBook | null = null;
-
-    while (partyBooks.length < 4 && attempts < 30) {
-    /* NEW — fresh “used” set so packs can overlap each other */
+  let idx = 0, attempts = 0, bestSoFar: RecipeBook | null = null;
+  while (partyBooks.length < 4 && attempts < 30) {
     const b = buildBookDistinct(
-        drinks,
-        new Set<number>(),                      // ← was partyUsed
-        `party_${idx}`,
-        names[idx % names.length],
-        'Mixed-spirit party load-out.',
+      drinks, new Set<number>(),
+      `party_${idx}`,
+      names[idx % names.length],
+      'Mixed-spirit party load-out.',
     );
-
-    attempts++;
-    idx++;
-
-    if (!b) break;                            // nothing buildable this round
-
+    attempts++; idx++;
+    if (!b) break;
     const bases = spiritSet(b.drinks);
-
-    /* keep track of the most diverse pack seen */
-    if (!bestSoFar || bases.size > spiritSet(bestSoFar.drinks).size)
-        bestSoFar = b;
-
-    /* skip packs that don’t hit the ≥3-spirit rule */
-    if (bases.size < 3) continue;
-
+    if (!bestSoFar || bases.size > spiritSet(bestSoFar.drinks).size) bestSoFar = b;
+    if (bases.size < 3) continue;   // need ≥3 spirit bases
     partyBooks.push(b);
-    }
-
-    /* guarantee 1 pack, then try to grow to at least 3 */
-    if (partyBooks.length === 0 && bestSoFar) partyBooks.push(bestSoFar);
-    while (partyBooks.length < 3) {
+  }
+  if (partyBooks.length === 0 && bestSoFar) partyBooks.push(bestSoFar);
+  while (partyBooks.length < 3) {
     const extra = buildBookDistinct(
-        drinks,
-        new Set<number>(),                      // ← fresh again
-        `party_auto_${partyBooks.length}`,
-        `Party Mix #${partyBooks.length + 1}`,
-        'Extra party load-out.',
+      drinks, new Set<number>(),
+      `party_auto_${partyBooks.length}`,
+      `Party Mix #${partyBooks.length + 1}`,
+      'Extra party load-out.',
     );
     if (!extra || spiritSet(extra.drinks).size < 3) break;
     partyBooks.push(extra);
-    }
-    return [
-        ['Starter Kits',        starterBooks],
-        ['Bartender Favorites', favBooks],
-        ['Party Packs',         partyBooks],
-      ];
+  }
+
+  return [
+    ['Starter Kits',         starterBooks],
+    ['Bartender Favourites', favBooks],
+    ['Party Packs',          partyBooks],
+  ];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -524,26 +622,23 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#141414' },
   scroll:    { paddingBottom: 100 },
 
-  /* header + refresh */
   headerRow: { flexDirection: 'row', justifyContent: 'space-between',
                alignItems: 'center', paddingHorizontal: 20,
                paddingTop: 80, marginBottom: 10 },
-  header:    { color: '#DFDCD9', fontSize: 36, fontWeight: 'bold' },
+  header: { color: '#DFDCD9', fontSize: 36, fontWeight: 'bold' },
   refreshButton: { padding: 6 },
 
-  /* section */
   sectionRow:   { flexDirection: 'row', alignItems: 'center',
                   paddingHorizontal: 20, marginTop: 12, marginBottom: 4 },
   sectionTitle: { color: '#DFDCD9', fontSize: 24, fontWeight: '600' },
 
-  /* card row */
   booksRow: { paddingLeft: 20, paddingVertical: 10, paddingRight: 10 },
   bookTile: {
     marginRight: 14, borderRadius: 12, backgroundColor: '#1F1F1F', padding: 10,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
   },
-  bookCard:   { width: CARD_W, height: CARD_W * 0.68, borderRadius: 8,
+  bookCard:   { width: CARD_W * 0.9, height: CARD_W * 0.6, borderRadius: 8,
                 overflow: 'hidden', backgroundColor: '#1F1F1F' },
   bookImage:  { width: '100%', height: '100%', resizeMode: 'contain' },
   bookOverlay:{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
@@ -552,18 +647,17 @@ const styles = StyleSheet.create({
   bookSubtitle:{ position: 'absolute', bottom: 18, left: 12, right: 12,
                  color: '#CE975E', fontSize: 14 },
 
-  /* loading */
   loadingScreen:{ flex: 1, backgroundColor: '#141414',
                   justifyContent: 'center', alignItems: 'center' },
   loadingText:  { color: '#DFDCD9', marginTop: 10 },
 
-  /* modal */
   modalOverlay:{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
                  justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent:{ width: '100%', backgroundColor: '#1F1F1F',
                  borderRadius: 12, padding: 20 },
   modalClose:  { position: 'absolute', top: 15, right: 15, zIndex: 2 },
-  modalTitle:  { color: '#DFDCD9', fontSize: 24, fontWeight: '600', marginBottom: 4 },
+  modalTitle:  { color: '#DFDCD9', fontSize: 24, fontWeight: '600',
+                 marginBottom: 4 },
   modalSubtitle:{ color: '#4F4F4F', marginBottom: 16 },
   sectionHeader:{ color: '#CE975E', fontSize: 18, marginBottom: 8 },
 
@@ -573,4 +667,19 @@ const styles = StyleSheet.create({
   modalDrinkName: { color: '#DFDCD9', fontSize: 12, textAlign: 'center' },
 
   ingItem: { color: '#DFDCD9', fontSize: 14, marginBottom: 2 },
+
+  applyBtn: {
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+    backgroundColor: '#CE975E', borderRadius: 10, paddingVertical: 12,
+    marginTop: 24,
+  },
+  applyBtnText: { color: '#141414', fontSize: 16, fontWeight: 'bold',
+                  marginLeft: 10 },
+
+  exploreImage: {
+    width: '100%',
+    height: 400,
+    resizeMode: 'cover',
+    marginBottom: 10,
+  },
 });
