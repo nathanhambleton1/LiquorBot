@@ -50,6 +50,7 @@ export interface Drink {
   name: string;
   category: string;
   image: string;
+  ingredients: string; // Add missing property
 }
 interface LikedDrinkRecord {
   id: string;

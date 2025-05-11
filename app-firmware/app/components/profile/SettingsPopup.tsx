@@ -6,8 +6,6 @@ import { View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView } from 're
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const KEYS = {
-  haptics:       'pref_haptics',
-  sounds:        'pref_sounds',
   notifications: 'pref_notifications',
   useWifi:       'pref_useWifi',
   units:         'pref_units',           // 'oz' | 'ml'
@@ -15,8 +13,6 @@ const KEYS = {
 
 export default function SettingsPopup() {
   // ------------- state -------------
-  const [haptics,       setHaptics]       = useState(false);
-  const [sounds,        setSounds]        = useState(false);
   const [notifications, setNotifications]= useState(false);
   const [useWifi,       setUseWifi]       = useState(false);
   const [units,         setUnits]         = useState<'oz' | 'ml'>('oz');
@@ -28,8 +24,6 @@ export default function SettingsPopup() {
       vals.forEach(([k, v]) => {
         if (v === null) return;
         switch (k) {
-          case KEYS.haptics:       setHaptics(v === '1'); break;
-          case KEYS.sounds:        setSounds(v === '1'); break;
           case KEYS.notifications: setNotifications(v === '1'); break;
           case KEYS.useWifi:       setUseWifi(v === '1'); break;
           case KEYS.units:         setUnits(v === 'ml' ? 'ml' : 'oz'); break;
@@ -59,22 +53,12 @@ export default function SettingsPopup() {
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
       <PrefRow
-        label="Enable Haptics"
-        value={haptics}
-        onValueChange={(v)=>{ setHaptics(v); save(KEYS.haptics, v?'1':'0'); }}
-      />
-      <PrefRow
-        label="Enable Sound Effects"
-        value={sounds}
-        onValueChange={(v)=>{ setSounds(v); save(KEYS.sounds, v?'1':'0'); }}
-      />
-      <PrefRow
         label="Push Notifications"
         value={notifications}
         onValueChange={(v)=>{ setNotifications(v); save(KEYS.notifications, v?'1':'0'); }}
       />
       <PrefRow
-        label="Use Wi‑Fi Instead of Bluetooth (β)"
+        label="Use Wi‑Fi Instead of Bluetooth"
         value={useWifi}
         onValueChange={(v)=>{ setUseWifi(v); save(KEYS.useWifi, v?'1':'0'); }}
       />
