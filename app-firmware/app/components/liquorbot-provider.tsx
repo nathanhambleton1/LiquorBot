@@ -1,10 +1,7 @@
 // -----------------------------------------------------------------------------
 // File: liquorbot-provider.tsx
 // Description: Provides a React context for managing LiquorBot's connection 
-//              status and handling IoT PubSub subscriptions. Integrates with 
-//              AWS Amplify for PubSub communication.
-// Author: Nathan Hambleton
-// Created:  March 1, 2025
+//              status, configuration, and handling IoT PubSub subscriptions.
 // -----------------------------------------------------------------------------
 import React, {
   createContext,
@@ -19,7 +16,6 @@ import config from '../../src/amplifyconfiguration.json';
 
 Amplify.configure(config);
 
-// Initialize PubSub with the AWS IoT endpoint
 const pubsub = new PubSub({
   region: 'us-east-1',
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
@@ -30,57 +26,66 @@ const SLOT_CONFIG_TOPIC = 'liquorbot/liquorbot001/slot-config';
 
 interface LiquorBotContextValue {
   isConnected: boolean;
-  forceDisconnect: () => void; // <-- added
+  slots: number[];
+  forceDisconnect: () => void;
+  updateSlots: (newSlots: number[]) => void;
 }
 
 const LiquorBotContext = createContext<LiquorBotContextValue>({
   isConnected: false,
+  slots: Array(15).fill(0),
   forceDisconnect: () => {},
+  updateSlots: () => {},
 });
 
 export function LiquorBotProvider({ children }: { children: ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const [lastHeartbeat, setLastHeartbeat] = useState<number>(0);
+  const [slots, setSlots] = useState<number[]>(Array(15).fill(0));
 
-  // Add this useEffect to fetch config when connected
+  // Centralized slot configuration handler
+  const handleSlotConfig = (message: any) => {
+    if (message.action === 'CURRENT_CONFIG' && Array.isArray(message.slots)) {
+      setSlots(message.slots.map((id: any) => Number(id) || 0));
+    }
+    if (message.action === 'SET_SLOT' && typeof message.slot === 'number') {
+      setSlots(prev => {
+        const next = [...prev];
+        next[message.slot - 1] = Number(message.ingredientId) || 0;
+        return next;
+      });
+    }
+  };
+
+  // Subscribe to config updates
+  useEffect(() => {
+    const subscription = pubsub.subscribe({ topics: [SLOT_CONFIG_TOPIC] }).subscribe({
+      next: (data) => handleSlotConfig((data as any)?.value ?? data),
+      error: (error) => console.error('Config subscription error:', error),
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Fetch config when connected
   useEffect(() => {
     if (isConnected) {
-      const fetchConfig = async () => {
-        try {
-          await pubsub.publish({
-            topics: [SLOT_CONFIG_TOPIC],
-            message: { action: 'GET_CONFIG' }
-          });
-        } catch (error) {
-          console.error('Error fetching config:', error);
-        }
-      };
-      fetchConfig();
+      pubsub.publish({
+        topics: [SLOT_CONFIG_TOPIC],
+        message: { action: 'GET_CONFIG' }
+      }).catch(error => console.error('Config fetch error:', error));
     }
   }, [isConnected]);
 
-  // Utility so other screens can mark us disconnected
-  function forceDisconnect() {
-    setIsConnected(false);
-  }
-
+  // Connection status management
   useEffect(() => {
-    // Subscribe to liquorbot/heartbeat
     const subscription = pubsub.subscribe({ topics: HEARTBEAT_TOPIC }).subscribe({
-      next: (data) => {
-        setLastHeartbeat(Date.now());
-      },
-      error: (error) => console.error('Subscription error:', error),
-      complete: () => console.log('Subscription completed.'),
+      next: () => setLastHeartbeat(Date.now()),
+      error: (error) => console.error('Heartbeat subscription error:', error),
     });
 
-    // Check connection status every 1 second
     const intervalId = setInterval(() => {
-      if (Date.now() - lastHeartbeat < 7000) {
-        setIsConnected(true);
-      } else {
-        setIsConnected(false);
-      }
+      setIsConnected(Date.now() - lastHeartbeat < 7000);
     }, 1000);
 
     return () => {
@@ -89,8 +94,25 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
     };
   }, [lastHeartbeat]);
 
+  const contextValue: LiquorBotContextValue = {
+    isConnected,
+    slots,
+    forceDisconnect: () => setIsConnected(false),
+    updateSlots: (newSlots) => {
+      setSlots(newSlots);
+      // Optional: Send update to device if needed
+      pubsub.publish({
+        topics: [SLOT_CONFIG_TOPIC],
+        message: { 
+          action: 'CURRENT_CONFIG',
+          slots: newSlots
+        }
+      }).catch(console.error);
+    }
+  };
+
   return (
-    <LiquorBotContext.Provider value={{ isConnected, forceDisconnect }}>
+    <LiquorBotContext.Provider value={contextValue}>
       {children}
     </LiquorBotContext.Provider>
   );
