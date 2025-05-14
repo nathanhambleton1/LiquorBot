@@ -404,35 +404,49 @@ export default function ExploreScreen() {
 
   /* ––––– SLOT-CONFIG PUBLISHER ––––– */
   const publishSlotMessage = async (payload: any) => {
-    try {
-      await pubsub.publish({
-        topics: [SLOT_CONFIG_TOPIC],
-        message: payload,
-      });
-    } catch (error) {
-      console.error('Error publishing slot-config message:', error);
-    }
-  };
+  try {
+    // Convert payload to JSON string and verify structure
+    const messageStr = JSON.stringify(payload);
+    console.log('Publishing to MQTT:', SLOT_CONFIG_TOPIC, messageStr);
+    
+    await pubsub.publish({
+      topics: [SLOT_CONFIG_TOPIC],
+      message: { 
+        // Wrap in 'message' key to match AWS IoT Core format
+        message: messageStr 
+      },
+    });
+  } catch (error) {
+    console.error('Publish error:', error);
+    throw error; // Propagate error to handleApply
+  }
+};
 
-  const applyBookToDevice = useCallback(async (book: RecipeBook) => {
-    const padded = [...book.ingredientIds];
-    while (padded.length < 15) padded.push(0);
+// Then update applyBookToDevice to handle errors properly:
+const applyBookToDevice = useCallback(async (book: RecipeBook) => {
+  try {
+    const padded = Array.from({ length: 15 }, (_, i) => 
+      i < book.ingredientIds.length ? book.ingredientIds[i] : 0
+    );
 
-    /* clear → write slots → ask for echo */
-    await publishSlotMessage({ action: 'CLEAR_CONFIG' });
-    await sleep(300);                           // give ESP a breath
+    // Send batch updates with confirmation logging
+    await Promise.all(padded.map((ingId, index) => 
+      publishSlotMessage({
+        action: 'SET_SLOT',
+        slot: index + 1,
+        ingredientId: ingId,
+        timestamp: Date.now()
+      })
+    ));
 
-    for (let i = 0; i < 15; i++) {
-      await publishSlotMessage({
-        action:       'SET_SLOT',
-        slot:         i + 1,        // ESP is 1-based
-        ingredientId: padded[i],
-      });
-      await sleep(150);             // throttle to avoid lost packets
-    }
-
+    // Final verification request
     await publishSlotMessage({ action: 'GET_CONFIG' });
-  }, []);
+    console.log('Slot config update complete');
+  } catch (error) {
+    console.error('Failed to apply book:', error);
+    throw error; // Let modal handle the error state
+  }
+}, [publishSlotMessage]);
 
   /* ––––– UI ––––– */
   if (loading || !books.length) {
