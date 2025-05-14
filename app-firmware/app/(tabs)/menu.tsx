@@ -225,58 +225,26 @@ function DrinkItem({
 
   async function handlePourDrink() {
     if (logging || !isMakeable) return;
-    if (!isConnected) { console.warn('LiquorBot is not connected.'); return; }
-  
-    setLogging(true);
-  
-    let responded = false;                          // <-- single flag
-    let timer: ReturnType<typeof setTimeout>;       // <-- timer handle
-    let sub: any;                                   // <-- will hold our sub object
+    if (!isConnected) { 
+      console.warn('LiquorBot is not connected.'); 
+      triggerStatus('error', 'LiquorBot is not connected.');
+      return; 
+    }
 
-    // 1.  Subscribe
-    sub = pubsub.subscribe({ topics: ['liquorbot/liquorbot001/heartbeat_check'] })
-      .subscribe({
-        next: async (resp: any) => {
-          const payload  = (resp as any)?.value ?? resp;
-          const content  = payload?.content ?? payload;
-          console.log('Heartbeat check');
-          if (content !== 'OK') return;             // ignore echo or junk
-  
-          responded = true;
-          clearTimeout(timer);
-          sub.unsubscribe();
-          
-          await publishDrinkCommand();
-          console.log(`Pouring ${drink.name} (${quantity})`);
-          await logPouredDrink((await getCurrentUser())?.username ?? null);
-  
-          setLogging(false);
-          triggerStatus('success', 'Pour successful, enjoy!');
-        },
-        error: () => {
-          clearTimeout(timer);
-          sub.unsubscribe();
-          forceDisconnect();
-          setLogging(false);
-          triggerStatus('error', 'Connection lost – please try again.');
-        },
-      });
-      
-    // 2.  Send heartbeat *after* we’re listening
-    await pubsub.publish({
-      topics: ['liquorbot/liquorbot001/heartbeat_check'],
-      message: { content: 'CHECK' },
-    });
-  
-    // 3.  Fail-safe timeout
-    timer = setTimeout(() => {
-      if (!responded) {
-        sub.unsubscribe();
-        forceDisconnect();
-        setLogging(false);
-        triggerStatus('error', 'No response from LiquorBot – try again.');
-      }
-    }, 5000);
+    setLogging(true);
+
+    try {
+      await publishDrinkCommand();
+      console.log(`Pouring ${drink.name} (${quantity})`);
+      await logPouredDrink((await getCurrentUser())?.username ?? null);
+
+      setLogging(false);
+      triggerStatus('success', 'Pour successful, enjoy!');
+    } catch (error) {
+      console.error('Pour failed', error);
+      setLogging(false);
+      triggerStatus('error', 'Pour failed – please try again.');
+    }
   }
 
   const handleToggleLike = () => toggleFavorite(drink.id);
@@ -407,7 +375,7 @@ function DrinkItem({
                 (!isMakeable || logging || !isConnected) && styles.disabledButtonText,
               ]}>
                 { !isConnected
-                    ? 'Check Connection'
+                    ? 'Not Connected'
                     : !isMakeable
                     ? 'Missing Ingredients'
                     : logging
