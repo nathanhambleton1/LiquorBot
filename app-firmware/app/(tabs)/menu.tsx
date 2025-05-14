@@ -630,16 +630,18 @@ export default function MenuScreen() {
       error: (e) => console.error('slot‑config sub error', e),
     });
 
-    isConnected &&
+    // Request config when connected OR when page comes into focus
+    if (isConnected || isFocused) {
       pubsub
         .publish({
           topics: [SLOT_CONFIG_TOPIC],
           message: { action: 'GET_CONFIG' },
         })
         .catch(console.error);
+    }
 
     return () => sub.unsubscribe();
-  }, [isConnected]);
+  }, [isConnected, isFocused]);
 
   /* -------------------- favourite toggle -------------------- */
   async function toggleFavorite(drinkId: number) {
