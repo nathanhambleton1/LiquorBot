@@ -34,7 +34,7 @@ export default function TabLayout() {
             borderTopLeftRadius: 20,
             borderTopRightRadius: 20,
             overflow: 'hidden',
-            position: 'relative',
+            position: 'absolute',
             left: 0,
             right: 0,
             bottom: 0,

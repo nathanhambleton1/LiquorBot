@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
   },
   menuButton: {
     position: 'absolute',
-    bottom: 90, // Position the button at the bottom
+    bottom: 130, // Position the button at the bottom
     alignSelf: 'center', // Center the button horizontally
     backgroundColor: '#CE975E', // Light background color
     paddingVertical: 16,
