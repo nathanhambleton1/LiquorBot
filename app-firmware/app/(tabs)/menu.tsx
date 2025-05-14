@@ -63,8 +63,6 @@ const pubsub = new PubSub({
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
 
-const SLOT_CONFIG_TOPIC = 'liquorbot/liquorbot001/slot-config';
-
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
@@ -154,7 +152,6 @@ function DrinkItem({
   drink,
   isExpanded,
   isLiked,
-  isMakeable,
   toggleFavorite,
   onExpand,
   onCollapse,
@@ -163,11 +160,19 @@ function DrinkItem({
 }: DrinkItemProps) {
   const [animValue] = useState(new Animated.Value(isExpanded ? 1 : 0));
   const [quantity, setQuantity] = useState(1);
-  const { isConnected, forceDisconnect } = useLiquorBot();
+  const { isConnected, slots } = useLiquorBot();
   const [logging, setLogging] = useState(false); // prevent double-taps
   const [statusAnim] = useState(new Animated.Value(0));
   const [statusType, setStatusType] = useState<'success' | 'error' | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const isDrinkMakeable = (drink: Drink) => {
+    if (!drink.ingredients) return false;
+    const needed = drink.ingredients
+      .split(',')
+      .map((c) => parseInt(c.split(':')[0], 10));
+    return needed.every((id) => slots.includes(id));
+  };
+  const isMakeable = isDrinkMakeable(drink);
 
   const triggerStatus = (type: 'success' | 'error', message: string) => {
     setStatusType(type);
@@ -438,7 +443,7 @@ function DrinkItem({
 export default function MenuScreen() {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
-  const { isConnected } = useLiquorBot();
+  const { isConnected, slots } = useLiquorBot();
   const isFocused = useIsFocused(); // << add
 
   /* ------------------------- STATE ------------------------- */
@@ -457,9 +462,6 @@ export default function MenuScreen() {
   const [alphabetical, setAlphabetical] = useState(false);
   const [onlyCustom, setOnlyCustom] = useState(false);
 
-  // slot‑config
-  const [slots, setSlots] = useState<number[]>(Array(15).fill(0));
-
   // expand / likes / user
   const [expandedDrink, setExpandedDrink] = useState<number | null>(null);
   const [userID, setUserID] = useState<string | null>(null);
@@ -473,11 +475,11 @@ export default function MenuScreen() {
 
   // is a drink makeable?
   const isDrinkMakeable = (drink: Drink) => {
-    if (!drink.ingredients || loadedIds.length === 0) return false;
+    if (!drink.ingredients) return false;
     const needed = drink.ingredients
       .split(',')
       .map((c) => parseInt(c.split(':')[0], 10));
-    return needed.every((id) => loadedIds.includes(id));
+    return needed.every((id) => slots.includes(id));
   };
 
   // glow anim for status dot
@@ -617,31 +619,6 @@ export default function MenuScreen() {
       }
     })();
   }, [userID, customFetched]);
-
-  /* --------------------- MQTT: slot config ------------------- */
-  useEffect(() => {
-    const sub = pubsub.subscribe({ topics: [SLOT_CONFIG_TOPIC] }).subscribe({
-      next: (data) => {
-        const msg = (data as any)?.value ?? data;
-        if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
-          setSlots(msg.slots.map((id: any) => Number(id) || 0));
-        }
-      },
-      error: (e) => console.error('slot‑config sub error', e),
-    });
-
-    // Request config when connected OR when page comes into focus
-    if (isConnected || isFocused) {
-      pubsub
-        .publish({
-          topics: [SLOT_CONFIG_TOPIC],
-          message: { action: 'GET_CONFIG' },
-        })
-        .catch(console.error);
-    }
-
-    return () => sub.unsubscribe();
-  }, [isConnected, isFocused]);
 
   /* -------------------- favourite toggle -------------------- */
   async function toggleFavorite(drinkId: number) {
