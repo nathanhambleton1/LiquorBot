@@ -19,10 +19,14 @@ import config from '../../src/amplifyconfiguration.json';
 
 Amplify.configure(config);
 
+// Initialize PubSub with the AWS IoT endpoint
 const pubsub = new PubSub({
   region: 'us-east-1',
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
+
+const HEARTBEAT_TOPIC = 'liquorbot/liquorbot001/heartbeat';
+const SLOT_CONFIG_TOPIC = 'liquorbot/liquorbot001/slot-config';
 
 interface LiquorBotContextValue {
   isConnected: boolean;
@@ -38,6 +42,23 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const [lastHeartbeat, setLastHeartbeat] = useState<number>(0);
 
+  // Add this useEffect to fetch config when connected
+  useEffect(() => {
+    if (isConnected) {
+      const fetchConfig = async () => {
+        try {
+          await pubsub.publish({
+            topics: [SLOT_CONFIG_TOPIC],
+            message: { action: 'GET_CONFIG' }
+          });
+        } catch (error) {
+          console.error('Error fetching config:', error);
+        }
+      };
+      fetchConfig();
+    }
+  }, [isConnected]);
+
   // Utility so other screens can mark us disconnected
   function forceDisconnect() {
     setIsConnected(false);
@@ -45,7 +66,7 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Subscribe to liquorbot/heartbeat
-    const subscription = pubsub.subscribe({ topics: 'liquorbot/liquorbot001/heartbeat' }).subscribe({
+    const subscription = pubsub.subscribe({ topics: HEARTBEAT_TOPIC }).subscribe({
       next: (data) => {
         setLastHeartbeat(Date.now());
       },
