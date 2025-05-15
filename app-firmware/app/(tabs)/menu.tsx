@@ -204,7 +204,7 @@ function DrinkItem({
   /* --------------- pour-drink helpers --------------- */
   async function publishDrinkCommand() {
     await pubsub.publish({
-      topics: ['liquorbot/liquorbot001/publish'],
+      topics: ['liquorbot/liquorbot${liquorbotId}/publish'],
       message: { content: drink.ingredients ?? '' },
     });
     console.log(`Published command="${drink.ingredients}"`);

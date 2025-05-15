@@ -21,27 +21,32 @@ const pubsub = new PubSub({
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
 
-const HEARTBEAT_TOPIC = 'liquorbot/liquorbot001/heartbeat';
-const SLOT_CONFIG_TOPIC = 'liquorbot/liquorbot001/slot-config';
+const HEARTBEAT_TOPIC = 'liquorbot/liquorbot${liquorbotId}/heartbeat';
+const SLOT_CONFIG_TOPIC = 'liquorbot/liquorbot${liquorbotId}/slot-config';
 
 interface LiquorBotContextValue {
   isConnected: boolean;
   slots: number[];
+  liquorbotId: string;
   forceDisconnect: () => void;
   updateSlots: (newSlots: number[]) => void;
+  setLiquorbotId: (id: string) => void;
 }
 
 const LiquorBotContext = createContext<LiquorBotContextValue>({
   isConnected: false,
   slots: Array(15).fill(0),
+  liquorbotId: '000',
   forceDisconnect: () => {},
   updateSlots: () => {},
+  setLiquorbotId: () => {},
 });
 
 export function LiquorBotProvider({ children }: { children: ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const [lastHeartbeat, setLastHeartbeat] = useState<number>(0);
   const [slots, setSlots] = useState<number[]>(Array(15).fill(0));
+  const [liquorbotId, setLiquorbotId] = useState('000');
 
   // Centralized slot configuration handler
   const handleSlotConfig = (message: any) => {
@@ -97,12 +102,13 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
   const contextValue: LiquorBotContextValue = {
     isConnected,
     slots,
+    liquorbotId,
+    setLiquorbotId,
     forceDisconnect: () => setIsConnected(false),
     updateSlots: (newSlots) => {
       setSlots(newSlots);
-      // Optional: Send update to device if needed
       pubsub.publish({
-        topics: [SLOT_CONFIG_TOPIC],
+        topics: [`liquorbot/liquorbot${liquorbotId}/slot-config`],
         message: { 
           action: 'CURRENT_CONFIG',
           slots: newSlots
@@ -110,6 +116,7 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
       }).catch(console.error);
     }
   };
+
 
   return (
     <LiquorBotContext.Provider value={contextValue}>

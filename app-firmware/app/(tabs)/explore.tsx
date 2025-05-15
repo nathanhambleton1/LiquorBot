@@ -27,7 +27,7 @@ const pubsub = new PubSub({
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
 
-const SLOT_CONFIG_TOPIC = 'liquorbot/liquorbot001/slot-config';
+const SLOT_CONFIG_TOPIC = 'liquorbot/liquorbot${liquorbotId}/slot-config';
 
 if (Platform.OS === 'android')
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
