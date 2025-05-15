@@ -68,6 +68,31 @@
       "service": "Cognito"
     }
   },
+  "function": {
+    "attachIotPolicy": {
+      "build": true,
+      "providerPlugin": "awscloudformation",
+      "service": "Lambda"
+    }
+  },
+  "parameters": {
+    "AMPLIFY_function_attachIotPolicy_deploymentBucketName": {
+      "usedBy": [
+        {
+          "category": "function",
+          "resourceName": "attachIotPolicy"
+        }
+      ]
+    },
+    "AMPLIFY_function_attachIotPolicy_s3Key": {
+      "usedBy": [
+        {
+          "category": "function",
+          "resourceName": "attachIotPolicy"
+        }
+      ]
+    }
+  },
   "storage": {
     "s3liquorbotstorage8cb6bcd8": {
       "dependsOn": [],

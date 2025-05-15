@@ -17,6 +17,15 @@
       },
       "storage": {
         "s3liquorbotstorage8cb6bcd8": {}
+      },
+      "function": {
+        "attachIotPolicy": {
+          "deploymentBucketName": "amplify-liquorbot-dev-a9244-deployment",
+          "s3Key": "amplify-builds/attachIotPolicy-3345345266544d617564-build.zip"
+        }
+      },
+      "api": {
+        "LiquorBot": {}
       }
     }
   }

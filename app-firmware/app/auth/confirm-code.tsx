@@ -1,15 +1,14 @@
 // -----------------------------------------------------------------------------
 // File: confirm-code.tsx
-// Description: Confirms a new account, then signs in & attaches the IoT policy
-//              (Amplify-App-Policy) to the user’s Cognito Identity ID.
+// Confirms a new user, then signs in.  IoT policy is now attached by a
+// Cognito Post‑Confirmation Lambda trigger, so no AWS‑SDK code is needed here.
 // Author: Nathan Hambleton
-// Updated: May 15 2025
+// Updated: May 15 2025
 // -----------------------------------------------------------------------------
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { confirmSignUp, signIn, fetchAuthSession } from '@aws-amplify/auth';
-import { IoTClient, AttachPolicyCommand } from '@aws-sdk/client-iot';
+import { confirmSignUp, signIn } from '@aws-amplify/auth';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function ConfirmCode() {
@@ -18,55 +17,28 @@ export default function ConfirmCode() {
     useLocalSearchParams<{ username?: string; password?: string }>();
 
   const [confirmationCode, setConfirmationCode] = useState('');
-  const [confirmationSuccess, setConfirmationSuccess] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
   const pwd = routePwd ?? '';
-
-  /* ─────────── helper: attach IoT policy once we have an identity ID ───────── */
-  const attachIotPolicyIfNeeded = async () => {
-    try {
-      const session = await fetchAuthSession();          // identityId + creds
-      const { identityId, credentials } = session;
-      if (!identityId) return;                           // shouldn't happen
-
-      const iot = new IoTClient({ region: 'us-east-1', credentials });
-      await iot.send(
-        new AttachPolicyCommand({
-          policyName: 'Amplify-App-Policy',
-          target: identityId,
-        })
-      );
-      console.log('🔗 IoT policy attached to', identityId);
-    } catch (err: any) {
-      // Ignore “already attached” errors, log the rest
-      if (err?.name !== 'ResourceAlreadyExistsException') {
-        console.warn('IoT attach‑policy failed:', err);
-      }
-    }
-  };
 
   /* ───────────────────────── handlers ───────────────────────── */
   const doConfirm = async () => {
     setErrorMessage(''); setInfoMessage('');
     try {
       await confirmSignUp({ username: username!, confirmationCode });
-      setConfirmationSuccess(true);
+      setConfirmed(true);
       setInfoMessage('Your account has been confirmed!');
 
-      // OPTIONAL: auto‑sign‑in and attach policy if we have the password
+      // Auto‑sign‑in if password was provided via route params
       if (pwd) {
         await signIn({ username: username!, password: pwd });
-        await attachIotPolicyIfNeeded();
-        router.replace('/(tabs)');                       // go straight into app
+        router.replace('/(tabs)');
       }
     } catch (e: any) {
       // Treat “already confirmed” as success
-      if (
-        (e?.code === 'NotAuthorizedException' || e?.name === 'NotAuthorizedException') &&
-        /already.*confirmed/i.test(e?.message ?? '')
-      ) {
-        setConfirmationSuccess(true);
+      if ((e?.name === 'NotAuthorizedException') && /already.*confirmed/i.test(e?.message ?? '')) {
+        setConfirmed(true);
         setInfoMessage('Your account is already confirmed!');
         return;
       }
@@ -75,17 +47,11 @@ export default function ConfirmCode() {
   };
 
   const doSignIn = async () => {
-    if (!pwd) {
-      router.replace('/auth/sign-in');     // fall back if password missing
-      return;
-    }
+    if (!pwd) { router.replace('/auth/sign-in'); return; }
     try {
       await signIn({ username: username!, password: pwd });
-      await attachIotPolicyIfNeeded();
       router.replace('/(tabs)');
-    } catch {
-      router.replace('/auth/sign-in');
-    }
+    } catch { router.replace('/auth/sign-in'); }
   };
 
   /* ───────────────────────── UI ───────────────────────── */
@@ -93,21 +59,16 @@ export default function ConfirmCode() {
     <View style={styles.container}>
       <Text style={styles.title}>Confirm Account</Text>
 
-      {confirmationSuccess && !pwd ? (
+      {confirmed && !pwd ? (
         <>
-          <Ionicons
-            name="checkmark-circle"
-            size={48}
-            color="#44e627"
-            style={{ alignSelf: 'center', marginVertical: 24 }}
-          />
+          <Ionicons name="checkmark-circle" size={48} color="#44e627" style={{ alignSelf:'center',marginVertical:24 }} />
           <Text style={[styles.info, styles.confirmationMessage]}>{infoMessage}</Text>
           <TouchableOpacity style={styles.button} onPress={doSignIn}>
             <Text style={styles.buttonText}>Sign In</Text>
           </TouchableOpacity>
         </>
       ) : (
-        !confirmationSuccess && (
+        !confirmed && (
           <>
             <Text style={styles.label}>Confirmation Code</Text>
             <TextInput
@@ -126,8 +87,7 @@ export default function ConfirmCode() {
         )
       )}
 
-      {/* Back link */}
-      {!confirmationSuccess && (
+      {!confirmed && (
         <View style={styles.signInContainer}>
           <Text style={styles.signInText}>
             Need a different account?{' '}
