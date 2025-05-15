@@ -55,7 +55,7 @@ interface BluetoothDevice {
 
 export default function DeviceSettings() {
   const router = useRouter();
-  const { isConnected } = useLiquorBot();
+  const { isConnected, liquorbotId } = useLiquorBot();
   
   /**
    * We'll store 15 slots by ingredient ID. If 0 => no assignment.
@@ -311,7 +311,7 @@ export default function DeviceSettings() {
           >
             <Ionicons name="bluetooth-outline" size={24} color="#DFDCD9" />
           </TouchableOpacity>
-          <Text style={styles.liquorBotText}>LiquorBot #001</Text>
+          <Text style={styles.liquorBotText}>LiquorBot #{liquorbotId}</Text>
           <View style={styles.connectionStatusRow}>
             <View
               style={[

@@ -161,7 +161,7 @@ function DrinkItem({
 }: DrinkItemProps) {
   const [animValue] = useState(new Animated.Value(isExpanded ? 1 : 0));
   const [quantity, setQuantity] = useState(1);
-  const { isConnected, slots } = useLiquorBot();
+  const { isConnected, slots, liquorbotId } = useLiquorBot();
   const [logging, setLogging] = useState(false); // prevent double-taps
   const [statusAnim] = useState(new Animated.Value(0));
   const [statusType, setStatusType] = useState<'success' | 'error' | null>(null);
@@ -444,7 +444,7 @@ function DrinkItem({
 export default function MenuScreen() {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
-  const { isConnected, slots } = useLiquorBot();
+  const { isConnected, slots, liquorbotId } = useLiquorBot();
   const isFocused = useIsFocused(); // << add
 
   /* ------------------------- STATE ------------------------- */
@@ -739,7 +739,7 @@ export default function MenuScreen() {
               },
             ]}
           />
-          <Text style={styles.subHeaderText}>LiquorBot #001</Text>
+          <Text style={styles.subHeaderText}>LiquorBot #{liquorbotId}</Text>
         </View>
 
         <TouchableOpacity

@@ -37,7 +37,7 @@ export default function Index() {
   const glowAnimation = useRef(new Animated.Value(1)).current;
 
   /* LiquorBot connectivity (UI only) */
-  const { isConnected } = useLiquorBot();
+  const { isConnected, liquorbotId } = useLiquorBot();
 
   /* Ensure we attempt the attach only once per app‑launch */
   const attemptedAttach = useRef(false);
@@ -121,8 +121,8 @@ export default function Index() {
           />
           <Text style={styles.connectionText}>
             {isConnected
-              ? 'Connected to LiquorBot #001'
-              : 'LiquorBot #001 Disconnected'}
+              ? `Connected to LiquorBot #${liquorbotId}`
+              : `LiquorBot #${liquorbotId} Disconnected`}
           </Text>
         </View>
       </View>
