@@ -33,6 +33,7 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native'; // << add
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Amplify & PubSub
 import { Amplify } from 'aws-amplify';
@@ -473,6 +474,35 @@ export default function MenuScreen() {
     if (isFocused) setCustomFetched(false); // << add
   }, [isFocused]);
 
+  // Load saved filter options on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const savedFilters = await AsyncStorage.getItem('filterOptions');
+        if (savedFilters) {
+          const { onlyMakeable, alphabetical, onlyCustom } = JSON.parse(savedFilters);
+          setOnlyMakeable(onlyMakeable);
+          setAlphabetical(alphabetical);
+          setOnlyCustom(onlyCustom);
+        }
+      } catch (e) {
+        console.error('Failed to load filter options', e);
+      }
+    })();
+  }, []);
+
+  // Save filter options whenever they change
+  useEffect(() => {
+    (async () => {
+      try {
+        const filterOptions = JSON.stringify({ onlyMakeable, alphabetical, onlyCustom });
+        await AsyncStorage.setItem('filterOptions', filterOptions);
+      } catch (e) {
+        console.error('Failed to save filter options', e);
+      }
+    })();
+  }, [onlyMakeable, alphabetical, onlyCustom]);
+
   // is a drink makeable?
   const isDrinkMakeable = (drink: Drink) => {
     if (!drink.ingredients) return false;
@@ -627,7 +657,7 @@ export default function MenuScreen() {
       try {
         const res = await client.graphql({
           query: listLikedDrinks,
-          variables: { filter: { userID: { eq: userID }, drinkID: { eq: drinkId } } },
+        variables: { filter: { userID: { eq: userID }, drinkID: { eq: drinkId } } },
         });
         const existing = res.data?.listLikedDrinks?.items?.[0];
         existing &&
@@ -784,22 +814,30 @@ export default function MenuScreen() {
           { paddingBottom: expandedDrink ? 100 : 80 },
         ]}
       >
-        <View style={styles.grid}>
-          {renderedDrinks.map((drink) => (
-            <DrinkItem
-              key={drink.id}
-              drink={drink}
-              isExpanded={expandedDrink === drink.id}
-              isLiked={likedDrinks.includes(drink.id)}
-              toggleFavorite={toggleFavorite}
-              onExpand={(id) => setExpandedDrink(id)}
-              onCollapse={() => setExpandedDrink(null)}
-              allIngredients={allIngredients}
-              onExpandedLayout={handleExpandedLayout}
-              isMakeable={isDrinkMakeable(drink)}
-            />
-          ))}
-        </View>
+        {renderedDrinks.length === 0 ? (
+          <View style={styles.noDrinksContainer}>
+            <Text style={styles.noDrinksText}>
+              Oops! Looks like you can't make any drinks. Check your filters and connection.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.grid}>
+            {renderedDrinks.map((drink) => (
+              <DrinkItem
+                key={drink.id}
+                drink={drink}
+                isExpanded={expandedDrink === drink.id}
+                isLiked={likedDrinks.includes(drink.id)}
+                toggleFavorite={toggleFavorite}
+                onExpand={(id) => setExpandedDrink(id)}
+                onCollapse={() => setExpandedDrink(null)}
+                allIngredients={allIngredients}
+                onExpandedLayout={handleExpandedLayout}
+                isMakeable={isDrinkMakeable(drink)}
+              />
+            ))}
+          </View>
+        )}
       </ScrollView>
 
       {/* ------------ FILTER POPUP ------------ */}
@@ -918,4 +956,15 @@ const styles = StyleSheet.create({
   buttonArea: { width: '100%', alignItems: 'center', position: 'relative' },
   statusMessageOverlay: { position: 'absolute', top: '100%', marginTop: -12, fontSize: 10, textAlign: 'center' },
   editButton: { position: 'absolute', top: 10, left: 45, zIndex: 2 },
+  noDrinksContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  noDrinksText: {
+    color: '#4f4f4f',
+    fontSize: 14,
+    textAlign: 'center',
+  },
 });
