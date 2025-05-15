@@ -1,14 +1,15 @@
 // -----------------------------------------------------------------------------
 // File: confirm-code.tsx
-// Confirms a new user, then signs in.  IoT policy is now attached by a
-// Cognito Post‑Confirmation Lambda trigger, so no AWS‑SDK code is needed here.
+// Description: Confirms the account, then shows ✅ & a Sign-In button.
+//              • Accepts username & (optional) password from route params.
+//              • Treats “already confirmed” as success.
 // Author: Nathan Hambleton
-// Updated: May 15 2025
+// Updated: Apr 23 2025
 // -----------------------------------------------------------------------------
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { confirmSignUp, signIn } from '@aws-amplify/auth';
+import { confirmSignUp, signIn } from 'aws-amplify/auth';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function ConfirmCode() {
@@ -17,7 +18,7 @@ export default function ConfirmCode() {
     useLocalSearchParams<{ username?: string; password?: string }>();
 
   const [confirmationCode, setConfirmationCode] = useState('');
-  const [confirmed, setConfirmed] = useState(false);
+  const [confirmationSuccess, setConfirmationSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
   const pwd = routePwd ?? '';
@@ -27,18 +28,15 @@ export default function ConfirmCode() {
     setErrorMessage(''); setInfoMessage('');
     try {
       await confirmSignUp({ username: username!, confirmationCode });
-      setConfirmed(true);
+      setConfirmationSuccess(true);
       setInfoMessage('Your account has been confirmed!');
-
-      // Auto‑sign‑in if password was provided via route params
-      if (pwd) {
-        await signIn({ username: username!, password: pwd });
-        router.replace('/(tabs)');
-      }
     } catch (e: any) {
-      // Treat “already confirmed” as success
-      if ((e?.name === 'NotAuthorizedException') && /already.*confirmed/i.test(e?.message ?? '')) {
-        setConfirmed(true);
+      // if it was already confirmed, treat that as success
+      if (
+        (e?.code === 'NotAuthorizedException' || e?.name === 'NotAuthorizedException') &&
+        /already.*confirmed/i.test(e?.message ?? '')
+      ) {
+        setConfirmationSuccess(true);
         setInfoMessage('Your account is already confirmed!');
         return;
       }
@@ -47,11 +45,16 @@ export default function ConfirmCode() {
   };
 
   const doSignIn = async () => {
-    if (!pwd) { router.replace('/auth/sign-in'); return; }
+    if (!pwd) {
+      router.replace('/auth/sign-in');     // fall back if password missing
+      return;
+    }
     try {
       await signIn({ username: username!, password: pwd });
       router.replace('/(tabs)');
-    } catch { router.replace('/auth/sign-in'); }
+    } catch {
+      router.replace('/auth/sign-in');
+    }
   };
 
   /* ───────────────────────── UI ───────────────────────── */
@@ -59,35 +62,40 @@ export default function ConfirmCode() {
     <View style={styles.container}>
       <Text style={styles.title}>Confirm Account</Text>
 
-      {confirmed && !pwd ? (
+      {confirmationSuccess ? (
         <>
-          <Ionicons name="checkmark-circle" size={48} color="#44e627" style={{ alignSelf:'center',marginVertical:24 }} />
+          <Ionicons
+            name="checkmark-circle"
+            size={48}
+            color="#44e627"
+            style={{ alignSelf: 'center', marginVertical: 24 }}
+          />
           <Text style={[styles.info, styles.confirmationMessage]}>{infoMessage}</Text>
           <TouchableOpacity style={styles.button} onPress={doSignIn}>
             <Text style={styles.buttonText}>Sign In</Text>
           </TouchableOpacity>
         </>
       ) : (
-        !confirmed && (
-          <>
-            <Text style={styles.label}>Confirmation Code</Text>
-            <TextInput
-              value={confirmationCode}
-              onChangeText={setConfirmationCode}
-              style={styles.input}
-              keyboardType="number-pad"
-            />
-            {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
-            {!!infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
+        <>
+          <Text style={styles.label}>Confirmation Code</Text>
+          <TextInput
+            value={confirmationCode}
+            onChangeText={setConfirmationCode}
+            style={styles.input}
+            keyboardType="number-pad"
+          />
 
-            <TouchableOpacity style={styles.button} onPress={doConfirm}>
-              <Text style={styles.buttonText}>Confirm</Text>
-            </TouchableOpacity>
-          </>
-        )
+          {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+          {!!infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
+
+          <TouchableOpacity style={styles.button} onPress={doConfirm}>
+            <Text style={styles.buttonText}>Confirm</Text>
+          </TouchableOpacity>
+        </>
       )}
 
-      {!confirmed && (
+      {/* Back link */}
+      {!confirmationSuccess && (
         <View style={styles.signInContainer}>
           <Text style={styles.signInText}>
             Need a different account?{' '}

@@ -21,7 +21,7 @@
       "function": {
         "attachIotPolicy": {
           "deploymentBucketName": "amplify-liquorbot-dev-a9244-deployment",
-          "s3Key": "amplify-builds/attachIotPolicy-3345345266544d617564-build.zip"
+          "s3Key": "amplify-builds/attachIotPolicy-684d6857555664485632-build.zip"
         }
       },
       "api": {
