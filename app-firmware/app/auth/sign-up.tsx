@@ -1,10 +1,11 @@
 // -----------------------------------------------------------------------------
 // File: sign-up.tsx
-// Description: Registration with real-time username check, debounced requests,
-//              gold spinner while checking, strict e-mail validation, and
-//              smart “free-only” suggestions.
+// Description: Registration with real‑time username check, format validation
+//              (letters, numbers, underscores only), debounced availability
+//              requests, gold spinner while checking, strict e‑mail validation,
+//              and smart “free‑only” suggestions.
 // Author: Nathan Hambleton
-// Updated: Apr 25 2025
+// Updated: 15 May 2025
 // -----------------------------------------------------------------------------
 import React, { useState, useRef } from 'react';
 import {
@@ -19,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 const client      = generateClient();
 const dummyPwd    = 'DummyPa$$word123!';                     // meets Cognito
 const emailRegex  = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const usernameRegex = /^[A-Za-z0-9_]+$/;                     // ← NEW constraint
 const DEBOUNCE_MS = 400;
 
 /* ───── GraphQL (no codegen) ───── */
@@ -56,23 +58,23 @@ export default function SignUp() {
     useState<'EventAttendee' | 'PersonalUse' | 'EventCoordinator' | ''>('');
 
   const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [email,    setEmail]    = useState('');
-  const [birthday, setBirthday] = useState('');
-
+  const [usernameValid, setUsernameValid] = useState<boolean | null>(null); // ← NEW
   const [usernameAvailable,  setUsernameAvailable]  = useState<boolean | null>(null);
   const [usernameSuggestion, setUsernameSuggestion] = useState('');
   const [isCheckingUsername, setIsCheckingUsername] = useState(false);
 
+  const [password, setPassword] = useState('');
   const [isPasswordVisible,  setIsPasswordVisible]  = useState(false);
   const [isPasswordFocused,  setIsPasswordFocused]  = useState(false);
   const [passwordValidity,   setPasswordValidity]   = useState({
     minLength:false, upper:false, lower:false, number:false, symbol:false,
   });
 
+  const [email,    setEmail]    = useState('');
   const [emailTouched, setEmailTouched] = useState(false);
   const [emailValid,   setEmailValid]   = useState<boolean | null>(null);
 
+  const [birthday, setBirthday] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
   /* ───── debounce timer ref ───── */
@@ -109,7 +111,7 @@ export default function SignUp() {
 
   const validateEmailFormat = (e:string)=>emailRegex.test(e);
 
-  /* ───── username availability (debounced) ───── */
+  /* ───── username availability & format (debounced) ───── */
   const startUsernameCheck = (name: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setUsername(name);
@@ -117,8 +119,14 @@ export default function SignUp() {
     setUsernameSuggestion('');
 
     const trimmed = name.trim();
-    if (!trimmed) { setIsCheckingUsername(false); return; }
+    if (!trimmed) { setIsCheckingUsername(false); setUsernameValid(null); return; }
 
+    // format check first
+    const isFormatOk = usernameRegex.test(trimmed);
+    setUsernameValid(isFormatOk);
+    if (!isFormatOk) { setIsCheckingUsername(false); return; }
+
+    // availability check
     debounceRef.current = setTimeout(async () => {
       setIsCheckingUsername(true);
       try {
@@ -142,14 +150,16 @@ export default function SignUp() {
     }, DEBOUNCE_MS);
   };
 
-  /* ───── first-screen validation ───── */
+  /* ───── first‑screen validation ───── */
   const onSignUpPress = () => {
     setErrorMessage('');
     if (!username.trim())            return setErrorMessage('Username is required.');
+    if (!usernameRegex.test(username.trim()))
+      return setErrorMessage('Username may contain only letters, numbers, and underscores.');
     if (usernameAvailable===false)   return setErrorMessage('Username already taken.');
     if (!validatePassword(password)) return setErrorMessage('Password must be at least 8 characters long and include lowercase, uppercase, numerals, and symbols.');
     if (!email.trim()||!validateEmailFormat(email.trim()))
-      return setErrorMessage('Please enter a valid e-mail address (e.g., name@example.com).');
+      return setErrorMessage('Please enter a valid e‑mail address (e.g., name@example.com).');
     if (!isAtLeast21(mdyToDash(birthday))) return setErrorMessage('You must be at least 21.');
     setStep('ROLE_SELECTION');
   };
@@ -166,7 +176,7 @@ export default function SignUp() {
       if (nextStep?.signUpStep==='CONFIRM_SIGN_UP'){
         router.replace({ pathname:'./confirm-code', params:{ username,password,role:selectedRole,fromSignup:'1' }});
       }
-    } catch(e:any){ setErrorMessage(e?.message??'Sign-up error'); }
+    } catch(e:any){ setErrorMessage(e?.message??'Sign‑up error'); }
   };
 
   /* ───── UI ───── */
@@ -184,7 +194,7 @@ export default function SignUp() {
               onChangeText={startUsernameCheck}
               style={[
                 styles.input,
-                usernameAvailable===false && styles.inputError,
+                (usernameValid===false || usernameAvailable===false) && styles.inputError,
               ]}
               autoCapitalize="none"
             />
@@ -196,14 +206,17 @@ export default function SignUp() {
               />
             )}
           </View>
-          {username && usernameAvailable===false && (
+          {username && usernameValid===false && (
+            <Text style={styles.error}>Only letters, numbers, and underscores are allowed.</Text>
+          )}
+          {username && usernameValid && usernameAvailable===false && (
             <Text style={styles.suggestion}>
               {usernameSuggestion
                 ? `Username already taken – try “${usernameSuggestion}”.`
                 : 'Username already taken'}
             </Text>
           )}
-          {username && usernameAvailable===true && (
+          {username && usernameValid && usernameAvailable===true && (
             <Text style={[styles.suggestion,{color:'green'}]}>Username available ✓</Text>
           )}
 
@@ -250,7 +263,7 @@ export default function SignUp() {
             autoCapitalize="none"
           />
           {emailTouched&&email&&emailValid===false&&(
-            <Text style={styles.error}>Invalid e-mail format. Try “name@example.com”.</Text>
+            <Text style={styles.error}>Invalid e‑mail format. Try “name@example.com”.</Text>
           )}
 
           {/* Birthday */}
@@ -311,7 +324,7 @@ export default function SignUp() {
         </View>
       )}
 
-      {/* link to sign-in */}
+      {/* link to sign‑in */}
       <View style={styles.signUpContainer}>
         <Text style={styles.signUpText}>
           Already have an account?{' '}
