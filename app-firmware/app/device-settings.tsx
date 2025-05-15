@@ -1,11 +1,8 @@
 // -----------------------------------------------------------------------------
-// File: device-settings.tsx
-// Description: Provides a user interface for configuring LiquorBot device 
-//              settings, including slot assignments and connectivity. 
-//              Integrates with AWS Amplify for ingredient data and uses 
-//              PubSub (MQTT) to set/retrieve slot configuration on the ESP32.
-// Author: Nathan Hambleton (modified for slot-config MQTT by ChatGPT)
-// Created: March 1, 2025
+// File: device-settings.tsx  (REPLACED)
+// Description: Adds a Maintenance section (ready, empty, deep‑clean) that
+//              publishes commands on the maintenance topic, plus UX polish.
+// Author: Nathan Hambleton – updated 15 May 2025 by ChatGPT
 // -----------------------------------------------------------------------------
 import React, { useState, useEffect } from 'react';
 import {
@@ -20,6 +17,8 @@ import {
   Platform,
   ActivityIndicator,
   PermissionsAndroid,
+  Alert,
+  Animated,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
@@ -32,103 +31,240 @@ import { Amplify } from 'aws-amplify';
 import config from '../src/amplifyconfiguration.json';
 import { PubSub } from '@aws-amplify/pubsub';
 
-// Initialize Amplify & PubSub
 Amplify.configure(config);
 const pubsub = new PubSub({
   region: 'us-east-1',
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
 
+/*───────────────────────── types ─────────────────────────*/
 interface Ingredient {
   id: number;
   name: string;
   type: 'Alcohol' | 'Mixer' | 'Sour' | 'Sweet' | 'Misc';
   description: string;
 }
-
 interface BluetoothDevice {
   id: string;
   name: string;
 }
 
+/*──────────────────────── helper component ────────────────────────*/
+function ActionRow({
+  label,
+  icon,
+  onPress,
+  info,
+}: {
+  label: string;
+  icon: any;
+  onPress: () => void;
+  info: string;
+}) {
+  const anim = new Animated.Value(1);
+  const pressIn  = () => Animated.timing(anim, { toValue: 0.97, duration: 90,  useNativeDriver: true }).start();
+  const pressOut = () => Animated.timing(anim, { toValue: 1,    duration: 90,  useNativeDriver: true }).start();
+  return (
+    <Animated.View style={{ transform: [{ scale: anim }] }}>
+      <TouchableOpacity
+        style={styles.actionRow}
+        activeOpacity={0.8}
+        onPressIn={pressIn}
+        onPressOut={pressOut}
+        onPress={onPress}
+      >
+        <Ionicons name={icon} size={20} color="#CE975E" style={{ marginRight: 15 }} />
+        <Text style={styles.actionLabel}>{label}</Text>
+        <View style={{ flex: 1 }} />
+        <TouchableOpacity onPress={() => Alert.alert(label, info)}>
+          <Ionicons name="information-circle-outline" size={20} color="#4F4F4F" />
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+/*───────────────────────── component ─────────────────────────*/
 export default function DeviceSettings() {
-  const router = useRouter();
+  const router                       = useRouter();
   const { isConnected, liquorbotId } = useLiquorBot();
-  
-  /**
-   * We'll store 15 slots by ingredient ID. If 0 => no assignment.
-   */
-  const [slots, setSlots] = useState<number[]>(Array(15).fill(0));
 
-  // For ingredient selection modal
-  const [modalVisible, setModalVisible] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
-
-  // For searching/filtering ingredients
-  const [searchQuery, setSearchQuery] = useState('');
+  /* Slots -------------------------------------------------------------------*/
+  const [slots, setSlots]                 = useState<number[]>(Array(15).fill(0));
+  const [modalVisible, setModalVisible]   = useState(false);
+  const [selectedSlot, setSelectedSlot]   = useState<number | null>(null);
+  const [searchQuery, setSearchQuery]     = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-
-  // Master ingredient list from S3
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  // "Please connect a device first" bubble
-  const [showConnectPrompt, setShowConnectPrompt] = useState(false);
-
-  // Bluetooth states
-  const [bluetoothModalVisible, setBluetoothModalVisible] = useState(false);
-  const [discoveryModalVisible, setDiscoveryModalVisible] = useState(false);
-  const [discoveredDevices, setDiscoveredDevices] = useState<BluetoothDevice[]>([]);
-  const [isScanning, setIsScanning] = useState(false);
-
-  const DEVICE_SERVICE_UUID = '1fb68313-bd17-4fd8-b615-554ddfd462d6';
-  const manager = new BleManager();
-
-  // Config loading state
+  const [ingredients, setIngredients]     = useState<Ingredient[]>([]);
+  const [loading, setLoading]             = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
 
-  // ---------------- FETCH INGREDIENTS FROM S3 ----------------
+  /* Maintenance -------------------------------------------------------------*/
+  const maintenanceTopic = `liquorbot/liquorbot${liquorbotId}/maintenance`;
+
+  const publishMaintenance = async (payload: any) => {
+    try {
+      await pubsub.publish({ topics: [maintenanceTopic], message: payload });
+    } catch (err) {
+      console.error('Maintenance publish error:', err);
+    }
+  };
+
+  const handleReadySystem = () => {
+    publishMaintenance({ action: 'READY_SYSTEM' });
+  };
+  const handleEmptySystem = () => {
+    publishMaintenance({ action: 'EMPTY_SYSTEM' });
+  };
+  const handleDeepClean   = () => {
+    Alert.alert(
+      'Deep Clean',
+      'All ingredient containers must be empty.\n\n' +
+        'Place warm water in a spare container and attach it to Slot 1. ' +
+        'Proceed with deep clean?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Start',
+          style: 'destructive',
+          onPress: () => publishMaintenance({ action: 'DEEP_CLEAN' }),
+        },
+      ],
+    );
+  };
+
+  /* UX helpers --------------------------------------------------------------*/
+  const [showConnectPrompt, setShowConnectPrompt] = useState(false);
+  const bumpIfDisconnected = (fn: () => void) => {
+    if (!isConnected) {
+      setShowConnectPrompt(true);
+      setTimeout(() => setShowConnectPrompt(false), 2000);
+      return;
+    }
+    fn();
+  };
+
+  /* Bluetooth (unchanged) ---------------------------------------------------*/
+  const [bluetoothModalVisible, setBluetoothModalVisible] = useState(false);
+  const [discoveryModalVisible, setDiscoveryModalVisible] = useState(false);
+  const [discoveredDevices, setDiscoveredDevices]         = useState<BluetoothDevice[]>([]);
+  const [isScanning, setIsScanning]                       = useState(false);
+  const manager                                           = new BleManager();
+  const DEVICE_SERVICE_UUID                               = '1fb68313-bd17-4fd8-b615-554ddfd462d6';
+
+  /*──────────────────────── BLUETOOTH HELPERS ───────────────────────*/
+  // Ask Android‑only runtime permissions
+  const requestBluetoothPermissions = async () => {
+    if (Platform.OS !== 'android') return true;
+    const granted = await PermissionsAndroid.requestMultiple([
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+    ]);
+    return (
+      granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN]    === PermissionsAndroid.RESULTS.GRANTED &&
+      granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED &&
+      granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED
+    );
+  };
+
+  // Scan for LiquorBot peripherals
+  const scanForDevices = async () => {
+    const ok = await requestBluetoothPermissions();
+    if (!ok) return;
+
+    setIsScanning(true);
+    setDiscoveredDevices([]);
+    manager.startDeviceScan(null, null, (error, device) => {
+      if (error) {
+        console.error('BLE scan error:', error);
+        manager.stopDeviceScan();
+        setIsScanning(false);
+        return;
+      }
+      if (device?.name?.toLowerCase().includes('liquorbot')) {
+        setDiscoveredDevices((prev) =>
+          prev.find((d) => d.id === device.id) ? prev : [...prev, { id: device.id, name: device.name! }],
+        );
+      }
+    });
+
+    // stop after 5 s
+    setTimeout(() => {
+      manager.stopDeviceScan();
+      setIsScanning(false);
+    }, 5000);
+  };
+
+  // Connect to a chosen device
+  const handleConnectDevice = async (deviceId: string) => {
+    try {
+      setDiscoveryModalVisible(false);
+      const dev = await manager.connectToDevice(deviceId, { requestMTU: 256 });
+      await dev.discoverAllServicesAndCharacteristics();
+      // TODO: update your LiquorBot provider with the connection
+    } catch (err) {
+      console.error('BLE connect error:', err);
+      Alert.alert('Bluetooth', 'Unable to connect. Please try again.');
+    }
+  };
+
+  /*──────────────────── INGREDIENT‑ASSIGN HELPER ───────────────────*/
+  const assignIngredientToSlot = (ingredientId: number) => {
+    if (selectedSlot == null) return;
+
+    // Local UI update
+    setSlots((prev) => {
+      const next = [...prev];
+      next[selectedSlot] = ingredientId;
+      return next;
+    });
+
+    // Tell the ESP
+    handleSetSlot(selectedSlot, ingredientId);
+
+    // Close picker
+    setModalVisible(false);
+    setSearchQuery('');
+  };
+
+  /* Fetch ingredients list --------------------------------------------------*/
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        // Load the ingredients.json from S3
-        const ingUrl = await getUrl({ key: 'drinkMenu/ingredients.json' });
-        const response = await fetch(ingUrl.url);
-        const data = await response.json();
-
-        // Sort them alphabetically by name
+        const ingUrl  = await getUrl({ key: 'drinkMenu/ingredients.json' });
+        const resp    = await fetch(ingUrl.url);
+        const data    = await resp.json();
         data.sort((a: Ingredient, b: Ingredient) => a.name.localeCompare(b.name));
         setIngredients(data);
-      } catch (error) {
-        console.error('Error fetching ingredients from S3:', error);
+      } catch (err) {
+        console.error('S3 ingredients fetch error:', err);
       } finally {
         setLoading(false);
       }
     })();
   }, []);
 
-  useEffect(() => {
-    if (ingredients.length > 0 && isConnected) {
-      fetchCurrentConfig();
-    }
-  }, [ingredients, isConnected, liquorbotId]); // Added liquorbotId dependency
+  /* Slot‑config MQTT subscribe/publish --------------------------------------*/
+  const slotTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
 
-  // ---------------- MQTT SUBSCRIBE & CONFIG HANDLERS ----------------
+  const publishSlot = async (payload: any) => {
+    try {
+      await pubsub.publish({ topics: [slotTopic], message: payload });
+    } catch (err) {
+      console.error('Slot publish error:', err);
+    }
+  };
+
   useEffect(() => {
-    const slotConfigTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
-    // Subscribe to slot-config topic
-    const subscription = pubsub.subscribe({ topics: [slotConfigTopic] }).subscribe({
-      next: (data) => {
-        const msg = ((data as any)?.value ?? data) as any;
-      
+    const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
+      next: (d) => {
+        const msg = (d as any).value ?? d;
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
-          // coerce any string IDs to numbers just in case
           setSlots(msg.slots.map((id: any) => Number(id) || 0));
           setConfigLoading(false);
-          return;
         }
-      
         if (msg.action === 'SET_SLOT' && typeof msg.slot === 'number') {
           setSlots((prev) => {
             const next = [...prev];
@@ -137,171 +273,46 @@ export default function DeviceSettings() {
           });
         }
       },
-      error: (error) => {
-        console.error('Slot-config subscription error:', error);
-      },
-      complete: () => {},
+      error: (err) => console.error('slot‑config sub error:', err),
     });
+    if (isConnected) fetchCurrentConfig();
+    return () => sub.unsubscribe();
+  }, [isConnected, liquorbotId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Once we are connected, we ask the ESP for the latest config
-    if (isConnected) {
-      fetchCurrentConfig();
-    }
-
-    // Cleanup
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [isConnected, liquorbotId]); // Added liquorbotId dependency
-
-  /**
-   * Publish a message to the slot-config topic
-   */
-  const publishSlotMessage = async (payload: any) => {
-    try {
-      const topic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
-      await pubsub.publish({
-        topics: [topic],
-        message: payload,
-      });
-    } catch (error) {
-      console.error('Error publishing slot-config message:', error);
-    }
-  };
-
-  // Ask the ESP for its current slot config
   const fetchCurrentConfig = () => {
     if (!isConnected) return;
     setConfigLoading(true);
-    publishSlotMessage({ action: 'GET_CONFIG' });
+    publishSlot({ action: 'GET_CONFIG' });
   };
-
-  // Clears all slots on both app & device
-  const handleClearAll = () => {
-    if (!isConnected) {
-      setShowConnectPrompt(true);
-      setTimeout(() => setShowConnectPrompt(false), 2000);
-      return;
-    }
-    publishSlotMessage({ action: 'CLEAR_CONFIG' });
-    setSlots(Array(15).fill(0)); // local reset
-  };
-
-  // For setting a single slot
-  const handleSetSlot = (slotIndex: number, ingredientId: number) => {
-    const message = {
-      action: 'SET_SLOT',
-      slot: slotIndex + 1, // 1-based index in the ESP
-      ingredientId,
-    };
-    publishSlotMessage(message);
-  };
-
-  // ---------------- BLUETOOTH HELPER METHODS (OPTIONAL) ----------------
-  const requestBluetoothPermissions = async () => {
-    if (Platform.OS === 'android') {
-      const granted = await PermissionsAndroid.requestMultiple([
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      ]);
-      return (
-        granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED &&
-        granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED &&
-        granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED
-      );
-    }
-    return true; // iOS or web
-  };
-
-  const scanForDevices = async () => {
-    const hasPermissions = await requestBluetoothPermissions();
-    if (!hasPermissions) {
-      return;
-    }
-    setIsScanning(true);
-    setDiscoveredDevices([]);
-
-    manager.startDeviceScan(null, null, (error, device) => {
-      if (error) {
-        manager.stopDeviceScan();
-        setIsScanning(false);
-        return;
-      }
-      if (device?.name?.toLowerCase().includes('liquorbot')) {
-        setDiscoveredDevices((prev) => [...prev, { id: device.id, name: device.name! }]);
-      }
+  const handleClearAll = () =>
+    bumpIfDisconnected(() => {
+      publishSlot({ action: 'CLEAR_CONFIG' });
+      setSlots(Array(15).fill(0));
     });
+  const handleSetSlot = (idx: number, id: number) =>
+    publishSlot({ action: 'SET_SLOT', slot: idx + 1, ingredientId: id });
 
-    setTimeout(() => {
-      manager.stopDeviceScan();
-      setIsScanning(false);
-    }, 5000);
-  };
-
-  const handleConnectDevice = (deviceId: string) => {
-    setDiscoveryModalVisible(false);
-    // your BLE connect flow here...
-  };
-
-  // ---------------- INGREDIENT FILTERING / MAPPING ----------------
+  /* Ingredient helpers ------------------------------------------------------*/
   const categories = ['All', 'Alcohol', 'Mixer', 'Sour', 'Sweet', 'Misc'];
-
   const filteredIngredients = ingredients
-    .filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    .filter((item) => selectedCategory === 'All' || item.type === selectedCategory);
+    .filter((i) => i.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .filter((i) => selectedCategory === 'All' || i.type === selectedCategory);
+  const ingName = (id: number | string) =>
+    ingredients.find((i) => i.id === Number(id))?.name ?? '';
 
-  /**
-   * Return the ingredient name for a given ID.
-   * If not found, we return a fallback message.
-   */
-  const getIngredientNameById = (id: number | string): string => {
-    if (!id || ingredients.length === 0) return '';      // suppress while loading
-    const numId = Number(id);
-    const found = ingredients.find((ing) => ing.id === numId);
-    return found ? found.name : '';                      // no “Unknown” flash
-  };
-
-  // User taps a slot => open the selection modal
-  const handleSlotPress = (index: number) => {
-    if (!isConnected) {
-      setShowConnectPrompt(true);
-      setTimeout(() => setShowConnectPrompt(false), 2000);
-      return;
-    }
-    setSelectedSlot(index);
-    setModalVisible(true);
-  };
-
-  // When user picks an ingredient from the modal
-  const assignIngredientToSlot = (ingredientId: number) => {
-    if (selectedSlot !== null) {
-      // Update local state
-      const newSlots = [...slots];
-      newSlots[selectedSlot] = ingredientId;
-      setSlots(newSlots);
-
-      // Publish to ESP
-      handleSetSlot(selectedSlot, ingredientId);
-
-      // Close modal & clear search
-      setModalVisible(false);
-      setSearchQuery('');
-    }
-  };
-
-  // ---------------- RENDER ----------------
+  /* Render ------------------------------------------------------------------*/
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {/* Close button => go back */}
+
+        {/* close */}
         <TouchableOpacity style={styles.closeButton} onPress={() => router.push('/')}>
           <Ionicons name="close" size={30} color="#DFDCD9" />
         </TouchableOpacity>
 
-        <Text style={styles.headerText}>Device Settings</Text>
+        <Text style={styles.headerText}>Device Settings</Text>
 
-        {/* Connection status box */}
+        {/* connection box */}
         <View style={styles.connectionBox}>
           <TouchableOpacity
             style={styles.bluetoothIconContainer}
@@ -324,18 +335,42 @@ export default function DeviceSettings() {
           </View>
         </View>
 
-        {/* Slots configuration box */}
+        {/* ─────────────────── MAINTENANCE SECTION ─────────────────── */}
+        <View style={styles.maintenanceContainer}>
+          <Text style={styles.sectionHeader}>Maintenance</Text>
+
+          {/* READY SYSTEM */}
+          <ActionRow
+            label="Load Ingredients"
+            icon="reload-outline"
+            onPress={() => bumpIfDisconnected(handleReadySystem)}
+            info="Primes every tube so the first pour is instant."
+          />
+
+          {/* EMPTY SYSTEM */}
+          <ActionRow
+            label="Empty System"
+            icon="download-outline"
+            onPress={() => bumpIfDisconnected(handleEmptySystem)}
+            info="Pumps liquid back to its bottles for safe storage."
+          />
+
+          {/* DEEP CLEAN */}
+          <ActionRow
+            label="Deep Clean"
+            icon="water-outline"
+            onPress={() => bumpIfDisconnected(handleDeepClean)}
+            info="Runs warm water through all tubes. Bottles must be empty."
+          />
+        </View>
+
+        {/* ─────────────────── CONFIGURE SLOTS ─────────────────── */}
         <View style={styles.slotsContainer}>
           <View style={styles.slotsHeaderContainer}>
-            <Text style={styles.slotsHeader}>Configure Slots</Text>
+            <Text style={styles.sectionHeader}>Configure Slots</Text>
             <TouchableOpacity onPress={handleClearAll} disabled={!isConnected}>
-              <Text
-                style={[
-                  styles.clearAllButtonText,
-                  !isConnected && { opacity: 0.5 },
-                ]}
-              >
-                Clear All
+              <Text style={[styles.clearAllButtonText, !isConnected && { opacity: 0.5 }]}>
+                Clear All
               </Text>
             </TouchableOpacity>
           </View>
@@ -346,47 +381,52 @@ export default function DeviceSettings() {
             </Text>
           )}
 
-          {slots.map((ingredientId, index) => {
-            const ingredientName = getIngredientNameById(ingredientId);
-            return (
-              <View key={index} style={styles.slotRow}>
-                <Text style={styles.slotLabel}>Slot {index + 1}</Text>
-                <View style={styles.pickerButtonContainer}>
+          {slots.map((ingredientId, idx) => (
+            <View key={idx} style={styles.slotRow}>
+              <Text style={styles.slotLabel}>Slot {idx + 1}</Text>
+              <View style={styles.pickerButtonContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.pickerButton,
+                    !isConnected && styles.pickerButtonDisconnected,
+                  ]}
+                  onPress={() => {
+                    if (!isConnected) {
+                      setShowConnectPrompt(true);
+                      setTimeout(() => setShowConnectPrompt(false), 2000);
+                      return;
+                    }
+                    setSelectedSlot(idx);
+                    setModalVisible(true);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.pickerButtonText,
+                      ingName(ingredientId) && styles.selectedPickerButtonText,
+                    ]}
+                  >
+                    {ingName(ingredientId) || 'Select Ingredient'}
+                  </Text>
+                </TouchableOpacity>
+                {ingName(ingredientId) && (
                   <TouchableOpacity
                     style={[
-                      styles.pickerButton,
-                      !isConnected && styles.pickerButtonDisconnected,
+                      styles.clearSlotOverlay,
+                      !isConnected && styles.clearSlotOverlayDisabled,
                     ]}
-                    onPress={() => handleSlotPress(index)}
+                    onPress={() => isConnected && handleSetSlot(idx, 0)}
+                    disabled={!isConnected}
                   >
-                    <Text
-                      style={[
-                        styles.pickerButtonText,
-                        ingredientName !== '' && styles.selectedPickerButtonText,
-                      ]}
-                    >
-                      {ingredientName || 'Select Ingredient'}
-                    </Text>
+                    <Text style={styles.clearSlotOverlayText}>X</Text>
                   </TouchableOpacity>
-                  {ingredientName !== '' && (
-                    <TouchableOpacity
-                      style={[
-                        styles.clearSlotOverlay,
-                        !isConnected && styles.clearSlotOverlayDisabled,
-                      ]}
-                      onPress={() => isConnected && handleSetSlot(index, 0)}
-                      disabled={!isConnected}
-                    >
-                      <Text style={styles.clearSlotOverlayText}>X</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+                )}
               </View>
-            );
-          })}
+            </View>
+          ))}
         </View>
 
-        {/* "Please connect a device first" bubble */}
+        {/* connect prompt bubble */}
         {showConnectPrompt && (
           <View style={styles.connectPrompt}>
             <Text style={styles.connectPromptText}>Please connect a device first</Text>
@@ -911,5 +951,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1000,
+  },
+  maintenanceContainer: {
+    backgroundColor: '#1F1F1F',
+    borderRadius: 10,
+    padding: 20,
+    marginBottom: 20,
+  },
+  sectionHeader: {
+    color: '#DFDCD9',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 15,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#141414',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    marginBottom: 10,
+  },
+  actionLabel: {
+    color: '#DFDCD9',
+    fontSize: 16,
   },
 });
