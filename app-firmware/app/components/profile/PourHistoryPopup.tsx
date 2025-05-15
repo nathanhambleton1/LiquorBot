@@ -386,6 +386,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 10,
+    marginBottom: 50,
   },
   clearTxt: {
     color: '#DFDCD9',
