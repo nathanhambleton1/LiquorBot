@@ -28,7 +28,8 @@ void setup() {
     // Initialize BLE and Wi-Fi setup
     //setupBluetoothWiFiAWS();
 
-    setWiFiCredentials("WhiteSky-TheWilde", "qg3v2zyr");
+    //setWiFiCredentials("WhiteSky-TheWilde", "qg3v2zyr");
+    setWiFiCredentials("USuites_legacy", "onmyhonor");
     connectToWiFi();
     setupAWS();
     initDrinkController();

@@ -338,6 +338,11 @@ export default function CreateDrinkScreen() {
         <Ionicons name="close" size={30} color="#DFDCD9"/>
       </TouchableOpacity>
 
+      {/* list button */}
+      <TouchableOpacity style={styles.listButton} onPress={() => router.push('/drink-list')}>
+        <Ionicons name="list" size={30} color="#DFDCD9" />
+      </TouchableOpacity>
+
       <Text style={styles.headerText}>{isEditing?'Edit Drink':'Custom Drink'}</Text>
 
       <ScrollView contentContainerStyle={styles.contentContainer}
@@ -713,6 +718,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 55,
     left: 20,
+    zIndex: 10,
+    padding: 10,
+  },
+  listButton: {
+    position: 'absolute',
+    top: 55,
+    right: 20,
     zIndex: 10,
     padding: 10,
   },

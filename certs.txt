@@ -12,4 +12,4 @@ liquorbot: wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt
 -----------------------------------------------------------
 ===========================================================
 
-aws iot attach-policy --policy-name Amplify-App-Policy --target us-east-1:29fa5f77-10b7-cdbe-2c9a-27870fd08c03
+aws iot attach-policy --policy-name Amplify-App-Policy --target us-east-1:29fa5f77-1071-c5ef-5bb8-b593793063a1

@@ -14,6 +14,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 // 1) Import the LiquorBot context hook:
 import { useLiquorBot } from '../components/liquorbot-provider';
+import { fetchAuthSession } from '@aws-amplify/auth';
 
 export default function Index() {
   const router = useRouter();
@@ -37,7 +38,17 @@ export default function Index() {
         }),
       ])
     ).start();
-  }, [glowAnimation]);
+    const logIdentityId = async () => {
+      try {
+        const session = await fetchAuthSession();
+        console.log('Cognito Identity ID:', session.identityId);
+      } catch (err) {
+        console.warn('Could not fetch identity ID:', err);
+      }
+    };
+
+    logIdentityId();
+  }, []);
 
   return (
     <ImageBackground

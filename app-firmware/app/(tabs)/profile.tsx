@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 
 // Sub‑popups
 import EditProfilePopup from '../components/profile/EditProfilePopup';
@@ -92,6 +93,7 @@ export default function ProfileScreen() {
   const [popup, setPopup] = useState<PopupMeta | null>(null);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
   const { signOut } = useAuthenticator((ctx: any) => [ctx.user]);
+  const router = useRouter();
 
   // Reset popup state when navigating to the profile tab
   useFocusEffect(
@@ -231,6 +233,7 @@ export default function ProfileScreen() {
   const buttons = [
     { title: 'Edit Profile', icon: 'create-outline' as const },
     { title: 'Liked Drinks', icon: 'heart-outline' as const },
+    { title: 'My Drinks',    icon: 'wine-outline'  as const },
     { title: 'Pour History', icon: 'time-outline'  as const },
     { title: 'Settings',      icon: 'settings-outline' as const },   // placeholders
     { title: 'Help',          icon: 'help-circle-outline' as const },
@@ -297,7 +300,18 @@ export default function ProfileScreen() {
             <TouchableOpacity
               key={b.title}
               style={styles.button}
-              onPress={() => (b.title === 'Sign Out' ? signOut() : openPopup({ title: b.title }))}
+              onPress={() => {
+                switch (b.title) {
+                  case 'Sign Out':
+                    signOut();
+                    break;
+                  case 'My Drinks':
+                    router.push('/drink-list');
+                    break;
+                  default:
+                    openPopup({ title: b.title });
+                }
+              }}
             >
               <View style={styles.buttonRow}>
                 <Ionicons name={b.icon} size={24} color="#CE975E" style={styles.buttonIcon} />

@@ -1,15 +1,15 @@
 // -----------------------------------------------------------------------------
 // File: confirm-code.tsx
-// Description: Confirms the account, then shows ✅ & a Sign-In button.
-//              • Accepts username & (optional) password from route params.
-//              • Treats “already confirmed” as success.
+// Description: Confirms a new account, then signs in & attaches the IoT policy
+//              (Amplify-App-Policy) to the user’s Cognito Identity ID.
 // Author: Nathan Hambleton
-// Updated: Apr 23 2025
+// Updated: May 15 2025
 // -----------------------------------------------------------------------------
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { confirmSignUp, signIn } from 'aws-amplify/auth';
+import { confirmSignUp, signIn, fetchAuthSession } from '@aws-amplify/auth';
+import { IoTClient, AttachPolicyCommand } from '@aws-sdk/client-iot';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function ConfirmCode() {
@@ -23,6 +23,29 @@ export default function ConfirmCode() {
   const [infoMessage, setInfoMessage] = useState('');
   const pwd = routePwd ?? '';
 
+  /* ─────────── helper: attach IoT policy once we have an identity ID ───────── */
+  const attachIotPolicyIfNeeded = async () => {
+    try {
+      const session = await fetchAuthSession();          // identityId + creds
+      const { identityId, credentials } = session;
+      if (!identityId) return;                           // shouldn't happen
+
+      const iot = new IoTClient({ region: 'us-east-1', credentials });
+      await iot.send(
+        new AttachPolicyCommand({
+          policyName: 'Amplify-App-Policy',
+          target: identityId,
+        })
+      );
+      console.log('🔗 IoT policy attached to', identityId);
+    } catch (err: any) {
+      // Ignore “already attached” errors, log the rest
+      if (err?.name !== 'ResourceAlreadyExistsException') {
+        console.warn('IoT attach‑policy failed:', err);
+      }
+    }
+  };
+
   /* ───────────────────────── handlers ───────────────────────── */
   const doConfirm = async () => {
     setErrorMessage(''); setInfoMessage('');
@@ -30,8 +53,15 @@ export default function ConfirmCode() {
       await confirmSignUp({ username: username!, confirmationCode });
       setConfirmationSuccess(true);
       setInfoMessage('Your account has been confirmed!');
+
+      // OPTIONAL: auto‑sign‑in and attach policy if we have the password
+      if (pwd) {
+        await signIn({ username: username!, password: pwd });
+        await attachIotPolicyIfNeeded();
+        router.replace('/(tabs)');                       // go straight into app
+      }
     } catch (e: any) {
-      // if it was already confirmed, treat that as success
+      // Treat “already confirmed” as success
       if (
         (e?.code === 'NotAuthorizedException' || e?.name === 'NotAuthorizedException') &&
         /already.*confirmed/i.test(e?.message ?? '')
@@ -51,6 +81,7 @@ export default function ConfirmCode() {
     }
     try {
       await signIn({ username: username!, password: pwd });
+      await attachIotPolicyIfNeeded();
       router.replace('/(tabs)');
     } catch {
       router.replace('/auth/sign-in');
@@ -62,7 +93,7 @@ export default function ConfirmCode() {
     <View style={styles.container}>
       <Text style={styles.title}>Confirm Account</Text>
 
-      {confirmationSuccess ? (
+      {confirmationSuccess && !pwd ? (
         <>
           <Ionicons
             name="checkmark-circle"
@@ -76,22 +107,23 @@ export default function ConfirmCode() {
           </TouchableOpacity>
         </>
       ) : (
-        <>
-          <Text style={styles.label}>Confirmation Code</Text>
-          <TextInput
-            value={confirmationCode}
-            onChangeText={setConfirmationCode}
-            style={styles.input}
-            keyboardType="number-pad"
-          />
+        !confirmationSuccess && (
+          <>
+            <Text style={styles.label}>Confirmation Code</Text>
+            <TextInput
+              value={confirmationCode}
+              onChangeText={setConfirmationCode}
+              style={styles.input}
+              keyboardType="number-pad"
+            />
+            {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+            {!!infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
 
-          {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
-          {!!infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
-
-          <TouchableOpacity style={styles.button} onPress={doConfirm}>
-            <Text style={styles.buttonText}>Confirm</Text>
-          </TouchableOpacity>
-        </>
+            <TouchableOpacity style={styles.button} onPress={doConfirm}>
+              <Text style={styles.buttonText}>Confirm</Text>
+            </TouchableOpacity>
+          </>
+        )
       )}
 
       {/* Back link */}

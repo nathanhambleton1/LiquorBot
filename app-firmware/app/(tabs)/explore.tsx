@@ -12,13 +12,13 @@ import {
   NativeScrollEvent, NativeSyntheticEvent,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Amplify } from 'aws-amplify';
 import { getUrl } from 'aws-amplify/storage';
 import { getCurrentUser } from '@aws-amplify/auth';
-import { PubSub } from '@aws-amplify/pubsub';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLiquorBot } from '../components/liquorbot-provider';
+import { Amplify } from 'aws-amplify';
 import config from '../../src/amplifyconfiguration.json';
+import { PubSub } from '@aws-amplify/pubsub';
 
 /* ─────────── Amplify + PubSub bootstrap ─────────── */
 Amplify.configure(config);
@@ -67,7 +67,7 @@ const AUTO_SPEED    = 36;
 
 /* placeholder for any missing drink artwork */
 const placeholder =
-  'https://d3jj0su0y4d6lr.cloudfront.net/placeholder_drink.png';
+  '../../assets/images/glasses/rocks.png';
 
 /* handy helpers */
 const shuffle = <T,>(arr: T[]) => {
@@ -337,6 +337,15 @@ export default function ExploreScreen() {
   const [modalBook, setModal]    = useState<RecipeBook | null>(null);
   const [modalVis,  setModalVis] = useState(false);
 
+  // Subscribe to the SLOT_CONFIG_TOPIC
+  useEffect(() => {
+    const subscription = pubsub.subscribe({ topics: [SLOT_CONFIG_TOPIC] }).subscribe({
+      error: (error) => console.error('Subscription error on SLOT_CONFIG_TOPIC:', error),
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   /* map for quick id→ingredient lookup */
   const ingredientMap = useMemo(() => {
     const m = new Map<number, Ingredient>();
@@ -404,23 +413,15 @@ export default function ExploreScreen() {
 
   /* ––––– SLOT-CONFIG PUBLISHER ––––– */
   const publishSlotMessage = async (payload: any) => {
-  try {
-    // Convert payload to JSON string and verify structure
-    const messageStr = JSON.stringify(payload);
-    console.log('Publishing to MQTT:', SLOT_CONFIG_TOPIC, messageStr);
-    
-    await pubsub.publish({
-      topics: [SLOT_CONFIG_TOPIC],
-      message: { 
-        // Wrap in 'message' key to match AWS IoT Core format
-        message: messageStr 
-      },
-    });
-  } catch (error) {
-    console.error('Publish error:', error);
-    throw error; // Propagate error to handleApply
-  }
-};
+    try {
+      await pubsub.publish({
+        topics: [SLOT_CONFIG_TOPIC],
+        message: payload,
+      });
+    } catch (error) {
+      console.error('Error publishing slot-config message:', error);
+    }
+  };
 
 // Then update applyBookToDevice to handle errors properly:
 const applyBookToDevice = useCallback(async (book: RecipeBook) => {
