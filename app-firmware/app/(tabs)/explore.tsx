@@ -27,8 +27,6 @@ const pubsub = new PubSub({
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
 
-const SLOT_CONFIG_TOPIC = 'liquorbot/liquorbot${liquorbotId}/slot-config';
-
 if (Platform.OS === 'android')
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 
@@ -326,7 +324,7 @@ const BookCard = ({ book, onPress }: BookCardProps) => (
 /*                          MAIN EXPLORE SCREEN                               */
 /* -------------------------------------------------------------------------- */
 export default function ExploreScreen() {
-  const { isConnected } = useLiquorBot();
+  const { isConnected, liquorbotId } = useLiquorBot();
 
   const [drinks,      setDrinks]  = useState<Drink[]>([]);
   const [ingredients, setIngs]    = useState<Ingredient[]>([]);
@@ -339,12 +337,15 @@ export default function ExploreScreen() {
 
   // Subscribe to the SLOT_CONFIG_TOPIC
   useEffect(() => {
-    const subscription = pubsub.subscribe({ topics: [SLOT_CONFIG_TOPIC] }).subscribe({
-      error: (error) => console.error('Subscription error on SLOT_CONFIG_TOPIC:', error),
+    if (!liquorbotId) return;
+
+    const topic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
+    const subscription = pubsub.subscribe({ topics: [topic] }).subscribe({
+      error: (error) => console.error('Subscription error:', error),
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [liquorbotId]);
 
   /* map for quick id→ingredient lookup */
   const ingredientMap = useMemo(() => {
@@ -412,42 +413,44 @@ export default function ExploreScreen() {
   }, [drinks, ingredientMap, userId]);
 
   /* ––––– SLOT-CONFIG PUBLISHER ––––– */
-  const publishSlotMessage = async (payload: any) => {
+  const publishSlotMessage = useCallback(async (payload: any) => {
+    if (!liquorbotId) return;
     try {
-      await pubsub.publish({
-        topics: [SLOT_CONFIG_TOPIC],
-        message: payload,
+      const topic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
+      await pubsub.publish({ 
+        topics: [topic],
+        message: payload 
       });
     } catch (error) {
-      console.error('Error publishing slot-config message:', error);
+      console.error('Publish error:', error);
     }
-  };
+  }, [liquorbotId]);
 
-// Then update applyBookToDevice to handle errors properly:
-const applyBookToDevice = useCallback(async (book: RecipeBook) => {
-  try {
-    const padded = Array.from({ length: 15 }, (_, i) => 
-      i < book.ingredientIds.length ? book.ingredientIds[i] : 0
-    );
+  // Then update applyBookToDevice to handle errors properly:
+  const applyBookToDevice = useCallback(async (book: RecipeBook) => {
+    try {
+      const padded = Array.from({ length: 15 }, (_, i) => 
+        i < book.ingredientIds.length ? book.ingredientIds[i] : 0
+      );
 
-    // Send batch updates with confirmation logging
-    await Promise.all(padded.map((ingId, index) => 
-      publishSlotMessage({
-        action: 'SET_SLOT',
-        slot: index + 1,
-        ingredientId: ingId,
-        timestamp: Date.now()
-      })
-    ));
+      // Send batch updates with confirmation logging
+      await Promise.all(padded.map((ingId, index) => 
+        publishSlotMessage({
+          action: 'SET_SLOT',
+          slot: index + 1,
+          ingredientId: ingId,
+          timestamp: Date.now()
+        })
+      ));
 
-    // Final verification request
-    await publishSlotMessage({ action: 'GET_CONFIG' });
-    console.log('Slot config update complete');
-  } catch (error) {
-    console.error('Failed to apply book:', error);
-    throw error; // Let modal handle the error state
-  }
-}, [publishSlotMessage]);
+      // Final verification request
+      await publishSlotMessage({ action: 'GET_CONFIG' });
+      console.log('Slot config update complete');
+    } catch (error) {
+      console.error('Failed to apply book:', error);
+      throw error; // Let modal handle the error state
+    }
+  }, [publishSlotMessage]);
 
   /* ––––– UI ––––– */
   if (loading || !books.length) {

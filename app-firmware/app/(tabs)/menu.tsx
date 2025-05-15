@@ -204,10 +204,9 @@ function DrinkItem({
   /* --------------- pour-drink helpers --------------- */
   async function publishDrinkCommand() {
     await pubsub.publish({
-      topics: ['liquorbot/liquorbot${liquorbotId}/publish'],
+      topics: [`liquorbot/liquorbot${liquorbotId}/publish`],
       message: { content: drink.ingredients ?? '' },
     });
-    console.log(`Published command="${drink.ingredients}"`);
   }
 
   // 👇 NEW – log to GraphQL
@@ -243,7 +242,6 @@ function DrinkItem({
       await publishDrinkCommand();
       console.log(`Pouring ${drink.name} (${quantity})`);
       await logPouredDrink((await getCurrentUser())?.username ?? null);
-
       setLogging(false);
       triggerStatus('success', 'Pour successful, enjoy!');
     } catch (error) {
@@ -445,7 +443,7 @@ export default function MenuScreen() {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
   const { isConnected, slots, liquorbotId } = useLiquorBot();
-  const isFocused = useIsFocused(); // << add
+  const isFocused = useIsFocused();
 
   /* ------------------------- STATE ------------------------- */
   const [drinks, setDrinks] = useState<Drink[]>([]);
@@ -473,6 +471,20 @@ export default function MenuScreen() {
   useEffect(() => {
     if (isFocused) setCustomFetched(false); // << add
   }, [isFocused]);
+
+  // Subscribe to the publish topic
+  useEffect(() => {
+    const subscription = pubsub.subscribe({
+      topics: [`liquorbot/liquorbot${liquorbotId}/publish`],
+    }).subscribe({
+      next: (data) => {
+        // Handle the incoming message as needed
+      },
+      error: (error) => console.error('Publish topic subscription error:', error),
+    });
+
+    return () => subscription.unsubscribe();
+  }, [liquorbotId]);
 
   // Load saved filter options on mount
   useEffect(() => {
@@ -817,7 +829,7 @@ export default function MenuScreen() {
         {renderedDrinks.length === 0 ? (
           <View style={styles.noDrinksContainer}>
             <Text style={styles.noDrinksText}>
-              Oops! Looks like you can't make any drinks. Check your filters and connection.
+              Oops, no drinks here! Check your filters and connection.
             </Text>
           </View>
         ) : (
@@ -964,7 +976,7 @@ const styles = StyleSheet.create({
   },
   noDrinksText: {
     color: '#4f4f4f',
-    fontSize: 14,
+    fontSize: 12,
     textAlign: 'center',
   },
 });

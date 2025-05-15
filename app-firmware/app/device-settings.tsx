@@ -39,8 +39,6 @@ const pubsub = new PubSub({
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
 
-const SLOT_CONFIG_TOPIC = 'liquorbot/liquorbot${liquorbotId}/slot-config';
-
 interface Ingredient {
   id: number;
   name: string;
@@ -114,12 +112,13 @@ export default function DeviceSettings() {
     if (ingredients.length > 0 && isConnected) {
       fetchCurrentConfig();
     }
-  }, [ingredients, isConnected]);
+  }, [ingredients, isConnected, liquorbotId]); // Added liquorbotId dependency
 
   // ---------------- MQTT SUBSCRIBE & CONFIG HANDLERS ----------------
   useEffect(() => {
+    const slotConfigTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
     // Subscribe to slot-config topic
-    const subscription = pubsub.subscribe({ topics: [SLOT_CONFIG_TOPIC] }).subscribe({
+    const subscription = pubsub.subscribe({ topics: [slotConfigTopic] }).subscribe({
       next: (data) => {
         const msg = ((data as any)?.value ?? data) as any;
       
@@ -153,16 +152,16 @@ export default function DeviceSettings() {
     return () => {
       subscription.unsubscribe();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConnected]);
+  }, [isConnected, liquorbotId]); // Added liquorbotId dependency
 
   /**
    * Publish a message to the slot-config topic
    */
   const publishSlotMessage = async (payload: any) => {
     try {
+      const topic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
       await pubsub.publish({
-        topics: [SLOT_CONFIG_TOPIC],
+        topics: [topic],
         message: payload,
       });
     } catch (error) {

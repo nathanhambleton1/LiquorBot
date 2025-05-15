@@ -1,8 +1,4 @@
-// -----------------------------------------------------------------------------
 // File: liquorbot-provider.tsx
-// Description: Provides a React context for managing LiquorBot's connection 
-//              status, configuration, and handling IoT PubSub subscriptions.
-// -----------------------------------------------------------------------------
 import React, {
   createContext,
   useState,
@@ -20,9 +16,6 @@ const pubsub = new PubSub({
   region: 'us-east-1',
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
-
-const HEARTBEAT_TOPIC = 'liquorbot/liquorbot${liquorbotId}/heartbeat';
-const SLOT_CONFIG_TOPIC = 'liquorbot/liquorbot${liquorbotId}/slot-config';
 
 interface LiquorBotContextValue {
   isConnected: boolean;
@@ -48,7 +41,6 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
   const [slots, setSlots] = useState<number[]>(Array(15).fill(0));
   const [liquorbotId, setLiquorbotId] = useState('000');
 
-  // Centralized slot configuration handler
   const handleSlotConfig = (message: any) => {
     if (message.action === 'CURRENT_CONFIG' && Array.isArray(message.slots)) {
       setSlots(message.slots.map((id: any) => Number(id) || 0));
@@ -64,28 +56,33 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
 
   // Subscribe to config updates
   useEffect(() => {
-    const subscription = pubsub.subscribe({ topics: [SLOT_CONFIG_TOPIC] }).subscribe({
+    const slotConfigTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
+    const subscription = pubsub.subscribe({ topics: [slotConfigTopic] }).subscribe({
       next: (data) => handleSlotConfig((data as any)?.value ?? data),
       error: (error) => console.error('Config subscription error:', error),
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [liquorbotId]); // Add liquorbotId as dependency
 
   // Fetch config when connected
   useEffect(() => {
     if (isConnected) {
+      const slotConfigTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
       pubsub.publish({
-        topics: [SLOT_CONFIG_TOPIC],
+        topics: [slotConfigTopic],
         message: { action: 'GET_CONFIG' }
       }).catch(error => console.error('Config fetch error:', error));
     }
-  }, [isConnected]);
+  }, [isConnected, liquorbotId]); // Add liquorbotId as dependency
 
-  // Connection status management
+  // Heartbeat and connection management
   useEffect(() => {
-    const subscription = pubsub.subscribe({ topics: HEARTBEAT_TOPIC }).subscribe({
-      next: () => setLastHeartbeat(Date.now()),
+    const heartbeatTopic = `liquorbot/liquorbot${liquorbotId}/heartbeat`;
+    const subscription = pubsub.subscribe({ topics: [heartbeatTopic] }).subscribe({
+      next: (data) => {
+        setLastHeartbeat(Date.now());
+      },
       error: (error) => console.error('Heartbeat subscription error:', error),
     });
 
@@ -97,18 +94,21 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
       clearInterval(intervalId);
     };
-  }, [lastHeartbeat]);
+  }, [liquorbotId, lastHeartbeat]); // Add liquorbotId as dependency
 
   const contextValue: LiquorBotContextValue = {
     isConnected,
     slots,
     liquorbotId,
-    setLiquorbotId,
+    setLiquorbotId: (id: string) => {
+      setLiquorbotId(id);
+    },
     forceDisconnect: () => setIsConnected(false),
     updateSlots: (newSlots) => {
       setSlots(newSlots);
+      const slotConfigTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
       pubsub.publish({
-        topics: [`liquorbot/liquorbot${liquorbotId}/slot-config`],
+        topics: [slotConfigTopic],
         message: { 
           action: 'CURRENT_CONFIG',
           slots: newSlots
@@ -116,7 +116,6 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
       }).catch(console.error);
     }
   };
-
 
   return (
     <LiquorBotContext.Provider value={contextValue}>
