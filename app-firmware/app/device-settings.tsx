@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: device-settings.tsx  (REPLACED)
+// File: device-settings.tsx
 // Description: Adds a Maintenance section (ready, empty, deep‑clean) that
 //              publishes commands on the maintenance topic, plus UX polish.
 // Author: Nathan Hambleton – updated 15 May 2025 by ChatGPT
@@ -44,26 +44,72 @@ interface Ingredient {
   type: 'Alcohol' | 'Mixer' | 'Sour' | 'Sweet' | 'Misc';
   description: string;
 }
+
 interface BluetoothDevice {
   id: string;
   name: string;
 }
 
-/*──────────────────────── helper component ────────────────────────*/
-function ActionRow({
-  label,
-  icon,
-  onPress,
+/*──────────────────────── helper components ────────────────────────*/
+const AnimatedIngredientItem = ({ item, index, onPress }: { 
+  item: Ingredient; 
+  index: number; 
+  onPress: () => void 
+}) => {
+  const anim = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    Animated.spring(anim, {
+      toValue: 1,
+      delay: index * 50,
+      useNativeDriver: true
+    }).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={{
+        opacity: anim,
+        transform: [{ translateY: anim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [50, 0]
+        }) }]
+      }}
+    >
+      <TouchableOpacity style={styles.ingredientItem} onPress={onPress}>
+        <Text style={styles.ingredientText}>{item.name}</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
+const ActionRow = ({ 
+  label, 
+  icon, 
+  onPress, 
   info,
-}: {
-  label: string;
-  icon: any;
-  onPress: () => void;
+  onInfoPress 
+}: { 
+  label: string; 
+  icon: any; 
+  onPress: () => void; 
   info: string;
-}) {
-  const anim = new Animated.Value(1);
-  const pressIn  = () => Animated.timing(anim, { toValue: 0.97, duration: 90,  useNativeDriver: true }).start();
-  const pressOut = () => Animated.timing(anim, { toValue: 1,    duration: 90,  useNativeDriver: true }).start();
+  onInfoPress: () => void;
+}) => {
+  const anim = React.useRef(new Animated.Value(1)).current;
+
+  const pressIn = () => Animated.timing(anim, { 
+    toValue: 0.97, 
+    duration: 90,  
+    useNativeDriver: true 
+  }).start();
+
+  const pressOut = () => Animated.timing(anim, { 
+    toValue: 1,    
+    duration: 90,  
+    useNativeDriver: true 
+  }).start();
+
   return (
     <Animated.View style={{ transform: [{ scale: anim }] }}>
       <TouchableOpacity
@@ -76,18 +122,39 @@ function ActionRow({
         <Ionicons name={icon} size={20} color="#CE975E" style={{ marginRight: 15 }} />
         <Text style={styles.actionLabel}>{label}</Text>
         <View style={{ flex: 1 }} />
-        <TouchableOpacity onPress={() => Alert.alert(label, info)}>
+        <TouchableOpacity onPress={onInfoPress}>
           <Ionicons name="information-circle-outline" size={20} color="#4F4F4F" />
         </TouchableOpacity>
       </TouchableOpacity>
     </Animated.View>
   );
-}
+};
 
 /*───────────────────────── component ─────────────────────────*/
 export default function DeviceSettings() {
-  const router                       = useRouter();
+  const router = useRouter();
   const { isConnected, liquorbotId } = useLiquorBot();
+
+  // State moved INSIDE the component
+  const [infoModalVisible, setInfoModalVisible] = React.useState(false);
+  const [selectedInfo, setSelectedInfo] = React.useState<{title: string, message: string} | null>(null);
+
+  const [isMaintenanceCollapsed, setIsMaintenanceCollapsed] = useState(true);
+  const rotationAnim = useState(new Animated.Value(0))[0];
+
+  const toggleMaintenance = () => {
+    Animated.timing(rotationAnim, {
+      toValue: isMaintenanceCollapsed ? 1 : 0,
+      duration: 200,
+      useNativeDriver: true
+    }).start();
+    setIsMaintenanceCollapsed(!isMaintenanceCollapsed);
+  };
+
+  const rotate = rotationAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg']
+  });
 
   /* Slots -------------------------------------------------------------------*/
   const [slots, setSlots]                 = useState<number[]>(Array(15).fill(0));
@@ -337,31 +404,67 @@ export default function DeviceSettings() {
 
         {/* ─────────────────── MAINTENANCE SECTION ─────────────────── */}
         <View style={styles.maintenanceContainer}>
-          <Text style={styles.sectionHeader}>Maintenance</Text>
+          <TouchableOpacity 
+            style={styles.maintenanceHeader} 
+            onPress={toggleMaintenance}
+            activeOpacity={0.8}
+          >
+            <View style={{ flexDirection: 'column', flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={styles.sectionHeader}>Maintenance</Text>
+                <Animated.View style={{ transform: [{ rotate }] }}>
+                  <Ionicons name="chevron-down" size={20} color="#DFDCD9" />
+                </Animated.View>
+              </View>
+              {isMaintenanceCollapsed && (
+                <Text style={{ fontSize: 12, color: '#4F4F4F', marginTop: -10 }}>
+                  Click to expand
+                </Text>
+              )}
+            </View>
+          </TouchableOpacity>
+          
+          {!isMaintenanceCollapsed && (
+            <Animated.View>
+              <ActionRow
+                label="Load Ingredients"
+                icon="server"
+                onPress={() => bumpIfDisconnected(handleReadySystem)}
+                info="Primes every tube so the first pour is instant."
+                onInfoPress={() => {
+                  setSelectedInfo({ title: "Load Ingredients", message: "Primes every tube so the first pour is instant." });
+                  setInfoModalVisible(true);
+                }}
+              />
+              <ActionRow
+              label="Empty System"
+              icon="server-outline"
+              onPress={() => bumpIfDisconnected(handleEmptySystem)}
+              info="Pumps liquid back to its bottles for safe storage."
+              onInfoPress={() => {
+                setSelectedInfo({ 
+                  title: "Empty System", 
+                  message: "Pumps liquid back to its bottles for safe storage." 
+                });
+                setInfoModalVisible(true);
+              }}
+            />
 
-          {/* READY SYSTEM */}
-          <ActionRow
-            label="Load Ingredients"
-            icon="reload-outline"
-            onPress={() => bumpIfDisconnected(handleReadySystem)}
-            info="Primes every tube so the first pour is instant."
-          />
-
-          {/* EMPTY SYSTEM */}
-          <ActionRow
-            label="Empty System"
-            icon="download-outline"
-            onPress={() => bumpIfDisconnected(handleEmptySystem)}
-            info="Pumps liquid back to its bottles for safe storage."
-          />
-
-          {/* DEEP CLEAN */}
-          <ActionRow
-            label="Deep Clean"
-            icon="water-outline"
-            onPress={() => bumpIfDisconnected(handleDeepClean)}
-            info="Runs warm water through all tubes. Bottles must be empty."
-          />
+            <ActionRow
+              label="Deep Clean"
+              icon="water-outline"
+              onPress={() => bumpIfDisconnected(handleDeepClean)}
+              info="Runs warm water through all tubes. Bottles must be empty."
+              onInfoPress={() => {
+                setSelectedInfo({ 
+                  title: "Deep Clean", 
+                  message: "Runs warm water through all tubes. Bottles must be empty." 
+                });
+                setInfoModalVisible(true);
+              }}
+            />
+            </Animated.View>
+          )}
         </View>
 
         {/* ─────────────────── CONFIGURE SLOTS ─────────────────── */}
@@ -511,6 +614,27 @@ export default function DeviceSettings() {
         </View>
       </Modal>
 
+      {/* Info Modal */}
+      <Modal
+        visible={infoModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setInfoModalVisible(false)}
+      >
+        <View style={styles.infoModalContainer}>
+          <View style={styles.infoModalContent}>
+            <Text style={styles.infoModalTitle}>{selectedInfo?.title}</Text>
+            <Text style={styles.infoModalText}>{selectedInfo?.message}</Text>
+            <TouchableOpacity
+              style={styles.infoModalButton}
+              onPress={() => setInfoModalVisible(false)}
+            >
+              <Text style={styles.infoModalButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Ingredient Selection Modal */}
       <Modal
         visible={modalVisible}
@@ -581,13 +705,12 @@ export default function DeviceSettings() {
             <FlatList
               data={filteredIngredients}
               keyExtractor={(item) => String(item.id)}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.ingredientItem}
+              renderItem={({ item, index }) => (
+                <AnimatedIngredientItem 
+                  item={item} 
+                  index={index} 
                   onPress={() => assignIngredientToSlot(item.id)}
-                >
-                  <Text style={styles.ingredientText}>{item.name}</Text>
-                </TouchableOpacity>
+                />
               )}
             />
           )}
@@ -977,4 +1100,43 @@ const styles = StyleSheet.create({
     color: '#DFDCD9',
     fontSize: 16,
   },
+  maintenanceHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+},
+infoModalContainer: {
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+},
+infoModalContent: {
+  backgroundColor: '#1F1F1F',
+  borderRadius: 15,
+  padding: 20,
+  width: '80%',
+},
+infoModalTitle: {
+  color: '#CE975E',
+  fontSize: 18,
+  fontWeight: 'bold',
+  marginBottom: 10,
+},
+infoModalText: {
+  color: '#DFDCD9',
+  fontSize: 14,
+  lineHeight: 20,
+  marginBottom: 20,
+},
+infoModalButton: {
+  backgroundColor: '#CE975E',
+  borderRadius: 8,
+  paddingVertical: 12,
+  alignItems: 'center',
+},
+infoModalButtonText: {
+  color: '#141414',
+  fontWeight: 'bold',
+},
 });
