@@ -8,11 +8,10 @@
 #define AWS_IOT_ENDPOINT   "a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com"
 
 /* Topics & client‑ID — literal concatenation happens at compile‑time */
-#define AWS_RECEIVE_TOPIC      "liquorbot/liquorbot" LIQUORBOT_ID "/publish"
-#define AWS_PUBLISH_TOPIC      "liquorbot/liquorbot" LIQUORBOT_ID "/receive"
+#define AWS_RECEIVE_TOPIC      "liquorbot/liquorbot" LIQUORBOT_ID "/receive"
+#define AWS_PUBLISH_TOPIC      "liquorbot/liquorbot" LIQUORBOT_ID "/publish"
 #define SLOT_CONFIG_TOPIC      "liquorbot/liquorbot" LIQUORBOT_ID "/slot-config"
 #define HEARTBEAT_TOPIC        "liquorbot/liquorbot" LIQUORBOT_ID "/heartbeat"
-#define HEARTBEAT_CHECK_TOPIC  "liquorbot/liquorbot" LIQUORBOT_ID "/heartbeat_check"
 #define MQTT_CLIENT_ID         "LiquorBot-" LIQUORBOT_ID
 
 #include <Arduino.h>

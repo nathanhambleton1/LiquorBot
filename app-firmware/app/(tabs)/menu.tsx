@@ -233,7 +233,7 @@ function DrinkItem({
     if (!isConnected) { 
       console.warn('LiquorBot is not connected.'); 
       triggerStatus('error', 'LiquorBot is not connected.');
-      return; 
+      return;
     }
 
     setLogging(true);
@@ -241,15 +241,78 @@ function DrinkItem({
     try {
       await publishDrinkCommand();
       console.log(`Pouring ${drink.name} (${quantity})`);
-      await logPouredDrink((await getCurrentUser())?.username ?? null);
-      setLogging(false);
-      triggerStatus('success', 'Pour successful, enjoy!');
     } catch (error) {
       console.error('Pour failed', error);
       setLogging(false);
       triggerStatus('error', 'Pour failed – please try again.');
     }
   }
+
+  // ADD NEW useEffect FOR RESPONSE HANDLING:
+  useEffect(() => {
+    if (!logging) return;                       // only listen while waiting
+    let isMounted = true;
+    const timeoutId = setTimeout(() => {        // 30 s watchdog
+      if (isMounted) {
+        triggerStatus('error', 'No response from device');
+        setLogging(false);
+      }
+    }, 30_000);
+
+    const sub = pubsub
+      .subscribe({ topics: [`liquorbot/liquorbot${liquorbotId}/receive`] })
+      .subscribe({
+        /* ---------- CHANGED ---------- */
+        next: async (evt: any) => {
+          if (!isMounted) return;
+
+          // Amplify wraps the raw payload in evt.value
+          const payload: any = evt?.value ?? evt;
+          console.log('[LiquorBot] device reply →', payload);
+
+          const status = typeof payload === 'string'
+            ? payload.toLowerCase().trim()
+            : String(
+                payload.status ??        // { status: "success" }
+                payload.result ??        // { result: "success" }
+                payload.message ?? ''    // fallback
+              ).toLowerCase();
+
+          if (status === 'success') {
+            triggerStatus('success', 'Success! Your drink was poured – enjoy.');
+            try {
+              const user = await getCurrentUser();
+              await logPouredDrink(user?.username ?? null);
+            } catch (e) {
+              console.warn('✓ pour logged locally – failed to store in DB', e);
+            }
+            setLogging(false);
+            clearTimeout(timeoutId);
+          } else if (['fail', 'failed', 'error'].includes(status)) {
+            const reason =
+              typeof payload === 'object' && payload?.error
+                ? ` – ${payload.error}`
+                : '';
+            triggerStatus('error', `Pour failed${reason}.`);
+            setLogging(false);
+            clearTimeout(timeoutId);
+          }
+        },
+        /* -------------------------------- */
+        error: (err: any) => {
+          console.error('MQTT receive‑topic error:', err);
+          triggerStatus('error', 'Error receiving device response.');
+          setLogging(false);
+          clearTimeout(timeoutId);
+        },
+      });
+
+    return () => {
+      isMounted = false;
+      sub.unsubscribe();
+      clearTimeout(timeoutId);
+    };
+  }, [logging, liquorbotId]);
 
   const handleToggleLike = () => toggleFavorite(drink.id);
 
@@ -467,12 +530,6 @@ export default function MenuScreen() {
   const [likedDrinks, setLikedDrinks] = useState<number[]>([]);
   const [customFetched, setCustomFetched] = useState(false);
 
-  // refetch custom recipes on focus
-  useEffect(() => {
-    if (isFocused) setCustomFetched(false); // << add
-  }, [isFocused]);
-
-  // Subscribe to the publish topic
   useEffect(() => {
     const subscription = pubsub.subscribe({
       topics: [`liquorbot/liquorbot${liquorbotId}/publish`],

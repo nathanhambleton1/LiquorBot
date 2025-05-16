@@ -46,10 +46,9 @@ void setupAWS() {
             Serial.println("✔ Connected!");
 
             /* command + heartbeat + slot‑config */
-            mqttClient.subscribe(AWS_RECEIVE_TOPIC);
+            mqttClient.subscribe(AWS_PUBLISH_TOPIC);
             mqttClient.subscribe(HEARTBEAT_TOPIC);
             mqttClient.subscribe(SLOT_CONFIG_TOPIC);
-            mqttClient.subscribe(HEARTBEAT_CHECK_TOPIC);
         } else {
             Serial.printf("✖ MQTT connect failed (rc=%d). Retrying…\n",
                           mqttClient.state());
@@ -76,30 +75,28 @@ void receiveData(char* topic, byte* payload, unsigned int length) {
         /* do nothing – app merely checks liveness */
     }
 
-    /* 2 · Heartbeat CHECK / OK flow */
-    else if (topicStr == HEARTBEAT_CHECK_TOPIC) {
-        StaticJsonDocument<128> doc;
-        if (!deserializeJson(doc, message)) {
-            const char* c = doc["content"];
-            if (c && String(c) == "CHECK") {
-                sendData(HEARTBEAT_CHECK_TOPIC, "{\"content\":\"OK\"}");
-                Serial.println("Heartbeat CHECK → OK");
-            }
-        }
-    }
-
-    /* 3 · Legacy drink commands */
-    else if (topicStr == AWS_RECEIVE_TOPIC) {
+    /* 3 · Drink command on new publish topic */
+    else if (topicStr == AWS_PUBLISH_TOPIC) {
         auto cmd = parseDrinkCommand(message);
-        dispenseDrink(cmd);
+
+        if (cmd.empty()) {                           // sanity check
+            sendData(AWS_RECEIVE_TOPIC,
+                    "{\"status\":\"fail\",\"error\":\"empty_command\"}");
+            Serial.println("✖ Empty command – FAIL sent.");
+            return;
+        }
+
+        dispenseDrink(cmd);                          // blocking; returns when done
+        sendData(AWS_RECEIVE_TOPIC, "{\"status\":\"success\"}");
+        Serial.println("✔ Drink dispensed – SUCCESS sent.");
     }
 
-    /* 4 · Slot‑config JSON */
+    /* 3 · Slot‑config JSON */
     else if (topicStr == SLOT_CONFIG_TOPIC) {
         handleSlotConfigMessage(message);
     }
 
-    /* 5 · Unknown topic */
+    /* 4 · Unknown topic */
     else {
         Serial.println("Unrecognized topic – ignored.");
     }
