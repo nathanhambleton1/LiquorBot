@@ -737,6 +737,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 70,
     left: 25,
+    zIndex: 1001,
   },
   headerText: {
     position: 'absolute',
