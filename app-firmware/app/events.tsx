@@ -142,8 +142,8 @@ export default function EventsScreen(){
   const[name,setName]=useState('');
   const[location,setLocation]=useState('');
   const[description,setDesc]=useState('');
-  const[startDate,setSD]=useState(today);
-  const[endDate,setED]=useState(today);
+  const[startDate,setSD]=useState('');
+  const[endDate,setED]=useState('');
   const[multiDay,setMD]=useState(false);
   const[startTime,setST]=useState('18:00');
   const[endTime,setET]=useState('21:00');
@@ -162,6 +162,7 @@ export default function EventsScreen(){
   },[menu]);
   const slotsOK=ingredientSet.size<=15;
   const[showSlots,setShowSlots]=useState(false);
+  const [showTimeInfo, setShowTimeInfo] = useState(false);
 
   /* enable animation on Android */
   useEffect(()=>{if(Platform.OS==='android'&&UIManager
@@ -198,6 +199,13 @@ export default function EventsScreen(){
   };
   const removeDrink=(id:number)=>setMenu(m=>m.filter(d=>d.id!==id));
 
+  /* auto-close ingredient list */
+  useEffect(() => {
+    if (menu.length === 0) {
+      setShowSlots(false); // Automatically close the ingredient list
+    }
+  }, [menu]);
+
   /* save */
   const save=async()=>{
     if(!name.trim()){Alert.alert('Name?');return;}
@@ -217,6 +225,14 @@ export default function EventsScreen(){
       Clipboard.setStringAsync(link);
       Alert.alert('Saved','Invite link copied!');
     }catch(e){console.error(e);Alert.alert('Error','Cannot save');}
+  };
+  const isDateInPast = (date: string): boolean => {
+    if (!date || date.length !== 10) return true; // Invalid or incomplete date
+    const [month, day, year] = date.split('/').map(Number);
+    const enteredDate = new Date(year, month - 1, day);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Set time to the start of the day
+    return enteredDate < today;
   };
 
   /* refs to measure TimeBoxes */
@@ -252,7 +268,15 @@ export default function EventsScreen(){
         </TouchableOpacity>
 
         {/* dates */}
-        <Text style={[styles.label,{marginTop:10}]}>Pour Window</Text>
+        <View style={styles.timeInfoHeader}>
+          <Text style={[styles.label, { marginTop: 10 }]}>Event Time</Text>
+          <TouchableOpacity 
+            onPress={() => setShowTimeInfo(true)}
+            style={styles.infoButton}
+          >
+            <Ionicons name="information-circle-outline" size={18} color="#4f4f4f" />
+          </TouchableOpacity>
+        </View>
         <View style={styles.dateRow}>
           <InputDate val={startDate} set={setSD}/>
           {multiDay&&<InputDate val={endDate} set={setED} />}
@@ -308,9 +332,14 @@ export default function EventsScreen(){
         )}
 
         {/* save */}
-        <TouchableOpacity style={[styles.saveBtn,
-            (!slotsOK||!name.trim())&&{opacity:0.4}]}
-          disabled={!slotsOK||!name.trim()} onPress={save}>
+        <TouchableOpacity
+          style={[
+            styles.saveBtn,
+            (!slotsOK || !name.trim() || menu.length === 0 || isDateInPast(startDate) || (multiDay && isDateInPast(endDate))) && { opacity: 0.4 },
+          ]}
+          disabled={!slotsOK || !name.trim() || menu.length === 0 || isDateInPast(startDate) || (multiDay && isDateInPast(endDate))}
+          onPress={save}
+        >
           <Text style={styles.saveTxt}>Save Event</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -320,6 +349,37 @@ export default function EventsScreen(){
         onRequestClose={()=>setPV(false)}
         presentationStyle={Platform.OS==='ios'?'pageSheet':'fullScreen'}>
         <PickerModal {...{cat,setCat,q,setQ,filtered,loading,addDrink,close:()=>setPV(false)}}/>
+      </Modal>
+      
+      {/* time‑info modal */}
+      <Modal
+        transparent
+        visible={showTimeInfo}
+        onRequestClose={() => setShowTimeInfo(false)}
+      >
+        <TouchableOpacity 
+          style={styles.infoBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowTimeInfo(false)}
+        >
+          <View style={styles.infoPopup}>
+            <Text style={styles.infoTitle}>Event Timing Information</Text>
+            <Text style={styles.infoText}>
+              The start time indicates when the Liquorbot will unlock and begin serving drinks.
+              {"\n\n"}
+              The end time is when the device will automatically lock and stop serving.
+              {"\n\n"}
+              For multi-day events, the device will remain active continuously even if the event 
+              spans multiple calendar days. Note that events can be longer than 24 hours.
+            </Text>
+            <TouchableOpacity 
+              style={styles.infoClose}
+              onPress={() => setShowTimeInfo(false)}
+            >
+              <Ionicons name="close" size={24} color="#DFDCD9" />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
 
       {/* animated time‑picker */}
@@ -334,19 +394,97 @@ export default function EventsScreen(){
 }
 
 /* ═════════ helpers components / styling ═════════ */
-const Field=({label,value,onChange,ph,multiline=false}:{label:string;value:string;
-  onChange:(t:string)=>void;ph:string;multiline?:boolean})=>(
-  <View style={{marginBottom:15}}>
-    <Text style={styles.label}>{label}</Text>
-    <TextInput style={[styles.input,multiline&&{height:80}]} multiline={multiline}
-      placeholder={ph} placeholderTextColor="#4F4F4F" value={value}
-      onChangeText={onChange}/>
-  </View>);
+const Field = ({
+  label,
+  value,
+  onChange,
+  ph,
+  multiline = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (t: string) => void;
+  ph: string;
+  multiline?: boolean;
+}) => {
+  const [height, setHeight] = useState(40); // Initial height
 
-const InputDate=({val,set}:{val:string;set:(v:string)=>void})=>(
-  <TextInput style={styles.dateBox} keyboardType="numbers-and-punctuation"
-    value={val} placeholder="MM/DD/YYYY" maxLength={10}
-    placeholderTextColor="#4F4F4F" onChangeText={set}/>);
+  return (
+    <View style={{ marginBottom: 15 }}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        style={[
+          styles.input,
+          multiline && { height: Math.max(40, height) }, // Adjust height dynamically
+        ]}
+        multiline={multiline}
+        placeholder={ph}
+        placeholderTextColor="#4F4F4F"
+        value={value}
+        onChangeText={onChange}
+        onContentSizeChange={(e) => {
+          if (multiline) {
+            setHeight(e.nativeEvent.contentSize.height); // Update height based on content
+          }
+        }}
+      />
+    </View>
+  );
+};
+
+const InputDate = ({ val, set }: { val: string; set: (v: string) => void }) => {
+  const [isInvalid, setIsInvalid] = useState(false); // Track if the date is invalid
+
+  const handleDateChange = (text: string) => {
+    // Remove all non-numeric characters
+    const numericText = text.replace(/[^0-9]/g, '');
+
+    // Format the date as MM/DD/YYYY
+    let formatted = numericText;
+    if (numericText.length > 2) {
+      formatted = `${numericText.slice(0, 2)}/${numericText.slice(2)}`;
+    }
+    if (numericText.length > 4) {
+      formatted = `${numericText.slice(0, 2)}/${numericText.slice(2, 4)}/${numericText.slice(4, 8)}`;
+    }
+
+    // Limit the length to 10 characters (MM/DD/YYYY)
+    formatted = formatted.slice(0, 10);
+
+    // Validate the date
+    if (formatted.length === 10) {
+      const [month, day, year] = formatted.split('/').map(Number);
+      const enteredDate = new Date(year, month - 1, day);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Set time to the start of the day
+
+      if (enteredDate < today) {
+        setIsInvalid(true); // Mark the date as invalid
+      } else {
+        setIsInvalid(false); // Mark the date as valid
+      }
+    } else {
+      setIsInvalid(false); // Reset invalid state for incomplete dates
+    }
+
+    set(formatted);
+  };
+
+  return (
+    <TextInput
+      style={[
+        styles.dateBox,
+        isInvalid && { borderColor: '#D9534F', borderWidth: 1 }, // Apply red border if invalid
+      ]}
+      keyboardType="numeric" // Ensures only numbers are shown on the keyboard
+      value={val}
+      placeholder="MM/DD/YYYY"
+      maxLength={10} // Limit input to 10 characters
+      placeholderTextColor="#4F4F4F"
+      onChangeText={handleDateChange}
+    />
+  );
+};
 
 const TimeBox=forwardRef(({label,onPress,tag}:{label:string;onPress:()=>void;tag:'START'|'END'},
   ref:Ref<View>)=>(
@@ -390,10 +528,11 @@ function fmt(d:Date){return`${String(d.getMonth()+1).padStart(2,'0')}/${
 const{width:W}=Dimensions.get('window');
 const styles=StyleSheet.create({
   /* generic layout (unchanged) */
-  container:{flex:1,backgroundColor:'#141414'},closeBtn:{position:'absolute',
-    top:55,left:20,zIndex:10,padding:10},scroll:{paddingTop:100,paddingHorizontal:20,
-    paddingBottom:40},header:{fontSize:32,color:'#DFDCD9',fontWeight:'bold',
-    marginBottom:20},label:{color:'#DFDCD9',marginBottom:5,fontSize:16},
+  container:{flex:1,backgroundColor:'#141414'},
+  closeBtn:{position:'absolute', top:62,left:20,zIndex:10,padding:10, },
+  scroll:{paddingTop:70,paddingHorizontal:20,
+    paddingBottom:40},header:{fontSize:24,color:'#DFDCD9',fontWeight:'bold',
+    marginBottom:20, textAlign: 'center'},label:{color:'#DFDCD9',marginBottom:5,fontSize:16},
   input:{backgroundColor:'#1F1F1F',color:'#DFDCD9',borderRadius:10,padding:12,
     fontSize:16},
 
@@ -449,4 +588,43 @@ const styles=StyleSheet.create({
   twHighlight:{position:'absolute',left:0,right:0,height:ITEM_H,top:'50%',
                marginTop:-ITEM_H/2,borderTopWidth:1,borderBottomWidth:1,
                borderColor:'#CE975E'},
+  timeInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  infoButton: {
+    marginLeft: 8,
+    padding: 4,
+  },
+  infoBackdrop: {
+    flex: 1,
+    backgroundColor: '#00000066',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  infoPopup: {
+    backgroundColor: '#1F1F1F',
+    borderRadius: 16,
+    padding: 20,
+    width: '80%',
+    position: 'relative',
+  },
+  infoTitle: {
+    color: '#CE975E',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  infoText: {
+    color: '#DFDCD9',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  infoClose: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    padding: 4,
+  },
 });

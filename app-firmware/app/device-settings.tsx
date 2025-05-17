@@ -315,6 +315,7 @@ export default function DeviceSettings() {
 
   /* Slot‑config MQTT subscribe/publish --------------------------------------*/
   const slotTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
+  const retryIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
 
   const publishSlot = async (payload: any) => {
     try {
@@ -331,6 +332,11 @@ export default function DeviceSettings() {
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
           setSlots(msg.slots.map((id: any) => Number(id) || 0));
           setConfigLoading(false);
+          // Clear the retry interval once config is received
+          if (retryIntervalRef.current) {
+            clearInterval(retryIntervalRef.current);
+            retryIntervalRef.current = null;
+          }
         }
         if (msg.action === 'SET_SLOT' && typeof msg.slot === 'number') {
           setSlots((prev) => {
@@ -342,8 +348,23 @@ export default function DeviceSettings() {
       },
       error: (err) => console.error('slot‑config sub error:', err),
     });
-    if (isConnected) fetchCurrentConfig();
-    return () => sub.unsubscribe();
+
+    if (isConnected) {
+      fetchCurrentConfig();
+      // Start retry interval to resend GET_CONFIG every 1.5 seconds
+      retryIntervalRef.current = setInterval(() => {
+        publishSlot({ action: 'GET_CONFIG' });
+      }, 1500);
+    }
+
+    return () => {
+      sub.unsubscribe();
+      // Cleanup interval on unmount or dependency change
+      if (retryIntervalRef.current) {
+        clearInterval(retryIntervalRef.current);
+        retryIntervalRef.current = null;
+      }
+    };
   }, [isConnected, liquorbotId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchCurrentConfig = () => {
