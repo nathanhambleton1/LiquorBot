@@ -6,7 +6,7 @@
 // Author: Nathan Hambleton
 // Updated: 15 May 2025  (static SDK import – no tsconfig tweaks needed)
 // -----------------------------------------------------------------------------
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   StyleSheet,
   ImageBackground,
@@ -14,12 +14,15 @@ import {
   View,
   Animated,
   TouchableOpacity,
+  ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-
 import { useLiquorBot }     from '../components/liquorbot-provider';
 import { fetchAuthSession } from '@aws-amplify/auth';
+import { generateClient } from 'aws-amplify/api';
+import { listEvents } from '../../src/graphql/queries';
 
 /* ---------- AWS IoT SDK (static import) ---------- */
 import {
@@ -41,6 +44,48 @@ export default function Index() {
 
   /* Ensure we attempt the attach only once per app‑launch */
   const attemptedAttach = useRef(false);
+
+  const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+
+  interface Event {
+    id: string;
+    name: string;
+    startTime: string;
+    endTime: string;
+  }
+
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        const { data } = await generateClient().graphql({
+          query: listEvents,
+          variables: { filter: { liquorbotId: { eq: Number(liquorbotId) } } },
+        });
+        
+        const now = new Date();
+        const filtered = data.listEvents.items
+          .map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            startTime: item.startTime,
+            endTime: item.endTime,
+          }))
+          .filter((event: Event) => new Date(event.startTime) > now)
+          .sort((a: Event, b: Event) => 
+            new Date(a.startTime).getTime() - new Date(b.startTime).getTime() // Changed to ascending order
+          );
+
+        setUpcomingEvents(filtered);
+      } catch (error) {
+        console.error('Error fetching events:', error);
+      } finally {
+        setEventsLoading(false);
+      }
+    };
+
+    fetchEvents();
+  }, [liquorbotId]);
 
   useEffect(() => {
     /* ---------- glow animation ---------- */
@@ -127,39 +172,224 @@ export default function Index() {
         </View>
       </View>
 
-      {/* navigate to events */}
-      <TouchableOpacity
-        style={styles.eventsButton}
-        onPress={() => router.push('/events')}
-      >
-        <Text style={styles.eventsButtonText}>Manage Events</Text>
-        <Ionicons
-          name="calendar"
-          size={20}
-          color="#141414"
-          style={styles.arrowIcon}
-        />
-      </TouchableOpacity>
+      {/* Updated Button Grid Container */}
+      <View style={styles.buttonGrid}>
+        {/* Main Event Tile */}
+        <TouchableOpacity 
+          style={styles.mainTile}
+          onPress={() => router.push('/events')}
+        >
+          <View style={styles.mainTileContent}>
+            <View style={styles.mainIconTextContainer}>
+              <View style={styles.mainIconContainer}>
+                <Ionicons name="calendar" size={32} color="#DFDCD9" />
+              </View>
+              <View style={styles.mainTextContainer}>
+                <Text style={styles.mainTileTitle}>Manage Events</Text>
+                <Text style={styles.mainTileSubtext}>Upcoming Events</Text>
+              </View>
+            </View>
 
-      {/* navigate to menu */}
-      <TouchableOpacity
-        style={styles.menuButton}
-        onPress={() => router.push('/menu')}
-      >
-        <Text style={styles.menuButtonText}>Explore Drinks</Text>
-        <Ionicons
-          name="chevron-forward"
-          size={20}
-          color="#141414"
-          style={styles.arrowIcon}
-        />
-      </TouchableOpacity>
+            {eventsLoading ? (
+              <ActivityIndicator color="#DFDCD9" style={styles.eventsLoader} />
+            ) : upcomingEvents.length === 0 ? (
+              <Text style={styles.noEventsText}>No upcoming events</Text>
+            ) : (
+                <ScrollView 
+                contentContainerStyle={styles.eventsContainer}
+                showsVerticalScrollIndicator={false}
+                >
+                {upcomingEvents.slice(0, 3).map((event: Event) => (
+                  <View key={event.id} style={styles.eventItem}>
+                    <View style={styles.eventRow}>
+                      <Text style={styles.eventDate}>
+                        {new Date(event.startTime).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </Text>
+                      <Text 
+                        numberOfLines={1} 
+                        ellipsizeMode="tail" 
+                        style={styles.eventTitle}
+                      >
+                        {event.name}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+                </ScrollView>
+            )}
+          </View>
+          <View style={styles.glowOverlay} />
+        </TouchableOpacity>
+
+
+        {/* Right Column Tiles */}
+        <View style={styles.rightColumn}>
+          <TouchableOpacity
+            style={styles.smallTile}
+            onPress={() => router.push('/menu')}
+          >
+            <View style={styles.iconTextContainer}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="wine" size={28} color="#DFDCD9" />
+              </View>
+              <View style={styles.textContainer}>
+                <Text style={styles.tileTitle}>Drink Menu</Text>
+                <Text style={styles.tileSubtext}>32 Recipes</Text>
+              </View>
+            </View>
+            <View style={styles.glowOverlay} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.smallTile}
+            onPress={() => router.push('/create-event')}
+          >
+            <View style={styles.iconTextContainer}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="add-circle" size={28} color="#DFDCD9" />
+              </View>
+              <View style={styles.textContainer}>
+                <Text style={styles.tileTitle}>New Event</Text>
+                <Text style={styles.tileSubtext}>Start Planning</Text>
+              </View>
+            </View>
+            <View style={styles.glowOverlay} />
+          </TouchableOpacity>
+        </View>
+      </View>
     </ImageBackground>
   );
+
 }
 
 /* ───────────────────────── styles ───────────────────────── */
 const styles = StyleSheet.create({
+  eventItem: {
+    marginBottom: 4,
+    width: '100%',
+  },
+  eventRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  eventDate: {
+    color: 'rgba(223, 220, 217, 0.7)',
+    fontSize: 12,
+    fontWeight: '500',
+    marginRight: 12,
+    minWidth: 40,
+  },
+  eventTitle: {
+    color: '#DFDCD9',
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  eventsLoader: {
+    marginVertical: 10,
+  },
+  noEventsText: {
+    color: 'rgba(223, 220, 217, 0.7)',
+    fontSize: 14,
+    marginVertical: 10,
+  },
+  eventsContainer: {
+    flexGrow: 1,
+    paddingVertical: 8,
+  },
+   mainTile: {
+    flex: 1,
+    backgroundColor: 'rgba(206, 151, 94, 0.9)',
+    borderRadius: 20,
+    padding: 16,
+    marginRight: 12,
+    overflow: 'hidden',
+  },
+  mainTileContent: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  mainIconTextContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 0,
+  },
+  mainIconContainer: {
+    justifyContent: 'center',
+    marginRight: 8,
+    height: 32, // Matches icon size
+  },
+  mainTextContainer: {
+    justifyContent: 'space-between',
+    height: 36, // Matches icon height
+  },
+  mainTileTitle: {
+    color: '#DFDCD9',
+    fontSize: 16,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  mainTileSubtext: {
+    color: 'rgba(223, 220, 217, 0.9)',
+    fontSize: 12,
+    fontWeight: '300',
+    lineHeight: 16,
+  },
+  buttonGrid: {
+    position: 'absolute',
+    bottom: 90,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '90%',
+    height: 140,
+  },
+  rightColumn: {
+    width: '48%',
+    height: '100%',
+    justifyContent: 'space-between',
+  },
+  smallTile: {
+    height: '48%',
+    backgroundColor: 'rgba(31, 31, 31, 0.95)',
+    borderRadius: 16,
+    padding: 12,
+    overflow: 'hidden',
+  },
+  iconTextContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: '100%',
+  },
+  iconContainer: {
+    justifyContent: 'center',
+    marginRight: 12,
+    height: 28, // Matches icon size
+  },
+  textContainer: {
+    justifyContent: 'space-between',
+    height: 28, // Matches icon height
+  },
+  tileTitle: {
+    color: '#DFDCD9',
+    fontSize: 16,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  tileSubtext: {
+    color: 'rgba(223, 220, 217, 0.8)',
+    fontSize: 12,
+    fontWeight: '300',
+    lineHeight: 14,
+  },
+  glowOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  
   background:   { flex: 1, justifyContent: 'center', alignItems: 'center' },
   overlay:      { position: 'absolute', top: 100, width: '100%', paddingLeft: 20 },
   title:        { fontSize: 48, color: '#DFDCD9', fontWeight: 'bold' },
@@ -185,3 +415,4 @@ const styles = StyleSheet.create({
   },
   eventsButtonText: { color: '#141414', fontSize: 20, fontWeight: 'bold', marginRight: 8 },
 });
+
