@@ -1,12 +1,8 @@
 /*
  * -----------------------------------------------------------------------------
  *  Project: Liquor Bot
- *  File: drink_controller.h
- *  Description: Defines structures and functions for controlling solenoids 
- *               and pumps to dispense drinks. Includes parsing logic for 
- *               drink commands and execution of dispensing sequences.
- * 
- *  Author: Nathan Hambleton
+ *  File: drink_controller.h  (updated)
+ *  Description: Structures & API for non‑blocking drink dispensing.
  * -----------------------------------------------------------------------------
  */
 
@@ -18,22 +14,24 @@
 #include <String>
 
 struct IngredientCommand {
-    int slot;       // e.g. Ingredient 1, 2, 3, ...
-    float amount;   // e.g. 2.5 (oz)
-    int priority;   // e.g. 1, 2, 3, ... (order of dispensing)
+    int   slot;     // 1‑16 (matches solenoid)
+    float amount;   // ounces
+    int   priority; // lower = earlier group
 };
 
-// Initializes pins for solenoids and pumps
+// ---------- Init ----------
 void initDrinkController();
 
-// Parses the incoming command string, e.g. "Pump1:30,Pump2:15,Pump3:10"
+// ---------- Parsing ----------
 std::vector<IngredientCommand> parseDrinkCommand(const String &commandStr);
 
-// Executes the sequence of pours
+// ---------- Execution (blocking – internal use) ----------
 void dispenseDrink(std::vector<IngredientCommand> &parsedCommand);
 
-// Cleanup function
+// ---------- NEW: kick off non‑blocking pour ----------
+void startPourTask(const String &commandStr);
+
+// ---------- Cleanup ----------
 void cleanupDrinkController();
 
-
-#endif
+#endif // DRINK_CONTROLLER_H

@@ -149,6 +149,36 @@ interface DrinkItemProps {
   }) => void;
 }
 
+// ────────────────────────── helpers ──────────────────────────
+function buildSlotCommand(
+  ingredientString: string,
+  slots: number[],      // current slot -> ingredientId map, length 15
+  qty: number,          // quantity selected on the UI
+): string {
+  if (!ingredientString) return '';
+
+  return ingredientString
+    .split(',')                                // id:amt:prio  …
+    .map(chunk => {
+      const [idStr, amtStr, prioStr] = chunk.split(':');
+      const ingId   = Number(idStr);
+      const amount  = Number(amtStr) * qty;    // multiply by user’s qty
+      const prio    = Number(prioStr);
+
+      // look up which slot holds this ingredient ID
+      const slotIdx = slots.findIndex(id => id === ingId);
+      if (slotIdx === -1) {
+        console.warn(`Ingredient ${ingId} not loaded – skipping`);
+        return null;                           // skip missing ingredients
+      }
+
+      const slotNum = slotIdx + 1;             // slots are 1‑based on ESP
+      return `${slotNum}:${amount}:${prio}`;
+    })
+    .filter(Boolean)                           // drop nulls
+    .join(',');
+}
+
 function DrinkItem({
   drink,
   isExpanded,
@@ -203,9 +233,12 @@ function DrinkItem({
 
   /* --------------- pour-drink helpers --------------- */
   async function publishDrinkCommand() {
+    const cmd = buildSlotCommand(drink.ingredients ?? '', slots, quantity);
+    if (!cmd) throw new Error('No valid ingredients to pour');
+
     await pubsub.publish({
       topics: [`liquorbot/liquorbot${liquorbotId}/publish`],
-      message: { content: drink.ingredients ?? '' },
+      message: cmd,
     });
   }
 

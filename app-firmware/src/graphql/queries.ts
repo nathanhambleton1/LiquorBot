@@ -8,6 +8,127 @@ type GeneratedQuery<InputType, OutputType> = string & {
   __generatedQueryOutput: OutputType;
 };
 
+export const getGuestEvent = /* GraphQL */ `query GetGuestEvent($id: ID!) {
+  getGuestEvent(id: $id) {
+    id
+    eventID
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GetGuestEventQueryVariables,
+  APITypes.GetGuestEventQuery
+>;
+export const listGuestEvents = /* GraphQL */ `query ListGuestEvents(
+  $id: ID
+  $filter: ModelGuestEventFilterInput
+  $limit: Int
+  $nextToken: String
+  $sortDirection: ModelSortDirection
+) {
+  listGuestEvents(
+    id: $id
+    filter: $filter
+    limit: $limit
+    nextToken: $nextToken
+    sortDirection: $sortDirection
+  ) {
+    items {
+      id
+      eventID
+      createdAt
+      updatedAt
+      owner
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListGuestEventsQueryVariables,
+  APITypes.ListGuestEventsQuery
+>;
+export const guestEventsByEvent = /* GraphQL */ `query GuestEventsByEvent(
+  $eventID: ID!
+  $sortDirection: ModelSortDirection
+  $filter: ModelGuestEventFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  guestEventsByEvent(
+    eventID: $eventID
+    sortDirection: $sortDirection
+    filter: $filter
+    limit: $limit
+    nextToken: $nextToken
+  ) {
+    items {
+      id
+      eventID
+      createdAt
+      updatedAt
+      owner
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.GuestEventsByEventQueryVariables,
+  APITypes.GuestEventsByEventQuery
+>;
+export const getEvent = /* GraphQL */ `query GetEvent($id: ID!) {
+  getEvent(id: $id) {
+    id
+    name
+    description
+    location
+    startTime
+    endTime
+    liquorbotId
+    inviteCode
+    drinkIDs
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedQuery<APITypes.GetEventQueryVariables, APITypes.GetEventQuery>;
+export const listEvents = /* GraphQL */ `query ListEvents(
+  $filter: ModelEventFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listEvents(filter: $filter, limit: $limit, nextToken: $nextToken) {
+    items {
+      id
+      name
+      description
+      location
+      startTime
+      endTime
+      liquorbotId
+      inviteCode
+      drinkIDs
+      createdAt
+      updatedAt
+      owner
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListEventsQueryVariables,
+  APITypes.ListEventsQuery
+>;
 export const getPouredDrink = /* GraphQL */ `query GetPouredDrink($id: ID!) {
   getPouredDrink(id: $id) {
     id

@@ -19,11 +19,14 @@
 #include "aws_manager.h"
 #include "drink_controller.h"
 #include "led_control.h"
+#include "state_manager.h"
 
 
 void setup() {
     Serial.begin(115200);
     Serial.println("Initializing Serial COM...");
+
+    initializeState();   // IDLE by default
 
     // Initialize BLE and Wi-Fi setup
     //setupBluetoothWiFiAWS();

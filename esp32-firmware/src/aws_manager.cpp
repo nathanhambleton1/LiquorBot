@@ -1,14 +1,14 @@
-/*  aws_manager.cpp  – all AWS‑IoT + slot‑config logic
- *  Uses the LIQUORBOT_ID & topic macros declared in aws_manager.h
- *  Author: Nathan Hambleton (refactored for single‑ID macro)
+/*  aws_manager.cpp  – AWS‑IoT + slot‑config logic (non‑blocking pour)
+ *  Author: Nathan Hambleton – refactor 16 May 2025 by ChatGPT
  * -------------------------------------------------------------------------- */
 
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
-#include "aws_manager.h"       // brings in LIQUORBOT_ID + all topic macros
+#include <ArduinoJson.h>
+#include "aws_manager.h"     // LIQUORBOT_ID & topic macros
 #include "certs.h"
 #include "drink_controller.h"
-#include <ArduinoJson.h>
+#include "state_manager.h"
 
 /* ---------- NVS for slot‑config persistence ---------- */
 #include <Preferences.h>
@@ -21,8 +21,21 @@ static uint16_t slotConfig[15] = {0};
 WiFiClientSecure secureClient;
 PubSubClient     mqttClient(secureClient);
 
+/* ---------- pour‑result hand‑off (from FreeRTOS task → main loop) ---------- */
+static volatile bool   pourResultPending = false;
+static String          pourResultMessage;
+
+void notifyPourResult(bool success, const char *error /*=nullptr*/) {
+    /* Build JSON once; send from processAWSMessages() in main loop */
+    StaticJsonDocument<128> doc;
+    doc["status"] = success ? "success" : "fail";
+    if (!success && error) doc["error"] = error;
+    serializeJson(doc, pourResultMessage);
+    pourResultPending = true;
+}
+
 /* ---------- forward decls ---------- */
-static void handleSlotConfigMessage(const String& json);
+static void handleSlotConfigMessage(const String &json);
 static void loadSlotConfigFromNVS();
 static void saveSlotConfigToNVS();
 
@@ -45,13 +58,12 @@ void setupAWS() {
         if (mqttClient.connect(MQTT_CLIENT_ID)) {
             Serial.println("✔ Connected!");
 
-            /* command + heartbeat + slot‑config */
+            /* subscribe once */
             mqttClient.subscribe(AWS_PUBLISH_TOPIC);
             mqttClient.subscribe(HEARTBEAT_TOPIC);
             mqttClient.subscribe(SLOT_CONFIG_TOPIC);
         } else {
-            Serial.printf("✖ MQTT connect failed (rc=%d). Retrying…\n",
-                          mqttClient.state());
+            Serial.printf("✖ MQTT connect failed (rc=%d). Retrying…\n", mqttClient.state());
             delay(2000);
         }
     }
@@ -61,58 +73,60 @@ void setupAWS() {
 void processAWSMessages() {
     if (!mqttClient.connected()) setupAWS();
     mqttClient.loop();
+
+    /* send pour‑result if the background task finished */
+    if (pourResultPending) {
+        sendData(AWS_RECEIVE_TOPIC, pourResultMessage);
+        pourResultPending = false;
+    }
 }
 
 /* -------------------------------------------------------------------------- */
 /*                       MQTT MESSAGE HANDLER (callback)                      */
 /* -------------------------------------------------------------------------- */
-void receiveData(char* topic, byte* payload, unsigned int length) {
-    String message  = String((char*)payload).substring(0, length);
+void receiveData(char *topic, byte *payload, unsigned int length) {
+    String message  = String((char *)payload).substring(0, length);
     String topicStr = String(topic);
 
     /* 1 · Heartbeat ping (ignore) */
     if (topicStr == HEARTBEAT_TOPIC) {
-        /* do nothing – app merely checks liveness */
+        return; // nothing else
     }
 
-    /* 3 · Drink command on new publish topic */
-    else if (topicStr == AWS_PUBLISH_TOPIC) {
-        auto cmd = parseDrinkCommand(message);
-
-        if (cmd.empty()) {                           // sanity check
-            sendData(AWS_RECEIVE_TOPIC,
-                    "{\"status\":\"fail\",\"error\":\"empty_command\"}");
-            Serial.println("✖ Empty command – FAIL sent.");
+    /* 2 · Drink command */
+    if (topicStr == AWS_PUBLISH_TOPIC) {
+        if (isBusy()) {
+            sendData(AWS_RECEIVE_TOPIC, "{\"status\":\"fail\",\"error\":\"busy\"}");
+            Serial.println("✖ Busy – drink rejected.");
             return;
         }
 
-        dispenseDrink(cmd);                          // blocking; returns when done
-        sendData(AWS_RECEIVE_TOPIC, "{\"status\":\"success\"}");
-        Serial.println("✔ Drink dispensed – SUCCESS sent.");
+        /* Kick off non‑blocking FreeRTOS task */
+        startPourTask(message);
+        return; // main loop continues running
     }
 
     /* 3 · Slot‑config JSON */
-    else if (topicStr == SLOT_CONFIG_TOPIC) {
+    if (topicStr == SLOT_CONFIG_TOPIC) {
         handleSlotConfigMessage(message);
+        return;
     }
 
     /* 4 · Unknown topic */
-    else {
-        Serial.println("Unrecognized topic – ignored.");
-    }
+    Serial.println("Unrecognized topic – ignored.");
 }
 
 /* -------------------------------------------------------------------------- */
 /*                    SLOT‑CONFIG JSON MESSAGE PARSER                         */
 /* -------------------------------------------------------------------------- */
-static void handleSlotConfigMessage(const String& json) {
+static void handleSlotConfigMessage(const String &json) {
     StaticJsonDocument<256> doc;
     if (deserializeJson(doc, json)) {
         Serial.println("Bad slot‑config JSON – ignored.");
         return;
     }
 
-    const char* action = doc["action"];
+    const char *action = doc["action"];
     if (!action) return;
 
     /* GET_CONFIG → send CURRENT_CONFIG */
@@ -130,7 +144,7 @@ static void handleSlotConfigMessage(const String& json) {
 
     /* SET_SLOT */
     else if (strcmp(action, "SET_SLOT") == 0) {
-        int slotIdx      = doc["slot"];        // 1‑based from app
+        int slotIdx      = doc["slot"];       // 1‑based from app
         int ingredientId = doc["ingredientId"];
         if (slotIdx >= 1 && slotIdx <= 15) {
             slotConfig[slotIdx - 1] = ingredientId;
@@ -152,7 +166,7 @@ static void handleSlotConfigMessage(const String& json) {
 /* -------------------------------------------------------------------------- */
 /*                           PUBLISH HELPERS                                  */
 /* -------------------------------------------------------------------------- */
-void sendData(const String& topic, const String& msg) {
+void sendData(const String &topic, const String &msg) {
     if (mqttClient.connected()) {
         mqttClient.publish(topic.c_str(), msg.c_str());
         Serial.printf("→ %s : %s\n", topic.c_str(), msg.c_str());

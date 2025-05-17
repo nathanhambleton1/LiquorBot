@@ -127,6 +127,20 @@ export default function Index() {
         </View>
       </View>
 
+      {/* navigate to events */}
+      <TouchableOpacity
+        style={styles.eventsButton}
+        onPress={() => router.push('/events')}
+      >
+        <Text style={styles.eventsButtonText}>Manage Events</Text>
+        <Ionicons
+          name="calendar"
+          size={20}
+          color="#141414"
+          style={styles.arrowIcon}
+        />
+      </TouchableOpacity>
+
       {/* navigate to menu */}
       <TouchableOpacity
         style={styles.menuButton}
@@ -164,4 +178,10 @@ const styles = StyleSheet.create({
   menuButtonText:{ color: '#141414', fontSize: 20, fontWeight: 'bold', marginRight: 8 },
   arrowIcon:    { marginLeft: 5 },
   wifiIconContainer:{ position: 'absolute', top: 115, right: 40, zIndex: 10 },
+  eventsButton: {
+    position: 'absolute', bottom: 200, alignSelf: 'center',
+    backgroundColor: '#CE975E', paddingVertical: 16, paddingHorizontal: 26,
+    borderRadius: 10, flexDirection: 'row', alignItems: 'center',
+  },
+  eventsButtonText: { color: '#141414', fontSize: 20, fontWeight: 'bold', marginRight: 8 },
 });

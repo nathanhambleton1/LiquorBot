@@ -1,93 +1,118 @@
 /*
  * -----------------------------------------------------------------------------
  *  Project: Liquor Bot
- *  File: drink_controller.cpp
- *  Description: Manages the control logic for dispensing drinks using solenoids.
- *               This module handles SPI communication with NCV7240 chips, 
- *               processes drink commands, and coordinates parallel dispensing 
- *               with priority-based scheduling.
- * 
- *  Author: Nathan Hambleton
+ *  File: drink_controller.cpp (non‑blocking refactor)
+ *  Description: Handles parsing & dispensing – now executed inside a FreeRTOS
+ *               task so the main loop stays responsive.
+ *
+ *  Author: Nathan Hambleton – refactor 16 May 2025 by ChatGPT
  * -----------------------------------------------------------------------------
  */
 
 #include <Arduino.h>
 #include <SPI.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include "drink_controller.h"
 #include "pin_config.h"
+#include "state_manager.h"
+#include "aws_manager.h"   // notifyPourResult()
 
-//Forward declarations
-void cleanupDrinkController();
+// Forward decls ---------------------------------------------------------------
+static void writeNCV7240(uint16_t state);
+static void pourDrinkTask(void *param);
 
-// We keep a 16-bit state for the two daisy-chained NCV7240
-// bit 0 => solenoid #0, bit 1 => #1, ..., bit 15 => #15
+// 16‑bit state for two NCV7240 chips
 static uint16_t ncvState = 0x0000;
 
+/* -------------------------------------------------------------------------- */
+/* INITIALISATION                                                              */
+/* -------------------------------------------------------------------------- */
+void initDrinkController() {
+    SPI.begin(SPI_SCK, SPI_MISO, SPI_MOSI, SPI_CS);
+    pinMode(SPI_CS, OUTPUT);
+    digitalWrite(SPI_CS, HIGH);
+
+    ncvState = 0x0000;
+    writeNCV7240(ncvState);
+    Serial.println("NCV7240 SPI initialized, all outputs OFF.");
+
+    pinMode(PUMP1_PIN, OUTPUT);
+    pinMode(PUMP2_PIN, OUTPUT);
+    digitalWrite(PUMP1_PIN, LOW);
+    digitalWrite(PUMP2_PIN, LOW);
+}
+
+/* -------------------------------------------------------------------------- */
+/*  PUBLIC API – startPourTask()                                               */
+/* -------------------------------------------------------------------------- */
+void startPourTask(const String &commandStr) {
+    /* copy the string onto heap so the task owns it */
+    char *buf = strdup(commandStr.c_str());
+    if (!buf) {
+        Serial.println("strdup failed – OOM?");
+        return;
+    }
+    xTaskCreatePinnedToCore(pourDrinkTask, "PourTask", 8192, buf, 1, nullptr, 1);
+}
+
+/* -------------------------------------------------------------------------- */
+/*            FREE RTOS TASK – parses + dispenses, then reports result         */
+/* -------------------------------------------------------------------------- */
+static void pourDrinkTask(void *param) {
+    char *raw = static_cast<char *>(param);
+    String cmdStr(raw);
+    free(raw);
+
+    setState(State::POURING);
+    Serial.println("PourTask > started");
+
+    // Parse & dispense -------------------------------------------------------
+    std::vector<IngredientCommand> vec = parseDrinkCommand(cmdStr);
+    if (vec.empty()) {
+        notifyPourResult(false, "empty_command");
+        setState(State::IDLE);
+        vTaskDelete(nullptr);
+    }
+
+    dispenseDrink(vec);
+
+    /* inform AWS manager */
+    notifyPourResult(true, nullptr);
+
+    setState(State::IDLE);
+    Serial.println("PourTask > finished");
+    vTaskDelete(nullptr);
+}
+
+/* -------------------------------------------------------------------------- */
+/*  (rest of original drink_controller.cpp – UNMODIFIED except final cleanup)  */
+/* -------------------------------------------------------------------------- */
+
 // --------------------- NCV7240 SPI WRITE ---------------------
-/*
-   Writes the 16-bit 'state' to two daisy-chained NCV7240 chips.
-   Each NCV7240 has 8 outputs, so 16 bits total for 2 chips.
-   We'll shift out MSB first or LSB first depending on how your hardware is wired.
-   The NCV7240 typically latches data on rising edge of CS.
-*/
 static void writeNCV7240(uint16_t state) {
-    // Example: We send 2 bytes. Check your NCV7240 datasheet for bit order.
-    // We'll assume MSB first for demonstration.
-
-    uint8_t highByte = (state >> 8) & 0xFF;   // top 8 bits
-    uint8_t lowByte  = state & 0xFF;         // low 8 bits
-
+    uint8_t highByte = (state >> 8) & 0xFF;
+    uint8_t lowByte  = state & 0xFF;
     digitalWrite(SPI_CS, LOW);
-    // SPI transfer 2 bytes
     SPI.transfer(highByte);
     SPI.transfer(lowByte);
     digitalWrite(SPI_CS, HIGH);
 }
 
-// --------------------- INIT ---------------------
-void initDrinkController() {
-    // Initialize SPI
-    SPI.begin(SPI_SCK, SPI_MISO, SPI_MOSI, SPI_CS);
-    pinMode(SPI_CS, OUTPUT);
-    digitalWrite(SPI_CS, HIGH); // CS idle high
-
-    // Set initial all OFF
-    ncvState = 0x0000;
-    writeNCV7240(ncvState);
-    Serial.println("NCV7240 SPI initialized, all outputs OFF.");
-
-    // Initialize Pumps GPIO
-    pinMode(PUMP1_PIN, OUTPUT);
-    pinMode(PUMP2_PIN, OUTPUT);
-    digitalWrite(PUMP1_PIN, LOW); // Ensure pumps are off initially
-    digitalWrite(PUMP2_PIN, LOW);
-}
-
 // --------------------- HELPER: SET SOLENOID ---------------------
-/*
-   setSolenoid(slot, on):
-   slot: 1..16
-   on: true => set bit, false => clear bit
-*/
 static void setSolenoid(int slot, bool on) {
-    // Convert user slot (1..16) to bit index (0..15)
     int bitIndex = slot - 1;
     if (bitIndex < 0 || bitIndex >= 16) {
         Serial.println("Invalid slot " + String(slot));
         return;
     }
+    if (on) ncvState |= (1 << bitIndex);
+    else    ncvState &= ~(1 << bitIndex);
 
-    if (on) {
-        ncvState |= (1 << bitIndex);
-    } else {
-        ncvState &= ~(1 << bitIndex);
-    }
     writeNCV7240(ncvState);
 }
 
 // --------------------- FLOW RATE EXAMPLE ---------------------
-// Example function that returns total manifold flow (oz/sec) 
-// depending on how many are open
 static float flowRate(int numOpen) {
     switch (numOpen) {
         case 1: return 1.0f;
