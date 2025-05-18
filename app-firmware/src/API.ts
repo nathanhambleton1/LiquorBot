@@ -2,22 +2,38 @@
 /* eslint-disable */
 //  This file was automatically generated and should not be edited.
 
-export type CreateGuestEventInput = {
+export type CreateEventInput = {
   id?: string | null,
-  eventID: string,
+  name: string,
+  description?: string | null,
+  location?: string | null,
+  startTime: string,
+  endTime: string,
+  liquorbotId: number,
+  inviteCode: string,
+  drinkIDs?: Array< number > | null,
+  guestOwners?: Array< string | null > | null,
 };
 
-export type ModelGuestEventConditionInput = {
-  eventID?: ModelIDInput | null,
-  and?: Array< ModelGuestEventConditionInput | null > | null,
-  or?: Array< ModelGuestEventConditionInput | null > | null,
-  not?: ModelGuestEventConditionInput | null,
+export type ModelEventConditionInput = {
+  name?: ModelStringInput | null,
+  description?: ModelStringInput | null,
+  location?: ModelStringInput | null,
+  startTime?: ModelStringInput | null,
+  endTime?: ModelStringInput | null,
+  liquorbotId?: ModelIntInput | null,
+  inviteCode?: ModelStringInput | null,
+  drinkIDs?: ModelIntInput | null,
+  guestOwners?: ModelStringInput | null,
+  and?: Array< ModelEventConditionInput | null > | null,
+  or?: Array< ModelEventConditionInput | null > | null,
+  not?: ModelEventConditionInput | null,
   createdAt?: ModelStringInput | null,
   updatedAt?: ModelStringInput | null,
   owner?: ModelStringInput | null,
 };
 
-export type ModelIDInput = {
+export type ModelStringInput = {
   ne?: string | null,
   eq?: string | null,
   le?: string | null,
@@ -57,69 +73,6 @@ export type ModelSizeInput = {
   between?: Array< number | null > | null,
 };
 
-export type ModelStringInput = {
-  ne?: string | null,
-  eq?: string | null,
-  le?: string | null,
-  lt?: string | null,
-  ge?: string | null,
-  gt?: string | null,
-  contains?: string | null,
-  notContains?: string | null,
-  between?: Array< string | null > | null,
-  beginsWith?: string | null,
-  attributeExists?: boolean | null,
-  attributeType?: ModelAttributeTypes | null,
-  size?: ModelSizeInput | null,
-};
-
-export type GuestEvent = {
-  __typename: "GuestEvent",
-  id: string,
-  eventID: string,
-  createdAt: string,
-  updatedAt: string,
-  owner?: string | null,
-};
-
-export type UpdateGuestEventInput = {
-  id: string,
-  eventID?: string | null,
-};
-
-export type DeleteGuestEventInput = {
-  id: string,
-};
-
-export type CreateEventInput = {
-  id?: string | null,
-  name: string,
-  description?: string | null,
-  location?: string | null,
-  startTime: string,
-  endTime: string,
-  liquorbotId: number,
-  inviteCode: string,
-  drinkIDs?: Array< number > | null,
-};
-
-export type ModelEventConditionInput = {
-  name?: ModelStringInput | null,
-  description?: ModelStringInput | null,
-  location?: ModelStringInput | null,
-  startTime?: ModelStringInput | null,
-  endTime?: ModelStringInput | null,
-  liquorbotId?: ModelIntInput | null,
-  inviteCode?: ModelStringInput | null,
-  drinkIDs?: ModelIntInput | null,
-  and?: Array< ModelEventConditionInput | null > | null,
-  or?: Array< ModelEventConditionInput | null > | null,
-  not?: ModelEventConditionInput | null,
-  createdAt?: ModelStringInput | null,
-  updatedAt?: ModelStringInput | null,
-  owner?: ModelStringInput | null,
-};
-
 export type ModelIntInput = {
   ne?: number | null,
   eq?: number | null,
@@ -143,6 +96,24 @@ export type Event = {
   liquorbotId: number,
   inviteCode: string,
   drinkIDs?: Array< number > | null,
+  guestOwners?: Array< string | null > | null,
+  guests?: ModelGuestEventConnection | null,
+  createdAt: string,
+  updatedAt: string,
+  owner?: string | null,
+};
+
+export type ModelGuestEventConnection = {
+  __typename: "ModelGuestEventConnection",
+  items:  Array<GuestEvent | null >,
+  nextToken?: string | null,
+};
+
+export type GuestEvent = {
+  __typename: "GuestEvent",
+  id: string,
+  eventID: string,
+  event?: Event | null,
   createdAt: string,
   updatedAt: string,
   owner?: string | null,
@@ -158,9 +129,50 @@ export type UpdateEventInput = {
   liquorbotId?: number | null,
   inviteCode?: string | null,
   drinkIDs?: Array< number > | null,
+  guestOwners?: Array< string | null > | null,
 };
 
 export type DeleteEventInput = {
+  id: string,
+};
+
+export type CreateGuestEventInput = {
+  id?: string | null,
+  eventID: string,
+};
+
+export type ModelGuestEventConditionInput = {
+  eventID?: ModelIDInput | null,
+  and?: Array< ModelGuestEventConditionInput | null > | null,
+  or?: Array< ModelGuestEventConditionInput | null > | null,
+  not?: ModelGuestEventConditionInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  owner?: ModelStringInput | null,
+};
+
+export type ModelIDInput = {
+  ne?: string | null,
+  eq?: string | null,
+  le?: string | null,
+  lt?: string | null,
+  ge?: string | null,
+  gt?: string | null,
+  contains?: string | null,
+  notContains?: string | null,
+  between?: Array< string | null > | null,
+  beginsWith?: string | null,
+  attributeExists?: boolean | null,
+  attributeType?: ModelAttributeTypes | null,
+  size?: ModelSizeInput | null,
+};
+
+export type UpdateGuestEventInput = {
+  id: string,
+  eventID?: string | null,
+};
+
+export type DeleteGuestEventInput = {
   id: string,
 };
 
@@ -368,29 +380,6 @@ export type DeleteUserProfileInput = {
   id: string,
 };
 
-export type ModelGuestEventFilterInput = {
-  id?: ModelIDInput | null,
-  eventID?: ModelIDInput | null,
-  createdAt?: ModelStringInput | null,
-  updatedAt?: ModelStringInput | null,
-  and?: Array< ModelGuestEventFilterInput | null > | null,
-  or?: Array< ModelGuestEventFilterInput | null > | null,
-  not?: ModelGuestEventFilterInput | null,
-  owner?: ModelStringInput | null,
-};
-
-export enum ModelSortDirection {
-  ASC = "ASC",
-  DESC = "DESC",
-}
-
-
-export type ModelGuestEventConnection = {
-  __typename: "ModelGuestEventConnection",
-  items:  Array<GuestEvent | null >,
-  nextToken?: string | null,
-};
-
 export type ModelEventFilterInput = {
   id?: ModelIDInput | null,
   name?: ModelStringInput | null,
@@ -401,6 +390,7 @@ export type ModelEventFilterInput = {
   liquorbotId?: ModelIntInput | null,
   inviteCode?: ModelStringInput | null,
   drinkIDs?: ModelIntInput | null,
+  guestOwners?: ModelStringInput | null,
   createdAt?: ModelStringInput | null,
   updatedAt?: ModelStringInput | null,
   and?: Array< ModelEventFilterInput | null > | null,
@@ -413,6 +403,23 @@ export type ModelEventConnection = {
   __typename: "ModelEventConnection",
   items:  Array<Event | null >,
   nextToken?: string | null,
+};
+
+export enum ModelSortDirection {
+  ASC = "ASC",
+  DESC = "DESC",
+}
+
+
+export type ModelGuestEventFilterInput = {
+  id?: ModelIDInput | null,
+  eventID?: ModelIDInput | null,
+  createdAt?: ModelStringInput | null,
+  updatedAt?: ModelStringInput | null,
+  and?: Array< ModelGuestEventFilterInput | null > | null,
+  or?: Array< ModelGuestEventFilterInput | null > | null,
+  not?: ModelGuestEventFilterInput | null,
+  owner?: ModelStringInput | null,
 };
 
 export type ModelPouredDrinkFilterInput = {
@@ -493,14 +500,22 @@ export type ModelUserProfileConnection = {
   nextToken?: string | null,
 };
 
-export type ModelSubscriptionGuestEventFilterInput = {
+export type ModelSubscriptionEventFilterInput = {
   id?: ModelSubscriptionIDInput | null,
-  eventID?: ModelSubscriptionIDInput | null,
+  name?: ModelSubscriptionStringInput | null,
+  description?: ModelSubscriptionStringInput | null,
+  location?: ModelSubscriptionStringInput | null,
+  startTime?: ModelSubscriptionStringInput | null,
+  endTime?: ModelSubscriptionStringInput | null,
+  liquorbotId?: ModelSubscriptionIntInput | null,
+  inviteCode?: ModelSubscriptionStringInput | null,
+  drinkIDs?: ModelSubscriptionIntInput | null,
   createdAt?: ModelSubscriptionStringInput | null,
   updatedAt?: ModelSubscriptionStringInput | null,
-  and?: Array< ModelSubscriptionGuestEventFilterInput | null > | null,
-  or?: Array< ModelSubscriptionGuestEventFilterInput | null > | null,
+  and?: Array< ModelSubscriptionEventFilterInput | null > | null,
+  or?: Array< ModelSubscriptionEventFilterInput | null > | null,
   owner?: ModelStringInput | null,
+  guestOwners?: ModelStringInput | null,
 };
 
 export type ModelSubscriptionIDInput = {
@@ -533,23 +548,6 @@ export type ModelSubscriptionStringInput = {
   notIn?: Array< string | null > | null,
 };
 
-export type ModelSubscriptionEventFilterInput = {
-  id?: ModelSubscriptionIDInput | null,
-  name?: ModelSubscriptionStringInput | null,
-  description?: ModelSubscriptionStringInput | null,
-  location?: ModelSubscriptionStringInput | null,
-  startTime?: ModelSubscriptionStringInput | null,
-  endTime?: ModelSubscriptionStringInput | null,
-  liquorbotId?: ModelSubscriptionIntInput | null,
-  inviteCode?: ModelSubscriptionStringInput | null,
-  drinkIDs?: ModelSubscriptionIntInput | null,
-  createdAt?: ModelSubscriptionStringInput | null,
-  updatedAt?: ModelSubscriptionStringInput | null,
-  and?: Array< ModelSubscriptionEventFilterInput | null > | null,
-  or?: Array< ModelSubscriptionEventFilterInput | null > | null,
-  owner?: ModelStringInput | null,
-};
-
 export type ModelSubscriptionIntInput = {
   ne?: number | null,
   eq?: number | null,
@@ -560,6 +558,16 @@ export type ModelSubscriptionIntInput = {
   between?: Array< number | null > | null,
   in?: Array< number | null > | null,
   notIn?: Array< number | null > | null,
+};
+
+export type ModelSubscriptionGuestEventFilterInput = {
+  id?: ModelSubscriptionIDInput | null,
+  eventID?: ModelSubscriptionIDInput | null,
+  createdAt?: ModelSubscriptionStringInput | null,
+  updatedAt?: ModelSubscriptionStringInput | null,
+  and?: Array< ModelSubscriptionGuestEventFilterInput | null > | null,
+  or?: Array< ModelSubscriptionGuestEventFilterInput | null > | null,
+  owner?: ModelStringInput | null,
 };
 
 export type ModelSubscriptionPouredDrinkFilterInput = {
@@ -624,54 +632,6 @@ export type ModelSubscriptionUserProfileFilterInput = {
   owner?: ModelStringInput | null,
 };
 
-export type CreateGuestEventMutationVariables = {
-  input: CreateGuestEventInput,
-  condition?: ModelGuestEventConditionInput | null,
-};
-
-export type CreateGuestEventMutation = {
-  createGuestEvent?:  {
-    __typename: "GuestEvent",
-    id: string,
-    eventID: string,
-    createdAt: string,
-    updatedAt: string,
-    owner?: string | null,
-  } | null,
-};
-
-export type UpdateGuestEventMutationVariables = {
-  input: UpdateGuestEventInput,
-  condition?: ModelGuestEventConditionInput | null,
-};
-
-export type UpdateGuestEventMutation = {
-  updateGuestEvent?:  {
-    __typename: "GuestEvent",
-    id: string,
-    eventID: string,
-    createdAt: string,
-    updatedAt: string,
-    owner?: string | null,
-  } | null,
-};
-
-export type DeleteGuestEventMutationVariables = {
-  input: DeleteGuestEventInput,
-  condition?: ModelGuestEventConditionInput | null,
-};
-
-export type DeleteGuestEventMutation = {
-  deleteGuestEvent?:  {
-    __typename: "GuestEvent",
-    id: string,
-    eventID: string,
-    createdAt: string,
-    updatedAt: string,
-    owner?: string | null,
-  } | null,
-};
-
 export type CreateEventMutationVariables = {
   input: CreateEventInput,
   condition?: ModelEventConditionInput | null,
@@ -689,6 +649,11 @@ export type CreateEventMutation = {
     liquorbotId: number,
     inviteCode: string,
     drinkIDs?: Array< number > | null,
+    guestOwners?: Array< string | null > | null,
+    guests?:  {
+      __typename: "ModelGuestEventConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
     owner?: string | null,
@@ -712,6 +677,11 @@ export type UpdateEventMutation = {
     liquorbotId: number,
     inviteCode: string,
     drinkIDs?: Array< number > | null,
+    guestOwners?: Array< string | null > | null,
+    guests?:  {
+      __typename: "ModelGuestEventConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
     owner?: string | null,
@@ -735,6 +705,107 @@ export type DeleteEventMutation = {
     liquorbotId: number,
     inviteCode: string,
     drinkIDs?: Array< number > | null,
+    guestOwners?: Array< string | null > | null,
+    guests?:  {
+      __typename: "ModelGuestEventConnection",
+      nextToken?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    owner?: string | null,
+  } | null,
+};
+
+export type CreateGuestEventMutationVariables = {
+  input: CreateGuestEventInput,
+  condition?: ModelGuestEventConditionInput | null,
+};
+
+export type CreateGuestEventMutation = {
+  createGuestEvent?:  {
+    __typename: "GuestEvent",
+    id: string,
+    eventID: string,
+    event?:  {
+      __typename: "Event",
+      id: string,
+      name: string,
+      description?: string | null,
+      location?: string | null,
+      startTime: string,
+      endTime: string,
+      liquorbotId: number,
+      inviteCode: string,
+      drinkIDs?: Array< number > | null,
+      guestOwners?: Array< string | null > | null,
+      createdAt: string,
+      updatedAt: string,
+      owner?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    owner?: string | null,
+  } | null,
+};
+
+export type UpdateGuestEventMutationVariables = {
+  input: UpdateGuestEventInput,
+  condition?: ModelGuestEventConditionInput | null,
+};
+
+export type UpdateGuestEventMutation = {
+  updateGuestEvent?:  {
+    __typename: "GuestEvent",
+    id: string,
+    eventID: string,
+    event?:  {
+      __typename: "Event",
+      id: string,
+      name: string,
+      description?: string | null,
+      location?: string | null,
+      startTime: string,
+      endTime: string,
+      liquorbotId: number,
+      inviteCode: string,
+      drinkIDs?: Array< number > | null,
+      guestOwners?: Array< string | null > | null,
+      createdAt: string,
+      updatedAt: string,
+      owner?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    owner?: string | null,
+  } | null,
+};
+
+export type DeleteGuestEventMutationVariables = {
+  input: DeleteGuestEventInput,
+  condition?: ModelGuestEventConditionInput | null,
+};
+
+export type DeleteGuestEventMutation = {
+  deleteGuestEvent?:  {
+    __typename: "GuestEvent",
+    id: string,
+    eventID: string,
+    event?:  {
+      __typename: "Event",
+      id: string,
+      name: string,
+      description?: string | null,
+      location?: string | null,
+      startTime: string,
+      endTime: string,
+      liquorbotId: number,
+      inviteCode: string,
+      drinkIDs?: Array< number > | null,
+      guestOwners?: Array< string | null > | null,
+      createdAt: string,
+      updatedAt: string,
+      owner?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
     owner?: string | null,
@@ -981,6 +1052,93 @@ export type DeleteUserProfileMutation = {
   } | null,
 };
 
+export type GetEventQueryVariables = {
+  id: string,
+};
+
+export type GetEventQuery = {
+  getEvent?:  {
+    __typename: "Event",
+    id: string,
+    name: string,
+    description?: string | null,
+    location?: string | null,
+    startTime: string,
+    endTime: string,
+    liquorbotId: number,
+    inviteCode: string,
+    drinkIDs?: Array< number > | null,
+    guestOwners?: Array< string | null > | null,
+    guests?:  {
+      __typename: "ModelGuestEventConnection",
+      nextToken?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    owner?: string | null,
+  } | null,
+};
+
+export type ListEventsQueryVariables = {
+  filter?: ModelEventFilterInput | null,
+  limit?: number | null,
+  nextToken?: string | null,
+};
+
+export type ListEventsQuery = {
+  listEvents?:  {
+    __typename: "ModelEventConnection",
+    items:  Array< {
+      __typename: "Event",
+      id: string,
+      name: string,
+      description?: string | null,
+      location?: string | null,
+      startTime: string,
+      endTime: string,
+      liquorbotId: number,
+      inviteCode: string,
+      drinkIDs?: Array< number > | null,
+      guestOwners?: Array< string | null > | null,
+      createdAt: string,
+      updatedAt: string,
+      owner?: string | null,
+    } | null >,
+    nextToken?: string | null,
+  } | null,
+};
+
+export type EventsByCodeQueryVariables = {
+  inviteCode: string,
+  sortDirection?: ModelSortDirection | null,
+  filter?: ModelEventFilterInput | null,
+  limit?: number | null,
+  nextToken?: string | null,
+};
+
+export type EventsByCodeQuery = {
+  eventsByCode?:  {
+    __typename: "ModelEventConnection",
+    items:  Array< {
+      __typename: "Event",
+      id: string,
+      name: string,
+      description?: string | null,
+      location?: string | null,
+      startTime: string,
+      endTime: string,
+      liquorbotId: number,
+      inviteCode: string,
+      drinkIDs?: Array< number > | null,
+      guestOwners?: Array< string | null > | null,
+      createdAt: string,
+      updatedAt: string,
+      owner?: string | null,
+    } | null >,
+    nextToken?: string | null,
+  } | null,
+};
+
 export type GetGuestEventQueryVariables = {
   id: string,
 };
@@ -990,6 +1148,22 @@ export type GetGuestEventQuery = {
     __typename: "GuestEvent",
     id: string,
     eventID: string,
+    event?:  {
+      __typename: "Event",
+      id: string,
+      name: string,
+      description?: string | null,
+      location?: string | null,
+      startTime: string,
+      endTime: string,
+      liquorbotId: number,
+      inviteCode: string,
+      drinkIDs?: Array< number > | null,
+      guestOwners?: Array< string | null > | null,
+      createdAt: string,
+      updatedAt: string,
+      owner?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
     owner?: string | null,
@@ -1034,56 +1208,6 @@ export type GuestEventsByEventQuery = {
       __typename: "GuestEvent",
       id: string,
       eventID: string,
-      createdAt: string,
-      updatedAt: string,
-      owner?: string | null,
-    } | null >,
-    nextToken?: string | null,
-  } | null,
-};
-
-export type GetEventQueryVariables = {
-  id: string,
-};
-
-export type GetEventQuery = {
-  getEvent?:  {
-    __typename: "Event",
-    id: string,
-    name: string,
-    description?: string | null,
-    location?: string | null,
-    startTime: string,
-    endTime: string,
-    liquorbotId: number,
-    inviteCode: string,
-    drinkIDs?: Array< number > | null,
-    createdAt: string,
-    updatedAt: string,
-    owner?: string | null,
-  } | null,
-};
-
-export type ListEventsQueryVariables = {
-  filter?: ModelEventFilterInput | null,
-  limit?: number | null,
-  nextToken?: string | null,
-};
-
-export type ListEventsQuery = {
-  listEvents?:  {
-    __typename: "ModelEventConnection",
-    items:  Array< {
-      __typename: "Event",
-      id: string,
-      name: string,
-      description?: string | null,
-      location?: string | null,
-      startTime: string,
-      endTime: string,
-      liquorbotId: number,
-      inviteCode: string,
-      drinkIDs?: Array< number > | null,
       createdAt: string,
       updatedAt: string,
       owner?: string | null,
@@ -1262,54 +1386,6 @@ export type ListUserProfilesQuery = {
   } | null,
 };
 
-export type OnCreateGuestEventSubscriptionVariables = {
-  filter?: ModelSubscriptionGuestEventFilterInput | null,
-  owner?: string | null,
-};
-
-export type OnCreateGuestEventSubscription = {
-  onCreateGuestEvent?:  {
-    __typename: "GuestEvent",
-    id: string,
-    eventID: string,
-    createdAt: string,
-    updatedAt: string,
-    owner?: string | null,
-  } | null,
-};
-
-export type OnUpdateGuestEventSubscriptionVariables = {
-  filter?: ModelSubscriptionGuestEventFilterInput | null,
-  owner?: string | null,
-};
-
-export type OnUpdateGuestEventSubscription = {
-  onUpdateGuestEvent?:  {
-    __typename: "GuestEvent",
-    id: string,
-    eventID: string,
-    createdAt: string,
-    updatedAt: string,
-    owner?: string | null,
-  } | null,
-};
-
-export type OnDeleteGuestEventSubscriptionVariables = {
-  filter?: ModelSubscriptionGuestEventFilterInput | null,
-  owner?: string | null,
-};
-
-export type OnDeleteGuestEventSubscription = {
-  onDeleteGuestEvent?:  {
-    __typename: "GuestEvent",
-    id: string,
-    eventID: string,
-    createdAt: string,
-    updatedAt: string,
-    owner?: string | null,
-  } | null,
-};
-
 export type OnCreateEventSubscriptionVariables = {
   filter?: ModelSubscriptionEventFilterInput | null,
   owner?: string | null,
@@ -1327,6 +1403,11 @@ export type OnCreateEventSubscription = {
     liquorbotId: number,
     inviteCode: string,
     drinkIDs?: Array< number > | null,
+    guestOwners?: Array< string | null > | null,
+    guests?:  {
+      __typename: "ModelGuestEventConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
     owner?: string | null,
@@ -1350,6 +1431,11 @@ export type OnUpdateEventSubscription = {
     liquorbotId: number,
     inviteCode: string,
     drinkIDs?: Array< number > | null,
+    guestOwners?: Array< string | null > | null,
+    guests?:  {
+      __typename: "ModelGuestEventConnection",
+      nextToken?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
     owner?: string | null,
@@ -1373,6 +1459,107 @@ export type OnDeleteEventSubscription = {
     liquorbotId: number,
     inviteCode: string,
     drinkIDs?: Array< number > | null,
+    guestOwners?: Array< string | null > | null,
+    guests?:  {
+      __typename: "ModelGuestEventConnection",
+      nextToken?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    owner?: string | null,
+  } | null,
+};
+
+export type OnCreateGuestEventSubscriptionVariables = {
+  filter?: ModelSubscriptionGuestEventFilterInput | null,
+  owner?: string | null,
+};
+
+export type OnCreateGuestEventSubscription = {
+  onCreateGuestEvent?:  {
+    __typename: "GuestEvent",
+    id: string,
+    eventID: string,
+    event?:  {
+      __typename: "Event",
+      id: string,
+      name: string,
+      description?: string | null,
+      location?: string | null,
+      startTime: string,
+      endTime: string,
+      liquorbotId: number,
+      inviteCode: string,
+      drinkIDs?: Array< number > | null,
+      guestOwners?: Array< string | null > | null,
+      createdAt: string,
+      updatedAt: string,
+      owner?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    owner?: string | null,
+  } | null,
+};
+
+export type OnUpdateGuestEventSubscriptionVariables = {
+  filter?: ModelSubscriptionGuestEventFilterInput | null,
+  owner?: string | null,
+};
+
+export type OnUpdateGuestEventSubscription = {
+  onUpdateGuestEvent?:  {
+    __typename: "GuestEvent",
+    id: string,
+    eventID: string,
+    event?:  {
+      __typename: "Event",
+      id: string,
+      name: string,
+      description?: string | null,
+      location?: string | null,
+      startTime: string,
+      endTime: string,
+      liquorbotId: number,
+      inviteCode: string,
+      drinkIDs?: Array< number > | null,
+      guestOwners?: Array< string | null > | null,
+      createdAt: string,
+      updatedAt: string,
+      owner?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    owner?: string | null,
+  } | null,
+};
+
+export type OnDeleteGuestEventSubscriptionVariables = {
+  filter?: ModelSubscriptionGuestEventFilterInput | null,
+  owner?: string | null,
+};
+
+export type OnDeleteGuestEventSubscription = {
+  onDeleteGuestEvent?:  {
+    __typename: "GuestEvent",
+    id: string,
+    eventID: string,
+    event?:  {
+      __typename: "Event",
+      id: string,
+      name: string,
+      description?: string | null,
+      location?: string | null,
+      startTime: string,
+      endTime: string,
+      liquorbotId: number,
+      inviteCode: string,
+      drinkIDs?: Array< number > | null,
+      guestOwners?: Array< string | null > | null,
+      createdAt: string,
+      updatedAt: string,
+      owner?: string | null,
+    } | null,
     createdAt: string,
     updatedAt: string,
     owner?: string | null,

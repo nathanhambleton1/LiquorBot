@@ -8,57 +8,6 @@ type GeneratedSubscription<InputType, OutputType> = string & {
   __generatedSubscriptionOutput: OutputType;
 };
 
-export const onCreateGuestEvent = /* GraphQL */ `subscription OnCreateGuestEvent(
-  $filter: ModelSubscriptionGuestEventFilterInput
-  $owner: String
-) {
-  onCreateGuestEvent(filter: $filter, owner: $owner) {
-    id
-    eventID
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedSubscription<
-  APITypes.OnCreateGuestEventSubscriptionVariables,
-  APITypes.OnCreateGuestEventSubscription
->;
-export const onUpdateGuestEvent = /* GraphQL */ `subscription OnUpdateGuestEvent(
-  $filter: ModelSubscriptionGuestEventFilterInput
-  $owner: String
-) {
-  onUpdateGuestEvent(filter: $filter, owner: $owner) {
-    id
-    eventID
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedSubscription<
-  APITypes.OnUpdateGuestEventSubscriptionVariables,
-  APITypes.OnUpdateGuestEventSubscription
->;
-export const onDeleteGuestEvent = /* GraphQL */ `subscription OnDeleteGuestEvent(
-  $filter: ModelSubscriptionGuestEventFilterInput
-  $owner: String
-) {
-  onDeleteGuestEvent(filter: $filter, owner: $owner) {
-    id
-    eventID
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedSubscription<
-  APITypes.OnDeleteGuestEventSubscriptionVariables,
-  APITypes.OnDeleteGuestEventSubscription
->;
 export const onCreateEvent = /* GraphQL */ `subscription OnCreateEvent(
   $filter: ModelSubscriptionEventFilterInput
   $owner: String
@@ -73,6 +22,11 @@ export const onCreateEvent = /* GraphQL */ `subscription OnCreateEvent(
     liquorbotId
     inviteCode
     drinkIDs
+    guestOwners
+    guests {
+      nextToken
+      __typename
+    }
     createdAt
     updatedAt
     owner
@@ -97,6 +51,11 @@ export const onUpdateEvent = /* GraphQL */ `subscription OnUpdateEvent(
     liquorbotId
     inviteCode
     drinkIDs
+    guestOwners
+    guests {
+      nextToken
+      __typename
+    }
     createdAt
     updatedAt
     owner
@@ -121,6 +80,11 @@ export const onDeleteEvent = /* GraphQL */ `subscription OnDeleteEvent(
     liquorbotId
     inviteCode
     drinkIDs
+    guestOwners
+    guests {
+      nextToken
+      __typename
+    }
     createdAt
     updatedAt
     owner
@@ -130,6 +94,105 @@ export const onDeleteEvent = /* GraphQL */ `subscription OnDeleteEvent(
 ` as GeneratedSubscription<
   APITypes.OnDeleteEventSubscriptionVariables,
   APITypes.OnDeleteEventSubscription
+>;
+export const onCreateGuestEvent = /* GraphQL */ `subscription OnCreateGuestEvent(
+  $filter: ModelSubscriptionGuestEventFilterInput
+  $owner: String
+) {
+  onCreateGuestEvent(filter: $filter, owner: $owner) {
+    id
+    eventID
+    event {
+      id
+      name
+      description
+      location
+      startTime
+      endTime
+      liquorbotId
+      inviteCode
+      drinkIDs
+      guestOwners
+      createdAt
+      updatedAt
+      owner
+      __typename
+    }
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnCreateGuestEventSubscriptionVariables,
+  APITypes.OnCreateGuestEventSubscription
+>;
+export const onUpdateGuestEvent = /* GraphQL */ `subscription OnUpdateGuestEvent(
+  $filter: ModelSubscriptionGuestEventFilterInput
+  $owner: String
+) {
+  onUpdateGuestEvent(filter: $filter, owner: $owner) {
+    id
+    eventID
+    event {
+      id
+      name
+      description
+      location
+      startTime
+      endTime
+      liquorbotId
+      inviteCode
+      drinkIDs
+      guestOwners
+      createdAt
+      updatedAt
+      owner
+      __typename
+    }
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnUpdateGuestEventSubscriptionVariables,
+  APITypes.OnUpdateGuestEventSubscription
+>;
+export const onDeleteGuestEvent = /* GraphQL */ `subscription OnDeleteGuestEvent(
+  $filter: ModelSubscriptionGuestEventFilterInput
+  $owner: String
+) {
+  onDeleteGuestEvent(filter: $filter, owner: $owner) {
+    id
+    eventID
+    event {
+      id
+      name
+      description
+      location
+      startTime
+      endTime
+      liquorbotId
+      inviteCode
+      drinkIDs
+      guestOwners
+      createdAt
+      updatedAt
+      owner
+      __typename
+    }
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedSubscription<
+  APITypes.OnDeleteGuestEventSubscriptionVariables,
+  APITypes.OnDeleteGuestEventSubscription
 >;
 export const onCreatePouredDrink = /* GraphQL */ `subscription OnCreatePouredDrink(
   $filter: ModelSubscriptionPouredDrinkFilterInput

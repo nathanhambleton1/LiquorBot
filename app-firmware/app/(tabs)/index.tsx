@@ -55,12 +55,29 @@ export default function Index() {
     endTime: string;
   }
 
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
+
+  /* ──────────────────────── fetch events ──────────────────────── */
   useEffect(() => {
+  /* grab the Cognito username first */
+    (async () => {
+      try {
+        const ses = await fetchAuthSession();
+        const u   = ses.tokens?.idToken?.payload['cognito:username'];
+        setCurrentUser(typeof u === 'string' ? u : null);
+      } catch { setCurrentUser(null); }
+    })();
+  }, []);
+
+
+  useEffect(() => {
+    if (!currentUser) return;
     const fetchEvents = async () => {
       try {
         const { data } = await generateClient().graphql({
           query: listEvents,
           variables: { filter: { liquorbotId: { eq: Number(liquorbotId) } } },
+          authMode: 'userPool',
         });
         
         const now = new Date();
@@ -83,9 +100,8 @@ export default function Index() {
         setEventsLoading(false);
       }
     };
-
     fetchEvents();
-  }, [liquorbotId]);
+  }, [liquorbotId, currentUser]);
 
   useEffect(() => {
     /* ---------- glow animation ---------- */
@@ -303,7 +319,7 @@ const styles = StyleSheet.create({
   },
    mainTile: {
     flex: 1,
-    backgroundColor: 'rgba(206, 151, 94, 0.9)',
+    backgroundColor: '#1F1F1F',
     borderRadius: 20,
     padding: 16,
     marginRight: 12,

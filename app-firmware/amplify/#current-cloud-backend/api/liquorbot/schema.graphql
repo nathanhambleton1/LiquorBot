@@ -1,12 +1,13 @@
-type GuestEvent
+type Event
   @model
-  @auth(rules: [{ allow: owner }]) {
-  id: ID! @primaryKey
-  eventID: ID! @index(name: "byEvent", queryField: "guestEventsByEvent")
-}
-
-
-type Event @model @auth(rules: [{allow: public}, {allow: owner}, {allow: groups, groups: ["IoTUsers"], operations: [read, create, update, delete]}]) {
+  @auth(rules: [
+    { allow: owner },                                # host
+    {                                                # guests → read-only via the relationship
+      allow: owner,
+      ownerField: "guestOwners",
+      operations: [read]
+    }
+  ]) {
   id: ID!
   name: String!
   description: String
@@ -14,9 +15,23 @@ type Event @model @auth(rules: [{allow: public}, {allow: owner}, {allow: groups,
   startTime: AWSDateTime!
   endTime: AWSDateTime!
   liquorbotId: Int!
-  inviteCode: String!
+  inviteCode: String!        @index(name: "byCode", queryField: "eventsByCode")
   drinkIDs: [Int!]
+
+  # NEW – reverse connection so AppSync can evaluate the second auth rule
+  guestOwners: [String]      # filled automatically; don’t touch in code
+  guests: [GuestEvent]       @hasMany(indexName: "byEvent", fields:["id"])
 }
+
+type GuestEvent
+  @model
+  @auth(rules:[{ allow: owner }]) {
+  id: ID!           @primaryKey
+  eventID: ID!      @index(name:"byEvent", queryField:"guestEventsByEvent")
+  # NEW – tell Amplify which event this belongs to
+  event: Event      @belongsTo(fields:["eventID"])
+}
+
 
 type PouredDrink @model @auth(rules: [{allow: public}, {allow: owner}]) {
   id: ID!

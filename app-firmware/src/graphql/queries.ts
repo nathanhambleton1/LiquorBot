@@ -8,10 +8,117 @@ type GeneratedQuery<InputType, OutputType> = string & {
   __generatedQueryOutput: OutputType;
 };
 
+export const getEvent = /* GraphQL */ `query GetEvent($id: ID!) {
+  getEvent(id: $id) {
+    id
+    name
+    description
+    location
+    startTime
+    endTime
+    liquorbotId
+    inviteCode
+    drinkIDs
+    guestOwners
+    guests {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedQuery<APITypes.GetEventQueryVariables, APITypes.GetEventQuery>;
+export const listEvents = /* GraphQL */ `query ListEvents(
+  $filter: ModelEventFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  listEvents(filter: $filter, limit: $limit, nextToken: $nextToken) {
+    items {
+      id
+      name
+      description
+      location
+      startTime
+      endTime
+      liquorbotId
+      inviteCode
+      drinkIDs
+      guestOwners
+      createdAt
+      updatedAt
+      owner
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.ListEventsQueryVariables,
+  APITypes.ListEventsQuery
+>;
+export const eventsByCode = /* GraphQL */ `query EventsByCode(
+  $inviteCode: String!
+  $sortDirection: ModelSortDirection
+  $filter: ModelEventFilterInput
+  $limit: Int
+  $nextToken: String
+) {
+  eventsByCode(
+    inviteCode: $inviteCode
+    sortDirection: $sortDirection
+    filter: $filter
+    limit: $limit
+    nextToken: $nextToken
+  ) {
+    items {
+      id
+      name
+      description
+      location
+      startTime
+      endTime
+      liquorbotId
+      inviteCode
+      drinkIDs
+      guestOwners
+      createdAt
+      updatedAt
+      owner
+      __typename
+    }
+    nextToken
+    __typename
+  }
+}
+` as GeneratedQuery<
+  APITypes.EventsByCodeQueryVariables,
+  APITypes.EventsByCodeQuery
+>;
 export const getGuestEvent = /* GraphQL */ `query GetGuestEvent($id: ID!) {
   getGuestEvent(id: $id) {
     id
     eventID
+    event {
+      id
+      name
+      description
+      location
+      startTime
+      endTime
+      liquorbotId
+      inviteCode
+      drinkIDs
+      guestOwners
+      createdAt
+      updatedAt
+      owner
+      __typename
+    }
     createdAt
     updatedAt
     owner
@@ -81,53 +188,6 @@ export const guestEventsByEvent = /* GraphQL */ `query GuestEventsByEvent(
 ` as GeneratedQuery<
   APITypes.GuestEventsByEventQueryVariables,
   APITypes.GuestEventsByEventQuery
->;
-export const getEvent = /* GraphQL */ `query GetEvent($id: ID!) {
-  getEvent(id: $id) {
-    id
-    name
-    description
-    location
-    startTime
-    endTime
-    liquorbotId
-    inviteCode
-    drinkIDs
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedQuery<APITypes.GetEventQueryVariables, APITypes.GetEventQuery>;
-export const listEvents = /* GraphQL */ `query ListEvents(
-  $filter: ModelEventFilterInput
-  $limit: Int
-  $nextToken: String
-) {
-  listEvents(filter: $filter, limit: $limit, nextToken: $nextToken) {
-    items {
-      id
-      name
-      description
-      location
-      startTime
-      endTime
-      liquorbotId
-      inviteCode
-      drinkIDs
-      createdAt
-      updatedAt
-      owner
-      __typename
-    }
-    nextToken
-    __typename
-  }
-}
-` as GeneratedQuery<
-  APITypes.ListEventsQueryVariables,
-  APITypes.ListEventsQuery
 >;
 export const getPouredDrink = /* GraphQL */ `query GetPouredDrink($id: ID!) {
   getPouredDrink(id: $id) {

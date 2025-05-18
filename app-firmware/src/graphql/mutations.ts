@@ -8,57 +8,6 @@ type GeneratedMutation<InputType, OutputType> = string & {
   __generatedMutationOutput: OutputType;
 };
 
-export const createGuestEvent = /* GraphQL */ `mutation CreateGuestEvent(
-  $input: CreateGuestEventInput!
-  $condition: ModelGuestEventConditionInput
-) {
-  createGuestEvent(input: $input, condition: $condition) {
-    id
-    eventID
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedMutation<
-  APITypes.CreateGuestEventMutationVariables,
-  APITypes.CreateGuestEventMutation
->;
-export const updateGuestEvent = /* GraphQL */ `mutation UpdateGuestEvent(
-  $input: UpdateGuestEventInput!
-  $condition: ModelGuestEventConditionInput
-) {
-  updateGuestEvent(input: $input, condition: $condition) {
-    id
-    eventID
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedMutation<
-  APITypes.UpdateGuestEventMutationVariables,
-  APITypes.UpdateGuestEventMutation
->;
-export const deleteGuestEvent = /* GraphQL */ `mutation DeleteGuestEvent(
-  $input: DeleteGuestEventInput!
-  $condition: ModelGuestEventConditionInput
-) {
-  deleteGuestEvent(input: $input, condition: $condition) {
-    id
-    eventID
-    createdAt
-    updatedAt
-    owner
-    __typename
-  }
-}
-` as GeneratedMutation<
-  APITypes.DeleteGuestEventMutationVariables,
-  APITypes.DeleteGuestEventMutation
->;
 export const createEvent = /* GraphQL */ `mutation CreateEvent(
   $input: CreateEventInput!
   $condition: ModelEventConditionInput
@@ -73,6 +22,11 @@ export const createEvent = /* GraphQL */ `mutation CreateEvent(
     liquorbotId
     inviteCode
     drinkIDs
+    guestOwners
+    guests {
+      nextToken
+      __typename
+    }
     createdAt
     updatedAt
     owner
@@ -97,6 +51,11 @@ export const updateEvent = /* GraphQL */ `mutation UpdateEvent(
     liquorbotId
     inviteCode
     drinkIDs
+    guestOwners
+    guests {
+      nextToken
+      __typename
+    }
     createdAt
     updatedAt
     owner
@@ -121,6 +80,11 @@ export const deleteEvent = /* GraphQL */ `mutation DeleteEvent(
     liquorbotId
     inviteCode
     drinkIDs
+    guestOwners
+    guests {
+      nextToken
+      __typename
+    }
     createdAt
     updatedAt
     owner
@@ -130,6 +94,105 @@ export const deleteEvent = /* GraphQL */ `mutation DeleteEvent(
 ` as GeneratedMutation<
   APITypes.DeleteEventMutationVariables,
   APITypes.DeleteEventMutation
+>;
+export const createGuestEvent = /* GraphQL */ `mutation CreateGuestEvent(
+  $input: CreateGuestEventInput!
+  $condition: ModelGuestEventConditionInput
+) {
+  createGuestEvent(input: $input, condition: $condition) {
+    id
+    eventID
+    event {
+      id
+      name
+      description
+      location
+      startTime
+      endTime
+      liquorbotId
+      inviteCode
+      drinkIDs
+      guestOwners
+      createdAt
+      updatedAt
+      owner
+      __typename
+    }
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.CreateGuestEventMutationVariables,
+  APITypes.CreateGuestEventMutation
+>;
+export const updateGuestEvent = /* GraphQL */ `mutation UpdateGuestEvent(
+  $input: UpdateGuestEventInput!
+  $condition: ModelGuestEventConditionInput
+) {
+  updateGuestEvent(input: $input, condition: $condition) {
+    id
+    eventID
+    event {
+      id
+      name
+      description
+      location
+      startTime
+      endTime
+      liquorbotId
+      inviteCode
+      drinkIDs
+      guestOwners
+      createdAt
+      updatedAt
+      owner
+      __typename
+    }
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.UpdateGuestEventMutationVariables,
+  APITypes.UpdateGuestEventMutation
+>;
+export const deleteGuestEvent = /* GraphQL */ `mutation DeleteGuestEvent(
+  $input: DeleteGuestEventInput!
+  $condition: ModelGuestEventConditionInput
+) {
+  deleteGuestEvent(input: $input, condition: $condition) {
+    id
+    eventID
+    event {
+      id
+      name
+      description
+      location
+      startTime
+      endTime
+      liquorbotId
+      inviteCode
+      drinkIDs
+      guestOwners
+      createdAt
+      updatedAt
+      owner
+      __typename
+    }
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.DeleteGuestEventMutationVariables,
+  APITypes.DeleteGuestEventMutation
 >;
 export const createPouredDrink = /* GraphQL */ `mutation CreatePouredDrink(
   $input: CreatePouredDrinkInput!
