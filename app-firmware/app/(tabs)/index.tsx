@@ -266,7 +266,7 @@ export default function Index() {
               </View>
               <View style={styles.textContainer}>
                 <Text style={styles.tileTitle}>Drink Menu</Text>
-                <Text style={styles.tileSubtext}>32 Recipes</Text>
+                <Text style={styles.tileSubtext}>Explore Recipes</Text>
               </View>
             </View>
             <View style={styles.glowOverlay} />

@@ -244,6 +244,16 @@ export default function EventsScreen(){
     }
   }, [menu]);
 
+  // Add this useEffect to handle menu population
+  useEffect(() => {
+    if (existingEvent && allDrinks.length > 0) {
+      const drinks = (existingEvent.drinkIDs || [])
+        .map(id => allDrinks.find(d => d.id === id))
+        .filter(Boolean) as Drink[];
+      setMenu(drinks);
+    }
+  }, [existingEvent, allDrinks]); // Re-run when event or drinks update
+
   /* auto‑select today */
   useEffect(() => {
     if (edit) {
@@ -288,16 +298,15 @@ export default function EventsScreen(){
           setMenu(drinks);
 
           setExistingEvent({
-            _id: event.id,
-            name: event.name,
-            description: event.description ?? undefined,
-            location: event.location ?? undefined,
-            startTime: event.startTime,
-            endTime: event.endTime,
-            liquorbotId: event.liquorbotId,
-            inviteCode: event.inviteCode,
-            drinkIDs: event.drinkIDs ? event.drinkIDs.filter((id: number | null): id is number => id !== null) : undefined,
-          });
+          ...event,
+          _id: event.id,
+          owner: event.owner,
+          description: event.description ?? undefined,
+          location: event.location ?? undefined,
+          drinkIDs: event.drinkIDs ? 
+            event.drinkIDs.filter((id: number | null): id is number => id !== null) 
+            : undefined,
+        });
         } catch (error) {
           const msg = (error && typeof error === 'object' && 'message' in error)
             ? (error as any).message
@@ -387,98 +396,104 @@ export default function EventsScreen(){
         <Ionicons name="close" size={28} color="#DFDCD9"/>
       </TouchableOpacity>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.header}>Create Event</Text>
-        <Field label="Event Name" value={name} onChange={setName} ph="e.g. Emma & Liam Wedding"/>
-        <Field label="Location" value={location} onChange={setLocation} ph="Venue or address"/>
-        <Field label="Description" value={description} onChange={setDesc}
-               ph="Optional notes" multiline/>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#CE975E" />
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <Text style={styles.header}>Create Event</Text>
+          <Field label="Event Name" value={name} onChange={setName} ph="e.g. Emma & Liam Wedding"/>
+          <Field label="Location" value={location} onChange={setLocation} ph="Venue or address"/>
+          <Field label="Description" value={description} onChange={setDesc}
+                ph="Optional notes" multiline/>
 
-        {/* ── MULTI‑DAY TOGGLE ── */}
-        <TouchableOpacity
-          style={[styles.mdToggle,multiDay&&styles.mdToggleOn]}
-          onPress={()=>{LayoutAnimation.easeInEaseOut();setMD(!multiDay);}}>
-          <Ionicons name={multiDay?'checkbox':'square-outline'} size={22}
-                    color={multiDay?'#CE975E':'#DFDCD9'} />
-          <Text style={styles.mdToggleTxt}>Multi‑day event</Text>
-        </TouchableOpacity>
-
-        {/* dates */}
-        <View style={styles.timeInfoHeader}>
-          <Text style={[styles.label, { marginTop: 10 }]}>Event Time</Text>
-          <TouchableOpacity 
-            onPress={() => setShowTimeInfo(true)}
-            style={styles.infoButton}
-          >
-            <Ionicons name="information-circle-outline" size={18} color="#4f4f4f" />
+          {/* ── MULTI‑DAY TOGGLE ── */}
+          <TouchableOpacity
+            style={[styles.mdToggle,multiDay&&styles.mdToggleOn]}
+            onPress={()=>{LayoutAnimation.easeInEaseOut();setMD(!multiDay);}}>
+            <Ionicons name={multiDay?'checkbox':'square-outline'} size={22}
+                      color={multiDay?'#CE975E':'#DFDCD9'} />
+            <Text style={styles.mdToggleTxt}>Multi‑day event</Text>
           </TouchableOpacity>
-        </View>
-        <View style={styles.dateRow}>
-          <InputDate val={startDate} set={setSD}/>
-          {multiDay&&<InputDate val={endDate} set={setED} />}
-        </View>
 
-        {/* times */}
-        <View style={styles.timeRow}>
-          <TimeBox ref={startRef} tag="START"
-                   label={to12(startTime)} onPress={()=>showWheel('start',startRef)}/>
-          <TimeBox ref={endRef} tag="END"
-                   label={to12(endTime)}   onPress={()=>showWheel('end',endRef)}/>
-        </View>
-
-        {/* drinks */}
-        <View style={styles.menuHead}>
-          <Text style={styles.section}>Drinks Menu</Text>
-          <TouchableOpacity onPress={()=>setPV(true)}>
-            <Ionicons name="add-circle" size={24} color="#CE975E"/>
-          </TouchableOpacity>
-        </View>
-        {menu.map(d=>(
-          <View key={d.id} style={styles.drinkRow}>
-            <Text style={styles.drinkTxt}>{d.name}</Text>
-            <TouchableOpacity onPress={()=>removeDrink(d.id)}>
-              <Ionicons name="trash" size={20} color="#D9534F"/>
+          {/* dates */}
+          <View style={styles.timeInfoHeader}>
+            <Text style={[styles.label, { marginTop: 10 }]}>Event Time</Text>
+            <TouchableOpacity 
+              onPress={() => setShowTimeInfo(true)}
+              style={styles.infoButton}
+            >
+              <Ionicons name="information-circle-outline" size={18} color="#4f4f4f" />
             </TouchableOpacity>
           </View>
-        ))}
-
-        {/* slot summary */}
-        <TouchableOpacity onPress={()=>{LayoutAnimation.easeInEaseOut();
-          setShowSlots(!showSlots);}}>
-          <Text style={[styles.slots, !slotsOK && { color: '#D9534F' }]}>
-            {fmtSlots()}
-            {menu.length > 0 && (
-              <Ionicons
-                name={showSlots ? 'chevron-up' : 'chevron-down'}
-                size={14}
-                color="#DFDCD9"
-                style={{ marginLeft: 0, marginTop: 0 }}
-              />
-            )}
-          </Text>
-        </TouchableOpacity>
-        {showSlots&&(
-          <View style={styles.slotBox}>
-            {[...ingredientSet].sort((a,b)=>a-b).map((id,i)=>{
-              const ing=ingredients.find(x=>x.id===id);
-              return(<Text key={id} style={styles.slotLine}>
-                Slot {i+1}: {ing?.name||'unknown'}</Text>);
-            })}
+          <View style={styles.dateRow}>
+            <InputDate val={startDate} set={setSD}/>
+            {multiDay&&<InputDate val={endDate} set={setED} />}
           </View>
-        )}
 
-        {/* save */}
-        <TouchableOpacity
-          style={[
-            styles.saveBtn,
-            (!slotsOK || !name.trim() || menu.length === 0 || isDateInPast(startDate) || (multiDay && isDateInPast(endDate))) && { opacity: 0.4 },
-          ]}
-          disabled={!slotsOK || !name.trim() || menu.length === 0 || isDateInPast(startDate) || (multiDay && isDateInPast(endDate))}
-          onPress={save}
-        >
-          <Text style={styles.saveTxt}>Save Event</Text>
-        </TouchableOpacity>
-      </ScrollView>
+          {/* times */}
+          <View style={styles.timeRow}>
+            <TimeBox ref={startRef} tag="START"
+                    label={to12(startTime)} onPress={()=>showWheel('start',startRef)}/>
+            <TimeBox ref={endRef} tag="END"
+                    label={to12(endTime)}   onPress={()=>showWheel('end',endRef)}/>
+          </View>
+
+          {/* drinks */}
+          <View style={styles.menuHead}>
+            <Text style={styles.section}>Drinks Menu</Text>
+            <TouchableOpacity onPress={()=>setPV(true)}>
+              <Ionicons name="add-circle" size={24} color="#CE975E"/>
+            </TouchableOpacity>
+          </View>
+          {menu.map(d=>(
+            <View key={d.id} style={styles.drinkRow}>
+              <Text style={styles.drinkTxt}>{d.name}</Text>
+              <TouchableOpacity onPress={()=>removeDrink(d.id)}>
+                <Ionicons name="trash" size={20} color="#D9534F"/>
+              </TouchableOpacity>
+            </View>
+          ))}
+
+          {/* slot summary */}
+          <TouchableOpacity onPress={()=>{LayoutAnimation.easeInEaseOut();
+            setShowSlots(!showSlots);}}>
+            <Text style={[styles.slots, !slotsOK && { color: '#D9534F' }]}>
+              {fmtSlots()}
+              {menu.length > 0 && (
+                <Ionicons
+                  name={showSlots ? 'chevron-up' : 'chevron-down'}
+                  size={14}
+                  color="#DFDCD9"
+                  style={{ marginLeft: 0, marginTop: 0 }}
+                />
+              )}
+            </Text>
+          </TouchableOpacity>
+          {showSlots&&(
+            <View style={styles.slotBox}>
+              {[...ingredientSet].sort((a,b)=>a-b).map((id,i)=>{
+                const ing=ingredients.find(x=>x.id===id);
+                return(<Text key={id} style={styles.slotLine}>
+                  Slot {i+1}: {ing?.name||'unknown'}</Text>);
+              })}
+            </View>
+          )}
+
+          {/* save */}
+          <TouchableOpacity
+            style={[
+              styles.saveBtn,
+              (!slotsOK || !name.trim() || menu.length === 0 || isDateInPast(startDate) || (multiDay && isDateInPast(endDate))) && { opacity: 0.4 },
+            ]}
+            disabled={!slotsOK || !name.trim() || menu.length === 0 || isDateInPast(startDate) || (multiDay && isDateInPast(endDate))}
+            onPress={save}
+          >
+            <Text style={styles.saveTxt}>Save Event</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      )}
 
       {/* drink‑picker modal */}
       <Modal visible={pickerVis} animationType="slide"
@@ -859,5 +874,15 @@ const styles=StyleSheet.create({
     right: 12,
     padding: 4,
   },
-  
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#141414' // Match your background color
+  },
 });

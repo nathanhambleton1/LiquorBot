@@ -199,12 +199,18 @@ export default function EventManager() {
 
   /* ---------- render ---------- */
   const formatRange = (s: string, e: string) => {
-    const a = new Date(s); const b = new Date(e);
-    const same = a.toDateString() === b.toDateString();
-    const f    = (d: Date) => d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
-    return same
-      ? `${a.toLocaleDateString()}  ${f(a)}–${f(b)}`
-      : `${a.toLocaleString([], { hour:'2-digit', minute:'2-digit' })} – ${b.toLocaleString([], { hour:'2-digit', minute:'2-digit' })}`;
+    const a = new Date(s); 
+    const b = new Date(e);
+    const sameDay = a.toDateString() === b.toDateString();
+    
+    const formatDate = (d: Date) => d.toLocaleDateString();
+    const formatTime = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    if (sameDay) {
+      return `${formatDate(a)}  ${formatTime(a)} – ${formatTime(b)}`;
+    } else {
+      return `${formatDate(a)} ${formatTime(a)} – ${formatDate(b)} ${formatTime(b)}`;
+    }
   };
 
   const [copiedEventId, setCopiedEventId] = useState<string | null>(null);
