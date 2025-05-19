@@ -51,12 +51,12 @@
         "FunctionName": {
           "Fn::If": [
             "ShouldNotCreateEnvResources",
-            "joinEventFunction",
+            "leaveEventFunction",
             {
               "Fn::Join": [
                 "",
                 [
-                  "joinEventFunction",
+                  "leaveEventFunction",
                   "-",
                   {
                     "Ref": "env"
@@ -148,12 +148,12 @@
         "RoleName": {
           "Fn::If": [
             "ShouldNotCreateEnvResources",
-            "liquorbotLambdaRole21f6f76f",
+            "liquorbotLambdaRole1a58eafc",
             {
               "Fn::Join": [
                 "",
                 [
-                  "liquorbotLambdaRole21f6f76f",
+                  "liquorbotLambdaRole1a58eafc",
                   "-",
                   {
                     "Ref": "env"

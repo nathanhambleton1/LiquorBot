@@ -28,8 +28,12 @@ type GuestEvent
 # ---------- NEW custom mutation ----------
 type Mutation {
   joinEvent(inviteCode: String!): Event
-    @function(name: "joinEventFunction-${env}")        # Lambda (see below)
-    @auth(rules:[{ allow: private }])          # any signed‑in user
+    @function(name: "joinEventFunction-${env}")
+    @auth(rules: [{ allow: private }])
+
+  leaveEvent(eventId: ID!): Event
+    @function(name: "leaveEventFunction-${env}")
+    @auth(rules: [{ allow: private }])
 }
 
 type PouredDrink @model @auth(rules: [{allow: public}, {allow: owner}]) {

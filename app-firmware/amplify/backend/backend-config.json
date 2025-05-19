@@ -82,6 +82,20 @@
       ],
       "providerPlugin": "awscloudformation",
       "service": "Lambda"
+    },
+    "leaveEventFunction": {
+      "build": true,
+      "dependsOn": [
+        {
+          "attributes": [
+            "GraphQLAPIIdOutput"
+          ],
+          "category": "api",
+          "resourceName": "LiquorBot"
+        }
+      ],
+      "providerPlugin": "awscloudformation",
+      "service": "Lambda"
     }
   },
   "parameters": {
@@ -98,6 +112,22 @@
         {
           "category": "function",
           "resourceName": "joinEventFunction"
+        }
+      ]
+    },
+    "AMPLIFY_function_leaveEventFunction_deploymentBucketName": {
+      "usedBy": [
+        {
+          "category": "function",
+          "resourceName": "leaveEventFunction"
+        }
+      ]
+    },
+    "AMPLIFY_function_leaveEventFunction_s3Key": {
+      "usedBy": [
+        {
+          "category": "function",
+          "resourceName": "leaveEventFunction"
         }
       ]
     }

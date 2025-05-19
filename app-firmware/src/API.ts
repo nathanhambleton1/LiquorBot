@@ -1081,6 +1081,33 @@ export type JoinEventMutation = {
   } | null,
 };
 
+export type LeaveEventMutationVariables = {
+  eventId: string,
+};
+
+export type LeaveEventMutation = {
+  leaveEvent?:  {
+    __typename: "Event",
+    id: string,
+    name: string,
+    description?: string | null,
+    location?: string | null,
+    startTime: string,
+    endTime: string,
+    liquorbotId: number,
+    inviteCode: string,
+    drinkIDs?: Array< number | null > | null,
+    owner: string,
+    guestOwners?: Array< string | null > | null,
+    guests?:  {
+      __typename: "ModelGuestEventConnection",
+      nextToken?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+  } | null,
+};
+
 export type GetEventQueryVariables = {
   id: string,
 };

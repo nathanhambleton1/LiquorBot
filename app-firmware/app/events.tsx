@@ -22,6 +22,7 @@ import {
   createGuestEvent,
   updateEvent,
   joinEvent,
+  leaveEvent,
 }                                    from '../src/graphql/mutations';
 import { useLiquorBot }             from './components/liquorbot-provider';
 
@@ -220,31 +221,52 @@ export default function EventManager() {
     setTimeout(() => setCopiedEventId(null), 2000); // Clear after 2 seconds
   };
 
+  const handleLeaveEvent = (ev: Event) => {
+    Alert.alert('Leave Event', `Leave "${ev.name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Leave', style: 'destructive', onPress: () => doLeaveEvent(ev.id) },
+    ]);
+  };
+
+  const doLeaveEvent = async (eventId: string) => {
+    try {
+      await client.graphql({
+        query: leaveEvent,
+        variables: { eventId },
+        authMode: 'userPool'
+      });
+      
+      // Optimistically remove from local state
+      setEvents(prev => prev.filter(e => e.id !== eventId));
+    } catch (error) {
+      Alert.alert('Error', 'Failed to leave event');
+    }
+  };
+
   const renderItem = ({ item }: { item: Event }) => {
     const isOwner = item.owner === currentUser;
+    const isGuest = item.guestOwners?.includes?.(currentUser ?? '') ?? false;
 
     return (
       <View style={styles.card}>
         <View style={styles.head}>
           <Text style={styles.name}>{item.name}</Text>
-          {isOwner && (
-            <View style={styles.actions}>
-              <TouchableOpacity 
-                onPress={() => {
-                  if (item.owner !== currentUser) {
-                    Alert.alert('Error', 'Only the event owner can edit');
-                    return;
-                  }
-                  router.push(`/create-event?edit=${item.id}`);
-                }}
-              >
-                <Ionicons name="create-outline" size={22} color="#CE975E" />
+          <View style={styles.actions}>
+            {isOwner ? (
+              <>
+                <TouchableOpacity onPress={() => router.push(`/create-event?edit=${item.id}`)}>
+                  <Ionicons name="create-outline" size={22} color="#CE975E" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => confirmDelete(item)}>
+                  <Ionicons name="trash-outline" size={22} color="#D9534F" />
+                </TouchableOpacity>
+              </>
+            ) : isGuest && (
+              <TouchableOpacity onPress={() => handleLeaveEvent(item)}>
+                <Ionicons name="exit-outline" size={22} color="#D9534F" />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => confirmDelete(item)}>
-                <Ionicons name="trash-outline" size={22} color="#D9534F" />
-              </TouchableOpacity>
-            </View>
-          )}
+            )}
+          </View>
         </View>
 
         <Text style={styles.detail}>{item.location || 'No location'}</Text>

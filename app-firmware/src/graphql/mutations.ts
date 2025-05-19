@@ -472,3 +472,29 @@ export const joinEvent = /* GraphQL */ `mutation JoinEvent($inviteCode: String!)
   APITypes.JoinEventMutationVariables,
   APITypes.JoinEventMutation
 >;
+export const leaveEvent = /* GraphQL */ `mutation LeaveEvent($eventId: ID!) {
+  leaveEvent(eventId: $eventId) {
+    id
+    name
+    description
+    location
+    startTime
+    endTime
+    liquorbotId
+    inviteCode
+    drinkIDs
+    owner
+    guestOwners
+    guests {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.LeaveEventMutationVariables,
+  APITypes.LeaveEventMutation
+>;
