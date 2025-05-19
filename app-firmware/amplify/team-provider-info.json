@@ -24,7 +24,7 @@
       "function": {
         "joinEventFunction": {
           "deploymentBucketName": "amplify-liquorbot-dev-a9244-deployment",
-          "s3Key": "amplify-builds/joinEventFunction-53776c417470356c4834-build.zip"
+          "s3Key": "amplify-builds/joinEventFunction-4343596a3472645a5641-build.zip"
         },
         "leaveEventFunction": {
           "deploymentBucketName": "amplify-liquorbot-dev-a9244-deployment",
