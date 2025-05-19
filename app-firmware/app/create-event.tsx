@@ -25,6 +25,7 @@ import { useLiquorBot }    from './components/liquorbot-provider';
 import { useLocalSearchParams } from 'expo-router';
 import { getEvent } from '../src/graphql/queries';
 import { updateEvent } from '../src/graphql/mutations';
+import { fetchAuthSession } from '@aws-amplify/auth';
 
 Amplify.configure(config);
 const client = generateClient();
@@ -75,6 +76,8 @@ const TimeWheel=({
   },[visible]);
 
   const clamp=(n:number,len:number)=>((n%len)+len)%len;
+
+
 
   /* snap after inertia */
   const alignToNearest=(y:number)=>{
@@ -172,6 +175,7 @@ export default function EventsScreen(){
     liquorbotId: number;
     inviteCode?: string;
     drinkIDs?: number[];
+    owner?: string; // Added owner property
   };
   /* menu */
   const[menu,setMenu]=useState<Drink[]>([]);
@@ -201,6 +205,20 @@ export default function EventsScreen(){
       }catch(e){console.error(e);}finally{setLoad(false);}
     })();
   },[]);
+
+  /* current user */
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const ses = await fetchAuthSession();
+        const u = ses.tokens?.idToken?.payload['cognito:username'];
+        setCurrentUser(typeof u === 'string' ? u : null);
+      } catch {
+        setCurrentUser(null);
+      }
+    })();
+  }, []);
 
   /* filtered list */
   const[pickerVis,setPV]=useState(false);
@@ -233,7 +251,8 @@ export default function EventsScreen(){
         try {
           const { data } = await client.graphql({
             query: getEvent,
-            variables: { id: edit }
+            variables: { id: edit },
+            authMode: 'userPool'
           });
           
           if (!data?.getEvent) {
@@ -242,6 +261,15 @@ export default function EventsScreen(){
           }
 
           const event = data.getEvent;
+          setExistingEvent({
+            ...event,
+            _id: event.id,
+            owner: event.owner,
+            description: event.description ?? undefined,
+            location: event.location ?? undefined,
+            drinkIDs: event.drinkIDs ? event.drinkIDs.filter((id: number | null): id is number => id !== null) : undefined,
+          });
+
           const start = new Date(event.startTime);
           const end = new Date(event.endTime);
           
@@ -271,7 +299,10 @@ export default function EventsScreen(){
             drinkIDs: event.drinkIDs ? event.drinkIDs.filter((id: number | null): id is number => id !== null) : undefined,
           });
         } catch (error) {
-          Alert.alert('Error', 'Failed to load event');
+          const msg = (error && typeof error === 'object' && 'message' in error)
+            ? (error as any).message
+            : String(error);
+          Alert.alert('Error', 'Failed to load event: ' + msg);
         }
       };
       loadExistingEvent();
@@ -294,8 +325,9 @@ export default function EventsScreen(){
       startTime: start.toISOString(),
       endTime: end.toISOString(),
       liquorbotId: Number(liquorbotId),
-      inviteCode: existingEvent?.inviteCode || Math.random().toString(36).slice(2,8).toUpperCase(),
-      drinkIDs: menu.map(d => d.id)
+      inviteCode: existingEvent?.inviteCode || Math.random().toString(36).slice(2, 8).toUpperCase(),
+      drinkIDs: menu.map(d => d.id),
+      owner: currentUser ?? '', // Ensure owner is always a string
     };
 
     try {
@@ -305,7 +337,8 @@ export default function EventsScreen(){
           variables: { 
             input: { 
               ...input, 
-              id: existingEvent._id
+              id: existingEvent._id,
+              owner: existingEvent.owner
             } 
           },
           authMode: 'userPool'

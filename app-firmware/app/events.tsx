@@ -223,7 +223,15 @@ export default function EventManager() {
           <Text style={styles.name}>{item.name}</Text>
           {isOwner && (
             <View style={styles.actions}>
-              <TouchableOpacity onPress={() => router.push(`/create-event?edit=${item.id}`)}>
+              <TouchableOpacity 
+                onPress={() => {
+                  if (item.owner !== currentUser) {
+                    Alert.alert('Error', 'Only the event owner can edit');
+                    return;
+                  }
+                  router.push(`/create-event?edit=${item.id}`);
+                }}
+              >
                 <Ionicons name="create-outline" size={22} color="#CE975E" />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => confirmDelete(item)}>

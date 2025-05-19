@@ -100,9 +100,10 @@ export default function Index() {
             startTime: item.startTime,
             endTime: item.endTime,
           }))
-          .filter((event: Event) => new Date(event.startTime) > now)
+          // Changed from startTime to endTime comparison
+          .filter((event: Event) => new Date(event.endTime) > now)
           .sort((a: Event, b: Event) => 
-            new Date(a.startTime).getTime() - new Date(b.startTime).getTime() // Changed to ascending order
+            new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
           );
 
         setUpcomingEvents(filtered);
