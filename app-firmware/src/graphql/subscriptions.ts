@@ -22,6 +22,7 @@ export const onCreateEvent = /* GraphQL */ `subscription OnCreateEvent(
     liquorbotId
     inviteCode
     drinkIDs
+    customRecipeIDs
     owner
     guestOwners
     guests {
@@ -51,6 +52,7 @@ export const onUpdateEvent = /* GraphQL */ `subscription OnUpdateEvent(
     liquorbotId
     inviteCode
     drinkIDs
+    customRecipeIDs
     owner
     guestOwners
     guests {
@@ -80,6 +82,7 @@ export const onDeleteEvent = /* GraphQL */ `subscription OnDeleteEvent(
     liquorbotId
     inviteCode
     drinkIDs
+    customRecipeIDs
     owner
     guestOwners
     guests {
@@ -112,6 +115,7 @@ export const onCreateGuestEvent = /* GraphQL */ `subscription OnCreateGuestEvent
       liquorbotId
       inviteCode
       drinkIDs
+      customRecipeIDs
       owner
       guestOwners
       createdAt
@@ -145,6 +149,7 @@ export const onUpdateGuestEvent = /* GraphQL */ `subscription OnUpdateGuestEvent
       liquorbotId
       inviteCode
       drinkIDs
+      customRecipeIDs
       owner
       guestOwners
       createdAt
@@ -178,6 +183,7 @@ export const onDeleteGuestEvent = /* GraphQL */ `subscription OnDeleteGuestEvent
       liquorbotId
       inviteCode
       drinkIDs
+      customRecipeIDs
       owner
       guestOwners
       createdAt

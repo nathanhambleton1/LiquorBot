@@ -22,6 +22,7 @@ export const createEvent = /* GraphQL */ `mutation CreateEvent(
     liquorbotId
     inviteCode
     drinkIDs
+    customRecipeIDs
     owner
     guestOwners
     guests {
@@ -51,6 +52,7 @@ export const updateEvent = /* GraphQL */ `mutation UpdateEvent(
     liquorbotId
     inviteCode
     drinkIDs
+    customRecipeIDs
     owner
     guestOwners
     guests {
@@ -80,6 +82,7 @@ export const deleteEvent = /* GraphQL */ `mutation DeleteEvent(
     liquorbotId
     inviteCode
     drinkIDs
+    customRecipeIDs
     owner
     guestOwners
     guests {
@@ -112,6 +115,7 @@ export const createGuestEvent = /* GraphQL */ `mutation CreateGuestEvent(
       liquorbotId
       inviteCode
       drinkIDs
+      customRecipeIDs
       owner
       guestOwners
       createdAt
@@ -145,6 +149,7 @@ export const updateGuestEvent = /* GraphQL */ `mutation UpdateGuestEvent(
       liquorbotId
       inviteCode
       drinkIDs
+      customRecipeIDs
       owner
       guestOwners
       createdAt
@@ -178,6 +183,7 @@ export const deleteGuestEvent = /* GraphQL */ `mutation DeleteGuestEvent(
       liquorbotId
       inviteCode
       drinkIDs
+      customRecipeIDs
       owner
       guestOwners
       createdAt
@@ -457,6 +463,7 @@ export const joinEvent = /* GraphQL */ `mutation JoinEvent($inviteCode: String!)
     liquorbotId
     inviteCode
     drinkIDs
+    customRecipeIDs
     owner
     guestOwners
     guests {
@@ -483,6 +490,7 @@ export const leaveEvent = /* GraphQL */ `mutation LeaveEvent($eventId: ID!) {
     liquorbotId
     inviteCode
     drinkIDs
+    customRecipeIDs
     owner
     guestOwners
     guests {

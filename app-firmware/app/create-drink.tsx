@@ -27,6 +27,7 @@ import { getUrl, uploadData } from 'aws-amplify/storage';
 import { generateClient } from 'aws-amplify/api';
 import { createCustomRecipe, updateCustomRecipe } from '../src/graphql/mutations';
 import config from '../src/amplifyconfiguration.json';
+import { emit } from '../src/event-bus';
 
 // ---- Skia --------------------------------------------------
 import {
@@ -302,16 +303,14 @@ export default function CreateDrinkScreen() {
           }},
           authMode:'userPool',
         });
-      }else{
-        await client.graphql({
-          query:createCustomRecipe,
-          variables:{ input:{
-            name:drinkName.trim(),
-            image:imageKey,
-            ingredients:ingredientsInput,
-          }},
-          authMode:'userPool',
-        });
+      } else {
+        const { data } = await client.graphql({
+          query: createCustomRecipe,
+          variables: { input: { name: drinkName.trim(), image: imageKey, ingredients: ingredientsInput } },
+          authMode: 'userPool',
+        }) as { data: { createCustomRecipe: any } };
+
+        emit('recipe-created', data.createCustomRecipe);   // ← tell whoever opened us
       }
       router.back();
     }catch(e){ console.error('Save failed',e); alert('Save failed – see console.'); }

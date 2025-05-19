@@ -26,6 +26,9 @@ import { useLocalSearchParams } from 'expo-router';
 import { getEvent } from '../src/graphql/queries';
 import { updateEvent } from '../src/graphql/mutations';
 import { fetchAuthSession } from '@aws-amplify/auth';
+import type { RecipeIngredient, CustomRecipe } from '../src/API';
+import { on } from '../src/event-bus';
+import { useFocusEffect } from 'expo-router';
 
 Amplify.configure(config);
 const client = generateClient();
@@ -36,12 +39,66 @@ const to12=(t24:string)=>{const[h,m]=t24.split(':').map(Number);
   return`${h12}:${m.toString().padStart(2,'0')} ${p}`;};
 const parseDT=(d:string,t:string)=>{const[mo,da,yr]=d.split('/').map(Number);
   const[h,m]=t.split(':').map(Number);return new Date(yr,mo-1,da,h,m,0,0);};
-const parseIng=(d:Drink)=>d.ingredients?d.ingredients.split(',')
-  .map(c=>+c.split(':')[0]):[];
+const parseIng = (d: Drink): number[] => {
+  if (d.isCustom) return (d.ingArr ?? []).map(r => Number(r.ingredientID));
+  return d.ingredients
+    ? d.ingredients.split(',').map(c => +c.split(':')[0])
+    : [];
+};
+const fetchMyRecipes = async (user: string, setAD: React.Dispatch<React.SetStateAction<Drink[]>>) => {
+  try {
+    const { data } = await client.graphql({
+      query: /* GraphQL */ `
+        query ListMyRecipes {
+          listCustomRecipes {
+            items {
+              id
+              name
+              image
+              owner
+              ingredients {
+                ingredientID
+                amount
+                priority
+              }
+            }
+          }
+        }
+      `,
+      authMode: 'userPool',
+    }) as { data: { listCustomRecipes: { items: any[] } } };
+
+    const customs: Drink[] = data.listCustomRecipes.items      // keep only mine
+      .filter(r => r.owner === user)
+      .map(r => ({
+        id: r.id,
+        name: r.name,
+        category: 'Custom',
+        image: r.image,
+        isCustom: true,
+        ingArr: r.ingredients ?? [],
+      }));
+
+    /* de-duplicate so reopening the screen doesn’t double-add anything */
+    setAD(prev => {
+      const seen = new Set(prev.map(d => d.id));
+      return [...prev, ...customs.filter(c => !seen.has(c.id))];
+    });
+  } catch (err) {
+    console.error('Could not load custom recipes', err);
+  }
+};
 
 /* ───────────────── types ───────────────── */
-type Drink={id:number;name:string;category:string;
-            image:string;ingredients?:string;isCustom?:boolean};
+type Drink = {
+  id:        string;                // “17” for stock, UUID for custom
+  name:      string;
+  category:  string;                // 'Vodka' |'Rum' |… |'Custom'
+  image:     string;
+  isCustom?: true;                  // flag for custom drinks
+  ingredients?: string;             // raw string for stock items
+  ingArr?:    RecipeIngredient[];   // parsed array for custom
+};
 type Ingredient={id:number;name:string;type:string};
 const categories=['All','Vodka','Rum','Tequila','Whiskey','Custom'];
 
@@ -175,6 +232,7 @@ export default function EventsScreen(){
     liquorbotId: number;
     inviteCode?: string;
     drinkIDs?: number[];
+    customRecipeIDs?: string[]; // Added customRecipeIDs property
     owner?: string; // Added owner property
   };
   /* menu */
@@ -220,6 +278,22 @@ export default function EventsScreen(){
     })();
   }, []);
 
+  useEffect(() => {
+  const unsub = on('recipe-created', (r: CustomRecipe) => {
+      const drink: Drink = {
+        id:        r.id,
+        name:      r.name,
+        category:  'Custom',
+        image:     r.image ?? '',
+        isCustom:  true,
+        ingArr:    r.ingredients ?? [],
+      };
+      setAD(p => [...p, drink]);   // add to master list
+      addDrink(drink);             // add to THIS event
+    });
+    return unsub;
+  }, [ingredients]);
+
   /* filtered list */
   const[pickerVis,setPV]=useState(false);
   const[cat,setCat]=useState('All');
@@ -235,7 +309,7 @@ export default function EventsScreen(){
     if(after.size>15){Alert.alert('Too many ingredients');return;}
     setMenu(m=>[...m,d]);setPV(false);setQ('');
   };
-  const removeDrink=(id:number)=>setMenu(m=>m.filter(d=>d.id!==id));
+  const removeDrink = (id:string)  => setMenu(m => m.filter(d => d.id !== id));
 
   /* auto-close ingredient list */
   useEffect(() => {
@@ -247,12 +321,72 @@ export default function EventsScreen(){
   // Add this useEffect to handle menu population
   useEffect(() => {
     if (existingEvent && allDrinks.length > 0) {
-      const drinks = (existingEvent.drinkIDs || [])
+      const fetchCustomRecipes = async () => {
+        try {
+          // Get ALL recipes first
+          const result = await client.graphql({
+            query: /* GraphQL */ `
+              query ListAllCustomRecipes {
+                listCustomRecipes {
+                  items {
+                    id
+                    name
+                    image
+                    ingredients {
+                      ingredientID
+                      amount
+                      priority
+                    }
+                  }
+                }
+              }
+            `,
+            authMode: 'userPool'
+          });
+          const data = (result as any).data;
+
+          // Then filter client-side
+          const targetIds = existingEvent?.customRecipeIDs || [];
+          const customRecipes = data?.listCustomRecipes?.items
+            ?.filter((r: any) => targetIds.includes(r.id))
+            ?.map((r: any) => ({
+              id: r.id,
+              name: r.name,
+              category: 'Custom',
+              image: r.image ?? '',
+              isCustom: true,
+              ingArr: r.ingredients ?? [],
+            })) || [];
+
+          // Merge custom recipes into allDrinks
+          setAD(prev => {
+            const newDrinks = [...prev];
+            customRecipes.forEach((cr: Drink) => {
+              if (!newDrinks.some(d => d.id === cr.id)) {
+                newDrinks.push(cr);
+              }
+            });
+            return newDrinks;
+          });
+        } catch (error) {
+          console.error('Error fetching custom recipes:', error);
+        }
+      };
+
+      fetchCustomRecipes();
+
+      // Combine both drink types
+      const standardDrinks = (existingEvent.drinkIDs || [])
+        .map(id => allDrinks.find(d => Number(d.id) === id))
+        .filter(Boolean) as Drink[];
+        
+      const customDrinks = (existingEvent.customRecipeIDs || [])
         .map(id => allDrinks.find(d => d.id === id))
         .filter(Boolean) as Drink[];
-      setMenu(drinks);
+
+      setMenu([...standardDrinks, ...customDrinks]);
     }
-  }, [existingEvent, allDrinks]); // Re-run when event or drinks update
+  }, [existingEvent, allDrinks]);
 
   /* auto‑select today */
   useEffect(() => {
@@ -278,6 +412,9 @@ export default function EventsScreen(){
             description: event.description ?? undefined,
             location: event.location ?? undefined,
             drinkIDs: event.drinkIDs ? event.drinkIDs.filter((id: number | null): id is number => id !== null) : undefined,
+            customRecipeIDs: Array.isArray(event.customRecipeIDs)
+              ? event.customRecipeIDs.filter((id: string | null): id is string => id !== null)
+              : undefined,
           });
 
           const start = new Date(event.startTime);
@@ -292,21 +429,27 @@ export default function EventsScreen(){
           setST(start.toTimeString().slice(0,5));
           setET(end.toTimeString().slice(0,5));
           
-          const drinks = (event.drinkIDs || []).map(id => 
+          const standard = (event.drinkIDs || []).map(id => 
+            allDrinks.find(d => Number(d.id) === id)
+          ).filter(Boolean) as Drink[];
+          const custom = (event.customRecipeIDs || []).map(id => 
             allDrinks.find(d => d.id === id)
           ).filter(Boolean) as Drink[];
-          setMenu(drinks);
+          setMenu([...standard, ...custom]);
 
-          setExistingEvent({
-          ...event,
-          _id: event.id,
-          owner: event.owner,
-          description: event.description ?? undefined,
-          location: event.location ?? undefined,
-          drinkIDs: event.drinkIDs ? 
-            event.drinkIDs.filter((id: number | null): id is number => id !== null) 
-            : undefined,
-        });
+        setExistingEvent({
+                  ...event,
+                  _id: event.id,
+                  owner: event.owner,
+                  description: event.description ?? undefined,
+                  location: event.location ?? undefined,
+                  drinkIDs: event.drinkIDs ? 
+                    event.drinkIDs.filter((id: number | null): id is number => id !== null) 
+                    : undefined,
+                  customRecipeIDs: Array.isArray(event.customRecipeIDs)
+                    ? event.customRecipeIDs.filter((id: string | null): id is string => id !== null)
+                    : undefined,
+                });
         } catch (error) {
           const msg = (error && typeof error === 'object' && 'message' in error)
             ? (error as any).message
@@ -318,6 +461,12 @@ export default function EventsScreen(){
     }
   }, [edit]);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      if (currentUser) fetchMyRecipes(currentUser, setAD);
+    }, [currentUser]),
+  );
+
   /* save */
   const save = async () => {
     if (liquorbotId === undefined || liquorbotId === null) {
@@ -326,6 +475,9 @@ export default function EventsScreen(){
     
     const start = parseDT(startDate, startTime);
     const end = parseDT(multiDay ? endDate : startDate, endTime);
+
+    const defaultIDs = menu.filter(d => !d.isCustom).map(d => Number(d.id));
+    const customRecipeIDs = menu.filter(d => d.isCustom).map(d => d.id);
     
     const input = {
       name: name.trim(),
@@ -335,7 +487,8 @@ export default function EventsScreen(){
       endTime: end.toISOString(),
       liquorbotId: Number(liquorbotId),
       inviteCode: existingEvent?.inviteCode || Math.random().toString(36).slice(2, 8).toUpperCase(),
-      drinkIDs: menu.map(d => d.id),
+      drinkIDs: defaultIDs,
+      customRecipeIDs,
       owner: currentUser ?? '', // Ensure owner is always a string
     };
 
@@ -450,7 +603,7 @@ export default function EventsScreen(){
           {menu.map(d=>(
             <View key={d.id} style={styles.drinkRow}>
               <Text style={styles.drinkTxt}>{d.name}</Text>
-              <TouchableOpacity onPress={()=>removeDrink(d.id)}>
+              <TouchableOpacity onPress={() => removeDrink(d.id)}>
                 <Ionicons name="trash" size={20} color="#D9534F"/>
               </TouchableOpacity>
             </View>

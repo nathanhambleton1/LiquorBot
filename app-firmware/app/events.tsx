@@ -53,6 +53,7 @@ interface Event {
   liquorbotId: number;
   inviteCode:  string;
   drinkIDs:    number[];
+  customRecipeIDs?: string[];
   owner?:      string;
   guestOwners?: string[];
 }
@@ -110,6 +111,7 @@ export default function EventManager() {
             liquorbotId: i.liquorbotId,
             inviteCode:  i.inviteCode,
             drinkIDs:    i.drinkIDs ?? [],
+            customRecipeIDs: i.customRecipeIDs ?? [],
             owner:       i.owner,
             guestOwners: i.guestOwners ?? [],
           })),
@@ -285,7 +287,9 @@ export default function EventManager() {
               <Text style={styles.copiedText}>Code Copied</Text>
             )}
           </View>
-          <Text style={styles.drinks}>{item.drinkIDs.length} drinks</Text>
+          <Text style={styles.drinks}>
+            {item.drinkIDs.length + (item.customRecipeIDs?.length ?? 0)} drinks
+          </Text>
         </View>
       </View>
     );

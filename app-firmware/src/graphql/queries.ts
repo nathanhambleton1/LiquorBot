@@ -19,6 +19,7 @@ export const getEvent = /* GraphQL */ `query GetEvent($id: ID!) {
     liquorbotId
     inviteCode
     drinkIDs
+    customRecipeIDs
     owner
     guestOwners
     guests {
@@ -47,6 +48,7 @@ export const listEvents = /* GraphQL */ `query ListEvents(
       liquorbotId
       inviteCode
       drinkIDs
+      customRecipeIDs
       owner
       guestOwners
       createdAt
@@ -85,6 +87,7 @@ export const eventsByCode = /* GraphQL */ `query EventsByCode(
       liquorbotId
       inviteCode
       drinkIDs
+      customRecipeIDs
       owner
       guestOwners
       createdAt
@@ -113,6 +116,7 @@ export const getGuestEvent = /* GraphQL */ `query GetGuestEvent($id: ID!) {
       liquorbotId
       inviteCode
       drinkIDs
+      customRecipeIDs
       owner
       guestOwners
       createdAt
