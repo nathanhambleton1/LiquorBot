@@ -1,6 +1,6 @@
 # LiquorBot 🍸
 
-A full‑stack, Bluetooth‑enabled cocktail robot & companion Expo app powered by **AWS Amplify v6**
+A full‑stack, Wifi‑enabled cocktail robot & companion Expo app powered by **AWS Amplify v6**
 
 ## Table of Contents
 
@@ -51,11 +51,11 @@ LiquorBot turns any gathering into a professional cocktail experience.
 ```text
 ┌─────────────────────────────────────────────┐
 │                 Mobile App                  │
-│ Expo (React Native)  ⇆ AWS Amplify API      │
-│  • GraphQL (queries/mutations/subs)         │
-│  • S3 Storage (drink art, logs)             │
-│  • Cognito Auth (username/email, social)    │
-│  • PubSub <–––► AWS IoT Core ––––––┐        │
+│ Expo (React Native) <-> AWS Amplify API     │
+│  • GraphQL (queries/mutations/subs)         │──────────> 
+│  • S3 Storage (drink art, logs)             │           │
+│  • Cognito Auth (username/email, social)    │           │
+│  • PubSub <––– AWS IoT Core –––>            │           │
 └─────────────────────────────────────────────┘           │
                                                           ▼
                                               ┌──────────────────────┐
@@ -64,12 +64,12 @@ LiquorBot turns any gathering into a professional cocktail experience.
                                               └──────────────────────┘
                                                           ▲
 ┌─────────────────────────────────────────────┐           │
-│               LiquorBot ESP32              │           │
-│  FreeRTOS + Arduino Core                   │           │
-│  • wifi_setup.cpp  ← BLE Wi‑Fi creds       │           │
-│  • aws_manager.cpp  ⇆ PubSub topics (JSON) │◄──────────┘
-│  • drink_controller.cpp (pour task)        │
-│  • led_control.cpp (WS2812 ring)           │
+│               LiquorBot ESP32               │           │
+│  FreeRTOS + Arduino Core                    │           │
+│  • wifi_setup.cpp  ← BLE Wi‑Fi creds        │           │
+│  • aws_manager.cpp <-> PubSub topics (JSON) │ <─────────
+│  • drink_controller.cpp (pour task)         │
+│  • led_control.cpp (WS2812 ring)            │
 └─────────────────────────────────────────────┘
 ```
 
@@ -78,11 +78,11 @@ LiquorBot turns any gathering into a professional cocktail experience.
 ## Repository Layout
 
 ```text
-📁 app/                 Expo React‑Native source
-│  ├── screens/         ↳ create-drink.tsx, menu.tsx, device-settings.tsx …
+📁 app-firmware/       Expo React‑Native source
+│  ├── app/             ↳ create-drink.tsx, menu.tsx, device-settings.tsx …
 │  ├── components/      Shared UI & context (LiquorBot provider)
 │  └── src/graphql/     Amplify‑generated GraphQL ops
-📁 firmware/            ESP32 C++ sketches & libs
+📁 esp32-firmware/      ESP32 C++ sketches & libs
 │  ├── main.cpp
 │  ├── drink_controller.cpp
 │  ├── wifi_setup.cpp, bluetooth_setup.cpp
