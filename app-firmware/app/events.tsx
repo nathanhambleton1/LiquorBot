@@ -26,7 +26,7 @@ import {
 }                                    from '../src/graphql/mutations';
 import { useLiquorBot }             from './components/liquorbot-provider';
 import { getUrl } from 'aws-amplify/storage';
-import { listCustomRecipes } from '../src/graphql/queries';
+import { getCustomRecipe, listCustomRecipes } from '../src/graphql/queries';
 
 const client = generateClient();
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -148,21 +148,32 @@ export default function EventManager() {
 
   // Fetch custom recipes via GraphQL
   useEffect(() => {
-    const fetchCustomRecipes = async () => {
-      try {
-        const { data } = await client.graphql({
-          query: listCustomRecipes,
-          authMode: 'userPool',
-        });
-        setCustomRecipes(data.listCustomRecipes.items);
-      } catch (error) {
-        console.error('Error fetching custom recipes:', error);
+    const fetchCustomRecipesForEvents = async () => {
+      const allCustomRecipeIDs = events.flatMap(event => event.customRecipeIDs || []);
+      const uniqueIDs = Array.from(new Set(allCustomRecipeIDs));
+
+      const fetchedRecipes = [];
+      for (const id of uniqueIDs) {
+        try {
+          const { data } = await client.graphql({
+            query: getCustomRecipe,
+            variables: { id },
+            authMode: 'apiKey',
+          });
+          if (data.getCustomRecipe) {
+            fetchedRecipes.push(data.getCustomRecipe);
+          }
+        } catch (error) {
+          console.error(`Error fetching custom recipe ${id}:`, error);
+        }
       }
+      setCustomRecipes(fetchedRecipes);
     };
-    if (currentUser) {
-      fetchCustomRecipes();
+
+    if (events.length > 0) {
+      fetchCustomRecipesForEvents();
     }
-  }, [currentUser]);
+  }, [events]);
 
   /* ---------- filtering / searching ---------- */
   const filteredEvents = useMemo(() => {
