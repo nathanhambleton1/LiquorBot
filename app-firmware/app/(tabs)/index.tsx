@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
   noEventsText: {
     color: 'rgba(223, 220, 217, 0.7)',
     fontSize: 14,
-    marginVertical: 10,
+    marginVertical: 30,
   },
   eventsContainer: {
     flexGrow: 1,
