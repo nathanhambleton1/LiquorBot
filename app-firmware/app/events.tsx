@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
   ActivityIndicator, Alert, Platform, TextInput, ScrollView,
-  Modal, Switch, Dimensions,
+  Modal, Switch, Dimensions, LayoutAnimation,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons                     from '@expo/vector-icons/Ionicons';
@@ -25,6 +25,8 @@ import {
   leaveEvent,
 }                                    from '../src/graphql/mutations';
 import { useLiquorBot }             from './components/liquorbot-provider';
+import { getUrl } from 'aws-amplify/storage';
+import { listCustomRecipes } from '../src/graphql/queries';
 
 const client = generateClient();
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -77,6 +79,11 @@ export default function EventManager() {
   const [joinLoading, setJoinLoading]           = useState(false);
   const [joinError, setJoinError]               = useState<string|null>(null);
 
+  // Existing state
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const [standardDrinks, setStandardDrinks] = useState<Array<{ id: number; name: string }>>([]);
+  const [customRecipes, setCustomRecipes] = useState<Array<{ id: string; name: string }>>([]);
+
   /* who am I? */
   const [currentUser, setCurrentUser] = useState<string|null>(null);
   useEffect(() => {
@@ -123,6 +130,39 @@ export default function EventManager() {
       }
     })();
   }, [currentUser, liquorbotId]);
+
+  // Fetch standard drinks from S3
+  useEffect(() => {
+    const fetchStandardDrinks = async () => {
+      try {
+        const dUrl = await getUrl({ key: 'drinkMenu/drinks.json' });
+        const response = await fetch(dUrl.url);
+        const data = await response.json();
+        setStandardDrinks(data);
+      } catch (error) {
+        console.error('Error fetching standard drinks:', error);
+      }
+    };
+    fetchStandardDrinks();
+  }, []);
+
+  // Fetch custom recipes via GraphQL
+  useEffect(() => {
+    const fetchCustomRecipes = async () => {
+      try {
+        const { data } = await client.graphql({
+          query: listCustomRecipes,
+          authMode: 'userPool',
+        });
+        setCustomRecipes(data.listCustomRecipes.items);
+      } catch (error) {
+        console.error('Error fetching custom recipes:', error);
+      }
+    };
+    if (currentUser) {
+      fetchCustomRecipes();
+    }
+  }, [currentUser]);
 
   /* ---------- filtering / searching ---------- */
   const filteredEvents = useMemo(() => {
@@ -245,12 +285,22 @@ export default function EventManager() {
     }
   };
 
+  const toggleExpand = (eventId: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedEventId(expandedEventId === eventId ? null : eventId);
+  };
+
   const renderItem = ({ item }: { item: Event }) => {
     const isOwner = item.owner === currentUser;
     const isGuest = item.guestOwners?.includes?.(currentUser ?? '') ?? false;
+    const isExpanded = expandedEventId === item.id;
 
     return (
-      <View style={styles.card}>
+      <TouchableOpacity 
+        style={styles.card} 
+        onPress={() => toggleExpand(item.id)}
+        activeOpacity={0.9}
+      >
         <View style={styles.head}>
           <Text style={styles.name}>{item.name}</Text>
           <View style={styles.actions}>
@@ -274,6 +324,47 @@ export default function EventManager() {
         <Text style={styles.detail}>{item.location || 'No location'}</Text>
         <Text style={styles.detail}>{formatRange(item.startTime, item.endTime)}</Text>
 
+        {/* Expanded content */}
+        {isExpanded && (
+          <View style={styles.expandedContent}>
+            {/* Drink Menu */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Drink Menu</Text>
+              {item.drinkIDs.map((id) => {
+                const drink = standardDrinks.find(d => d.id === id);
+                return (
+                  <Text key={id} style={styles.drinkName}>
+                    {drink ? drink.name : `Drink #${id}`}
+                  </Text>
+                );
+              })}
+              {item.customRecipeIDs?.map((id) => {
+                const recipe = customRecipes.find(r => r.id === id);
+                return (
+                  <Text key={id} style={styles.drinkName}>
+                    {recipe ? recipe.name : `Custom Recipe #${id}`}
+                  </Text>
+                );
+              })}
+            </View>
+
+            {/* Invite Link */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Event Link</Text>
+              <View style={styles.inviteRow}>
+                <Text style={styles.inviteLink}>https://yourapp.com/join/{item.inviteCode}</Text>
+                <TouchableOpacity
+                  onPress={() => copyToClipboard(`https://yourapp.com/join/${item.inviteCode}`, item.id)}
+                  style={styles.copyButton}
+                >
+                  <Ionicons name="copy-outline" size={16} color="#CE975E" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Always visible footer */}
         <View style={styles.foot}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Text style={styles.code}>Code: {item.inviteCode}</Text>
@@ -291,7 +382,7 @@ export default function EventManager() {
             {item.drinkIDs.length + (item.customRecipeIDs?.length ?? 0)} drinks
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -485,5 +576,42 @@ const styles = StyleSheet.create({
     color: '#8F8F8F', // Gray color
     fontSize: 8,
     marginLeft: 8,
+  },
+  expandedContent: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#2F2F2F',
+    paddingTop: 12,
+  },
+  section: {
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    color: '#CE975E',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  drinkName: {
+    color: '#8F8F8F',
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  inviteRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#2F2F2F',
+    borderRadius: 8,
+    padding: 12,
+  },
+  inviteLink: {
+    color: '#8F8F8F',
+    fontSize: 12,
+    flex: 1,
+    marginRight: 8,
+  },
+  copyButton: {
+    padding: 4,
   },
 });

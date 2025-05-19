@@ -545,7 +545,10 @@ export default function EventsScreen(){
   return(
     <View style={styles.container}>
       {/* close */}
-      <TouchableOpacity style={styles.closeBtn} onPress={()=>router.push('/')}>
+      <TouchableOpacity 
+        style={styles.closeBtn} 
+        onPress={() => router.back()} // Changed from router.push('/')
+      >
         <Ionicons name="close" size={28} color="#DFDCD9"/>
       </TouchableOpacity>
 
