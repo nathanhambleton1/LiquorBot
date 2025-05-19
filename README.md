@@ -8,17 +8,17 @@ A full‑stack, Wifi‑enabled cocktail robot & companion Expo app powered by **
 * [Core Features](#core-features)
 * [System Architecture](#system-architecture)
 * [Repository Layout](#repository-layout)
-* [Quick Start](#quick-start)
-* [Mobile App (Expo React Native)](#mobile-app-expo-react-native)
-* [Amplify Backend (v6)](#amplify-backend-v6)
-* [Robot Firmware (ESP32 C++)](#robot-firmware-esp32-c)
-* [Infrastructure & IoT](#infrastructure--iot)
-* [Data Models](#data-models)
-* [Development Workflows](#development-workflows)
+* [Quick Start](#quickstart)
+* [Mobile App (Expo React Native)](#mobile-app-expo-reactnative)
+* [Amplify Backend (v6)](#amplify-backendv6)
+* [Robot Firmware (ESP32 C++)](#robot-firmware-esp32c)
+* [Infrastructure & IoT](#infrastructureiot)
+* [Data Models](#datamodels)
+* [Development Workflows](#developmentworkflows)
 * [Testing](#testing)
-* [Troubleshooting & FAQ](#troubleshooting--faq)
+* [Troubleshooting & FAQ](#troubleshootingfaq)
+* [Screenshots](#screenshots)
 * [Roadmap](#roadmap)
-* [Contributing](#contributing)
 * [License](#license)
 
 ---
@@ -238,8 +238,7 @@ pio device monitor -b 115200                      # serial console
 ---
 
 ## Data Models
-
-> *(Generate & drop an image here)*
+![liquorbot-data-models](https://github.com/user-attachments/assets/ccbfac1c-38e9-4a20-aa65-993424684c57)
 
 Key relations:
 
@@ -314,29 +313,29 @@ to the maintenance topic or press the hardware **RESET** button.
 
 ---
 
+
+## Screenshots
+
+| Home Menu (Make a Drink) | Custom Drink Builder |
+|--------------------------|----------------------|
+| ![Screenshot 2025-05-19 140325](https://github.com/user-attachments/assets/4e400a36-8118-4af9-ba1d-9751b8d8b91a) | ![Screenshot 2025-05-19 140458](https://github.com/user-attachments/assets/538763ec-dc03-425b-8e23-b067be17e649) |
+
+| Events Manager | Device Settings |
+|----------------|-----------------|
+| ![Screenshot 2025-05-19 140639](https://github.com/user-attachments/assets/65be14dc-17b5-4e01-a45f-5a47085dfee5) | ![Screenshot 2025-05-19 140709](https://github.com/user-attachments/assets/e52fe967-8808-45c6-b92d-33d2ca8ae2bd) |
+
+> 📸 All screenshots captured from the Android Studio Emulator.
+
+---
+
 ## Roadmap
 
 * ✅ Custom recipe editing & S3 image upload
 * ✅ Non‑blocking FreeRTOS pour task
+* 🔜 IOS App Test
 * 🔜 Push notifications when pours complete
 * 🔜 OTA firmware updates via Amplify Storage
 * 🔜 Web dashboard (Next.js SSR with Amplify)
-
----
-
-## Contributing
-
-1. **Fork** 🍴 & create a feature branch
-
-   ```bash
-   git checkout -b feat/awesome
-   ```
-
-2. Follow **Conventional Commits** for commit messages
-
-3. Submit a PR & fill out the template (tests required)
-
-Please read [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) before contributing.
 
 ---
 
