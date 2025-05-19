@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import Ionicons                     from '@expo/vector-icons/Ionicons';
 import { generateClient }           from 'aws-amplify/api';
 import { fetchAuthSession }         from '@aws-amplify/auth';
+import * as Clipboard               from 'expo-clipboard'; // Import Clipboard API
 import {
   listEvents,
   eventsByCode,
@@ -153,9 +154,15 @@ export default function EventManager() {
 
   const doDelete = async (id: string) => {
     try {
-      await client.graphql({ query: deleteEvent, variables: { input: { id } } });
+      await client.graphql({
+        query: deleteEvent,
+        variables: { input: { id } },
+        authMode: 'userPool', // ✅ Critical for @auth(allow: owner) to work
+      });
       setEvents((p) => p.filter((e) => e.id !== id));
-    } catch { Alert.alert('Error', 'Delete failed'); }
+    } catch {
+      Alert.alert('Error', 'Delete failed'); 
+    }
   };
 
   /* ---------- join by invite code ---------- */
@@ -200,8 +207,16 @@ export default function EventManager() {
       : `${a.toLocaleString([], { hour:'2-digit', minute:'2-digit' })} – ${b.toLocaleString([], { hour:'2-digit', minute:'2-digit' })}`;
   };
 
+  const [copiedEventId, setCopiedEventId] = useState<string | null>(null);
+  const copyToClipboard = (code: string, eventId: string) => {
+    Clipboard.setStringAsync(code); // Copy the code to the clipboard
+    setCopiedEventId(eventId); // Set the copied event ID
+    setTimeout(() => setCopiedEventId(null), 2000); // Clear after 2 seconds
+  };
+
   const renderItem = ({ item }: { item: Event }) => {
     const isOwner = item.owner === currentUser;
+
     return (
       <View style={styles.card}>
         <View style={styles.head}>
@@ -209,10 +224,10 @@ export default function EventManager() {
           {isOwner && (
             <View style={styles.actions}>
               <TouchableOpacity onPress={() => router.push(`/create-event?edit=${item.id}`)}>
-                <Ionicons name="create-outline" size={22} color="#CE975E"/>
+                <Ionicons name="create-outline" size={22} color="#CE975E" />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => confirmDelete(item)}>
-                <Ionicons name="trash-outline" size={22} color="#D9534F"/>
+                <Ionicons name="trash-outline" size={22} color="#D9534F" />
               </TouchableOpacity>
             </View>
           )}
@@ -222,7 +237,18 @@ export default function EventManager() {
         <Text style={styles.detail}>{formatRange(item.startTime, item.endTime)}</Text>
 
         <View style={styles.foot}>
-          <Text style={styles.code}>Code: {item.inviteCode}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={styles.code}>Code: {item.inviteCode}</Text>
+            <TouchableOpacity
+              onPress={() => copyToClipboard(item.inviteCode, item.id)}
+              style={{ marginLeft: 8 }}
+            >
+              <Ionicons name="copy-outline" size={14} color="#CE975E" />
+            </TouchableOpacity>
+            {copiedEventId === item.id && (
+              <Text style={styles.copiedText}>Code Copied</Text>
+            )}
+          </View>
           <Text style={styles.drinks}>{item.drinkIDs.length} drinks</Text>
         </View>
       </View>
@@ -415,4 +441,9 @@ const styles = StyleSheet.create({
   joinGo:{backgroundColor:'#CE975E',borderRadius:8,paddingVertical:12,
           paddingHorizontal:30,alignSelf:'stretch',alignItems:'center'},
   joinGoTxt:{color:'#141414',fontSize:16,fontWeight:'600'},
+  copiedText: {
+    color: '#8F8F8F', // Gray color
+    fontSize: 8,
+    marginLeft: 8,
+  },
 });
