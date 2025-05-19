@@ -168,12 +168,21 @@ export default function EventManager() {
       const { data } = await client.graphql({
         query: joinEvent,
         variables: { inviteCode: code },
-        authMode:  'userPool',
+        authMode: 'userPool',
       }) as { data: { joinEvent: Event } };
 
-      /* stash locally so it appears immediately */
-      setEvents(prev => [...prev, data.joinEvent]);
-      setJoinModalVisible(false); setInviteCodeInput('');
+      // Check if event already exists in local state
+      setEvents(prev => {
+        const exists = prev.some(e => e.inviteCode === code);
+        if (!exists) {
+          return [...prev, data.joinEvent];
+        }
+        Alert.alert('Error Joining Event', 'You have already joined this event. Please check your events list.');
+        return prev;
+      });
+      
+      setJoinModalVisible(false); 
+      setInviteCodeInput('');
     } catch (err: any) {
       setJoinError(err.errors?.[0]?.message ?? 'Join failed');
     } finally {
@@ -270,7 +279,7 @@ export default function EventManager() {
       {/* list */}
       <FlatList
         data={filteredEvents}
-        keyExtractor={(i) => i.id}
+        keyExtractor={(i) => `${i.id}-${i.inviteCode}`}
         renderItem={renderItem}
         contentContainerStyle={styles.list}
         ListEmptyComponent={

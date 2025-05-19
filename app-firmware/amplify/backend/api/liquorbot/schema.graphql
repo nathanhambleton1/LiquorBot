@@ -1,17 +1,8 @@
-### amplify/backend/api/LiquorBot/schema.graphql
 type Event
   @model
   @auth(rules: [
-    # 1 Host – full CRUD
-    { allow: owner },
-
-    # 2 Guests that already appear in guestOwners – read‑only
+    { allow: owner, identityClaim: "username" },
     { allow: owner, ownerField: "guestOwners", operations: [read] },
-
-    # 3 Any signed‑in user may read a single record *by code* so
-    #   they can validate/preview an invite.  They still cannot
-    #   LIST all events because we will expose only a **custom**
-    #   resolver for this path (see below).
     { allow: private, operations: [read] }
   ])
 {
@@ -22,12 +13,11 @@ type Event
   startTime:   AWSDateTime!
   endTime:     AWSDateTime!
   liquorbotId: Int!
-  inviteCode:  String!
-    @index(name: "byCode", queryField: "eventsByCode")
-
+  inviteCode:  String! @index(name: "byCode", queryField: "eventsByCode")
   drinkIDs:    [Int]
-  guestOwners: [String]          # auto‑managed – never touch on the client
-  guests:      [GuestEvent]      @hasMany(indexName: "byEvent", fields: ["id"])
+  owner:       String
+  guestOwners: [String]
+  guests:      [GuestEvent] @hasMany(indexName: "byEvent", fields: ["id"])
 }
 
 type GuestEvent

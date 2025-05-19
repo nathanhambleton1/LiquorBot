@@ -19,6 +19,7 @@ export const getEvent = /* GraphQL */ `query GetEvent($id: ID!) {
     liquorbotId
     inviteCode
     drinkIDs
+    owner
     guestOwners
     guests {
       nextToken
@@ -26,7 +27,6 @@ export const getEvent = /* GraphQL */ `query GetEvent($id: ID!) {
     }
     createdAt
     updatedAt
-    owner
     __typename
   }
 }
@@ -47,10 +47,10 @@ export const listEvents = /* GraphQL */ `query ListEvents(
       liquorbotId
       inviteCode
       drinkIDs
+      owner
       guestOwners
       createdAt
       updatedAt
-      owner
       __typename
     }
     nextToken
@@ -85,10 +85,10 @@ export const eventsByCode = /* GraphQL */ `query EventsByCode(
       liquorbotId
       inviteCode
       drinkIDs
+      owner
       guestOwners
       createdAt
       updatedAt
-      owner
       __typename
     }
     nextToken
@@ -113,10 +113,10 @@ export const getGuestEvent = /* GraphQL */ `query GetGuestEvent($id: ID!) {
       liquorbotId
       inviteCode
       drinkIDs
+      owner
       guestOwners
       createdAt
       updatedAt
-      owner
       __typename
     }
     createdAt

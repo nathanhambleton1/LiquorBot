@@ -22,6 +22,7 @@ export const createEvent = /* GraphQL */ `mutation CreateEvent(
     liquorbotId
     inviteCode
     drinkIDs
+    owner
     guestOwners
     guests {
       nextToken
@@ -29,7 +30,6 @@ export const createEvent = /* GraphQL */ `mutation CreateEvent(
     }
     createdAt
     updatedAt
-    owner
     __typename
   }
 }
@@ -51,6 +51,7 @@ export const updateEvent = /* GraphQL */ `mutation UpdateEvent(
     liquorbotId
     inviteCode
     drinkIDs
+    owner
     guestOwners
     guests {
       nextToken
@@ -58,7 +59,6 @@ export const updateEvent = /* GraphQL */ `mutation UpdateEvent(
     }
     createdAt
     updatedAt
-    owner
     __typename
   }
 }
@@ -80,6 +80,7 @@ export const deleteEvent = /* GraphQL */ `mutation DeleteEvent(
     liquorbotId
     inviteCode
     drinkIDs
+    owner
     guestOwners
     guests {
       nextToken
@@ -87,7 +88,6 @@ export const deleteEvent = /* GraphQL */ `mutation DeleteEvent(
     }
     createdAt
     updatedAt
-    owner
     __typename
   }
 }
@@ -112,10 +112,10 @@ export const createGuestEvent = /* GraphQL */ `mutation CreateGuestEvent(
       liquorbotId
       inviteCode
       drinkIDs
+      owner
       guestOwners
       createdAt
       updatedAt
-      owner
       __typename
     }
     createdAt
@@ -145,10 +145,10 @@ export const updateGuestEvent = /* GraphQL */ `mutation UpdateGuestEvent(
       liquorbotId
       inviteCode
       drinkIDs
+      owner
       guestOwners
       createdAt
       updatedAt
-      owner
       __typename
     }
     createdAt
@@ -178,10 +178,10 @@ export const deleteGuestEvent = /* GraphQL */ `mutation DeleteGuestEvent(
       liquorbotId
       inviteCode
       drinkIDs
+      owner
       guestOwners
       createdAt
       updatedAt
-      owner
       __typename
     }
     createdAt
@@ -457,6 +457,7 @@ export const joinEvent = /* GraphQL */ `mutation JoinEvent($inviteCode: String!)
     liquorbotId
     inviteCode
     drinkIDs
+    owner
     guestOwners
     guests {
       nextToken
@@ -464,7 +465,6 @@ export const joinEvent = /* GraphQL */ `mutation JoinEvent($inviteCode: String!)
     }
     createdAt
     updatedAt
-    owner
     __typename
   }
 }
