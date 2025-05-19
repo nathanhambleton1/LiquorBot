@@ -68,7 +68,40 @@
       "service": "Cognito"
     }
   },
-  "function": {},
+  "function": {
+    "joinEventFunction": {
+      "build": true,
+      "dependsOn": [
+        {
+          "attributes": [
+            "GraphQLAPIIdOutput"
+          ],
+          "category": "api",
+          "resourceName": "LiquorBot"
+        }
+      ],
+      "providerPlugin": "awscloudformation",
+      "service": "Lambda"
+    }
+  },
+  "parameters": {
+    "AMPLIFY_function_joinEventFunction_deploymentBucketName": {
+      "usedBy": [
+        {
+          "category": "function",
+          "resourceName": "joinEventFunction"
+        }
+      ]
+    },
+    "AMPLIFY_function_joinEventFunction_s3Key": {
+      "usedBy": [
+        {
+          "category": "function",
+          "resourceName": "joinEventFunction"
+        }
+      ]
+    }
+  },
   "storage": {
     "s3liquorbotstorage8cb6bcd8": {
       "dependsOn": [],

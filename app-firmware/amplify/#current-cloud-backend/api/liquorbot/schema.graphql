@@ -1,37 +1,49 @@
+### amplify/backend/api/LiquorBot/schema.graphql
 type Event
   @model
   @auth(rules: [
-    { allow: owner },                                # host
-    {                                                # guests → read-only via the relationship
-      allow: owner,
-      ownerField: "guestOwners",
-      operations: [read]
-    }
-  ]) {
-  id: ID!
-  name: String!
-  description: String
-  location: String
-  startTime: AWSDateTime!
-  endTime: AWSDateTime!
-  liquorbotId: Int!
-  inviteCode: String!        @index(name: "byCode", queryField: "eventsByCode")
-  drinkIDs: [Int!]
+    # 1 Host – full CRUD
+    { allow: owner },
 
-  # NEW – reverse connection so AppSync can evaluate the second auth rule
-  guestOwners: [String]      # filled automatically; don’t touch in code
-  guests: [GuestEvent]       @hasMany(indexName: "byEvent", fields:["id"])
+    # 2 Guests that already appear in guestOwners – read‑only
+    { allow: owner, ownerField: "guestOwners", operations: [read] },
+
+    # 3 Any signed‑in user may read a single record *by code* so
+    #   they can validate/preview an invite.  They still cannot
+    #   LIST all events because we will expose only a **custom**
+    #   resolver for this path (see below).
+    { allow: private, operations: [read] }
+  ])
+{
+  id:          ID!
+  name:        String!
+  description: String
+  location:    String
+  startTime:   AWSDateTime!
+  endTime:     AWSDateTime!
+  liquorbotId: Int!
+  inviteCode:  String!
+    @index(name: "byCode", queryField: "eventsByCode")
+
+  drinkIDs:    [Int]
+  guestOwners: [String]          # auto‑managed – never touch on the client
+  guests:      [GuestEvent]      @hasMany(indexName: "byEvent", fields: ["id"])
 }
 
 type GuestEvent
   @model
   @auth(rules:[{ allow: owner }]) {
-  id: ID!           @primaryKey
-  eventID: ID!      @index(name:"byEvent", queryField:"guestEventsByEvent")
-  # NEW – tell Amplify which event this belongs to
-  event: Event      @belongsTo(fields:["eventID"])
+  id:      ID! @primaryKey
+  eventID: ID!   @index(name: "byEvent", queryField: "guestEventsByEvent")
+  event:   Event @belongsTo(fields: ["eventID"])
 }
 
+# ---------- NEW custom mutation ----------
+type Mutation {
+  joinEvent(inviteCode: String!): Event
+    @function(name: "joinEventFunction-${env}")        # Lambda (see below)
+    @auth(rules:[{ allow: private }])          # any signed‑in user
+}
 
 type PouredDrink @model @auth(rules: [{allow: public}, {allow: owner}]) {
   id: ID!

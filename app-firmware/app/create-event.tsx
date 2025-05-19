@@ -268,7 +268,7 @@ export default function EventsScreen(){
             endTime: event.endTime,
             liquorbotId: event.liquorbotId,
             inviteCode: event.inviteCode,
-            drinkIDs: event.drinkIDs ?? undefined,
+            drinkIDs: event.drinkIDs ? event.drinkIDs.filter((id: number | null): id is number => id !== null) : undefined,
           });
         } catch (error) {
           Alert.alert('Error', 'Failed to load event');
@@ -280,6 +280,10 @@ export default function EventsScreen(){
 
   /* save */
   const save = async () => {
+    if (liquorbotId === undefined || liquorbotId === null) {
+      Alert.alert('Error', 'Device ID not ready – try again in a second'); return;
+    }
+    
     const start = parseDT(startDate, startTime);
     const end = parseDT(multiDay ? endDate : startDate, endTime);
     

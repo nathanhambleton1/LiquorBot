@@ -11,7 +11,7 @@ export type CreateEventInput = {
   endTime: string,
   liquorbotId: number,
   inviteCode: string,
-  drinkIDs?: Array< number > | null,
+  drinkIDs?: Array< number | null > | null,
   guestOwners?: Array< string | null > | null,
 };
 
@@ -95,7 +95,7 @@ export type Event = {
   endTime: string,
   liquorbotId: number,
   inviteCode: string,
-  drinkIDs?: Array< number > | null,
+  drinkIDs?: Array< number | null > | null,
   guestOwners?: Array< string | null > | null,
   guests?: ModelGuestEventConnection | null,
   createdAt: string,
@@ -128,7 +128,7 @@ export type UpdateEventInput = {
   endTime?: string | null,
   liquorbotId?: number | null,
   inviteCode?: string | null,
-  drinkIDs?: Array< number > | null,
+  drinkIDs?: Array< number | null > | null,
   guestOwners?: Array< string | null > | null,
 };
 
@@ -648,7 +648,7 @@ export type CreateEventMutation = {
     endTime: string,
     liquorbotId: number,
     inviteCode: string,
-    drinkIDs?: Array< number > | null,
+    drinkIDs?: Array< number | null > | null,
     guestOwners?: Array< string | null > | null,
     guests?:  {
       __typename: "ModelGuestEventConnection",
@@ -676,7 +676,7 @@ export type UpdateEventMutation = {
     endTime: string,
     liquorbotId: number,
     inviteCode: string,
-    drinkIDs?: Array< number > | null,
+    drinkIDs?: Array< number | null > | null,
     guestOwners?: Array< string | null > | null,
     guests?:  {
       __typename: "ModelGuestEventConnection",
@@ -704,7 +704,7 @@ export type DeleteEventMutation = {
     endTime: string,
     liquorbotId: number,
     inviteCode: string,
-    drinkIDs?: Array< number > | null,
+    drinkIDs?: Array< number | null > | null,
     guestOwners?: Array< string | null > | null,
     guests?:  {
       __typename: "ModelGuestEventConnection",
@@ -736,7 +736,7 @@ export type CreateGuestEventMutation = {
       endTime: string,
       liquorbotId: number,
       inviteCode: string,
-      drinkIDs?: Array< number > | null,
+      drinkIDs?: Array< number | null > | null,
       guestOwners?: Array< string | null > | null,
       createdAt: string,
       updatedAt: string,
@@ -768,7 +768,7 @@ export type UpdateGuestEventMutation = {
       endTime: string,
       liquorbotId: number,
       inviteCode: string,
-      drinkIDs?: Array< number > | null,
+      drinkIDs?: Array< number | null > | null,
       guestOwners?: Array< string | null > | null,
       createdAt: string,
       updatedAt: string,
@@ -800,7 +800,7 @@ export type DeleteGuestEventMutation = {
       endTime: string,
       liquorbotId: number,
       inviteCode: string,
-      drinkIDs?: Array< number > | null,
+      drinkIDs?: Array< number | null > | null,
       guestOwners?: Array< string | null > | null,
       createdAt: string,
       updatedAt: string,
@@ -1052,6 +1052,33 @@ export type DeleteUserProfileMutation = {
   } | null,
 };
 
+export type JoinEventMutationVariables = {
+  inviteCode: string,
+};
+
+export type JoinEventMutation = {
+  joinEvent?:  {
+    __typename: "Event",
+    id: string,
+    name: string,
+    description?: string | null,
+    location?: string | null,
+    startTime: string,
+    endTime: string,
+    liquorbotId: number,
+    inviteCode: string,
+    drinkIDs?: Array< number | null > | null,
+    guestOwners?: Array< string | null > | null,
+    guests?:  {
+      __typename: "ModelGuestEventConnection",
+      nextToken?: string | null,
+    } | null,
+    createdAt: string,
+    updatedAt: string,
+    owner?: string | null,
+  } | null,
+};
+
 export type GetEventQueryVariables = {
   id: string,
 };
@@ -1067,7 +1094,7 @@ export type GetEventQuery = {
     endTime: string,
     liquorbotId: number,
     inviteCode: string,
-    drinkIDs?: Array< number > | null,
+    drinkIDs?: Array< number | null > | null,
     guestOwners?: Array< string | null > | null,
     guests?:  {
       __typename: "ModelGuestEventConnection",
@@ -1098,7 +1125,7 @@ export type ListEventsQuery = {
       endTime: string,
       liquorbotId: number,
       inviteCode: string,
-      drinkIDs?: Array< number > | null,
+      drinkIDs?: Array< number | null > | null,
       guestOwners?: Array< string | null > | null,
       createdAt: string,
       updatedAt: string,
@@ -1129,7 +1156,7 @@ export type EventsByCodeQuery = {
       endTime: string,
       liquorbotId: number,
       inviteCode: string,
-      drinkIDs?: Array< number > | null,
+      drinkIDs?: Array< number | null > | null,
       guestOwners?: Array< string | null > | null,
       createdAt: string,
       updatedAt: string,
@@ -1158,7 +1185,7 @@ export type GetGuestEventQuery = {
       endTime: string,
       liquorbotId: number,
       inviteCode: string,
-      drinkIDs?: Array< number > | null,
+      drinkIDs?: Array< number | null > | null,
       guestOwners?: Array< string | null > | null,
       createdAt: string,
       updatedAt: string,
@@ -1402,7 +1429,7 @@ export type OnCreateEventSubscription = {
     endTime: string,
     liquorbotId: number,
     inviteCode: string,
-    drinkIDs?: Array< number > | null,
+    drinkIDs?: Array< number | null > | null,
     guestOwners?: Array< string | null > | null,
     guests?:  {
       __typename: "ModelGuestEventConnection",
@@ -1430,7 +1457,7 @@ export type OnUpdateEventSubscription = {
     endTime: string,
     liquorbotId: number,
     inviteCode: string,
-    drinkIDs?: Array< number > | null,
+    drinkIDs?: Array< number | null > | null,
     guestOwners?: Array< string | null > | null,
     guests?:  {
       __typename: "ModelGuestEventConnection",
@@ -1458,7 +1485,7 @@ export type OnDeleteEventSubscription = {
     endTime: string,
     liquorbotId: number,
     inviteCode: string,
-    drinkIDs?: Array< number > | null,
+    drinkIDs?: Array< number | null > | null,
     guestOwners?: Array< string | null > | null,
     guests?:  {
       __typename: "ModelGuestEventConnection",
@@ -1490,7 +1517,7 @@ export type OnCreateGuestEventSubscription = {
       endTime: string,
       liquorbotId: number,
       inviteCode: string,
-      drinkIDs?: Array< number > | null,
+      drinkIDs?: Array< number | null > | null,
       guestOwners?: Array< string | null > | null,
       createdAt: string,
       updatedAt: string,
@@ -1522,7 +1549,7 @@ export type OnUpdateGuestEventSubscription = {
       endTime: string,
       liquorbotId: number,
       inviteCode: string,
-      drinkIDs?: Array< number > | null,
+      drinkIDs?: Array< number | null > | null,
       guestOwners?: Array< string | null > | null,
       createdAt: string,
       updatedAt: string,
@@ -1554,7 +1581,7 @@ export type OnDeleteGuestEventSubscription = {
       endTime: string,
       liquorbotId: number,
       inviteCode: string,
-      drinkIDs?: Array< number > | null,
+      drinkIDs?: Array< number | null > | null,
       guestOwners?: Array< string | null > | null,
       createdAt: string,
       updatedAt: string,

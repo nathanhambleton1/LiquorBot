@@ -1,7 +1,6 @@
 // -----------------------------------------------------------------------------
 // File: events.tsx  (REPLACEMENT – 18 May 2025)
-// Adds a “Join Event” button & invite-code modal.  Guests are stored in the
-// GuestEvent table and cannot edit / delete the host’s event.
+// Shows only the user’s own / joined events and fixes invite-code joining.
 // -----------------------------------------------------------------------------
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -10,81 +9,97 @@ import {
   Modal, Switch, Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import Ionicons                    from '@expo/vector-icons/Ionicons';
-import { generateClient }          from 'aws-amplify/api';
-import { fetchAuthSession }        from '@aws-amplify/auth';
-import { listEvents }              from '../src/graphql/queries';
-import { deleteEvent }             from '../src/graphql/mutations';
-import { createGuestEvent }        from '../src/graphql/mutations';
-import { useLiquorBot }            from './components/liquorbot-provider';
+import Ionicons                     from '@expo/vector-icons/Ionicons';
+import { generateClient }           from 'aws-amplify/api';
+import { fetchAuthSession }         from '@aws-amplify/auth';
+import {
+  listEvents,
+  eventsByCode,
+}                                    from '../src/graphql/queries';
+import {
+  deleteEvent,
+  createGuestEvent,
+  updateEvent,
+  joinEvent,
+}                                    from '../src/graphql/mutations';
+import { useLiquorBot }             from './components/liquorbot-provider';
 
 const client = generateClient();
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-/* ----------------------- TYPES ----------------------- */
+/* ---------- local helpers ---------- */
+const eventFilter = (user: string, liquorbotId: number) => ({
+  and: [
+    { liquorbotId: { eq: liquorbotId } },
+    {
+      or: [
+        { owner:       { eq: user } },
+        { guestOwners: { contains: user } },
+      ],
+    },
+  ],
+});
+
+/* ---------- types ---------- */
 interface Event {
-  id: string;
-  name: string;
-  description?: string;
-  location?: string;
-  startTime: string;
-  endTime: string;
+  id:          string;
+  name:        string;
+  description?:string;
+  location?:   string;
+  startTime:   string;
+  endTime:     string;
   liquorbotId: number;
-  inviteCode: string;
-  drinkIDs: number[];
-  owner?: string;
+  inviteCode:  string;
+  drinkIDs:    number[];
+  owner?:      string;
+  guestOwners?: string[];
 }
 
 export default function EventManager() {
-  const router = useRouter();
-  const { liquorbotId } = useLiquorBot();
+  /* navigation & device context */
+  const router                 = useRouter();
+  const { liquorbotId }        = useLiquorBot();
 
-  /* ------------------------- STATE ------------------------- */
-  const [events, setEvents]                   = useState<Event[]>([]);
-  const [loading, setLoading]                 = useState(true);
-  const [filter, setFilter]                   = useState<'all' | 'upcoming' | 'current' | 'past'>('all');
-  const [searchQuery, setSearchQuery]         = useState('');
-  const [alphabetical, setAlphabetical]       = useState(false);
+  /* UI state */
+  const [events, setEvents]                 = useState<Event[]>([]);
+  const [loading, setLoading]               = useState(true);
+  const [filter, setFilter]                 = useState<'all'|'upcoming'|'current'|'past'>('all');
+  const [searchQuery, setSearchQuery]       = useState('');
+  const [alphabetical, setAlphabetical]     = useState(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
   /* join-modal */
   const [joinModalVisible, setJoinModalVisible] = useState(false);
   const [inviteCodeInput, setInviteCodeInput]   = useState('');
   const [joinLoading, setJoinLoading]           = useState(false);
-  const [joinError, setJoinError]               = useState<string | null>(null);
+  const [joinError, setJoinError]               = useState<string|null>(null);
 
-  /* current user (for owner check) */
-  const [currentUser, setCurrentUser] = useState<string | null>(null);
-
-  /* ------------------ WHO AM I ------------------ */
+  /* who am I? */
+  const [currentUser, setCurrentUser] = useState<string|null>(null);
   useEffect(() => {
     (async () => {
       try {
-        const session  = await fetchAuthSession();
-        const rawUsername = session.tokens?.idToken?.payload['cognito:username'];
-        const username = typeof rawUsername === 'string' ? rawUsername : null;
-        setCurrentUser(username);
-      } catch {
-        setCurrentUser(null);
-      }
+        const ses = await fetchAuthSession();
+        const u   = ses.tokens?.idToken?.payload['cognito:username'];
+        setCurrentUser(typeof u === 'string' ? u : null);
+      } catch { setCurrentUser(null); }
     })();
   }, []);
 
-  /* --------------------- FETCH EVENTS ---------------------- */
+  /* fetch events that belong to me */
   useEffect(() => {
-    if (!currentUser) return;      // wait until we know who we are
+    if (!currentUser || liquorbotId === undefined || liquorbotId === null) return;
 
     (async () => {
       try {
-        const result = await client.graphql({
+        const { data } = await client.graphql({
           query: listEvents,
-          variables: { filter: { liquorbotId: { eq: Number(liquorbotId) } } },
-          authMode: 'userPool',
-        });
-  
-        const data = (result as { data?: any })?.data;
+          variables: { filter: eventFilter(currentUser, Number(liquorbotId)) },
+          authMode:  'userPool',
+        }) as { data: any };
+
         setEvents(
-          data.listEvents.items.map((i: any) => ({
+          data.listEvents.items.map((i: any): Event => ({
             id:          i.id,
             name:        i.name,
             location:    i.location ?? undefined,
@@ -93,27 +108,28 @@ export default function EventManager() {
             liquorbotId: i.liquorbotId,
             inviteCode:  i.inviteCode,
             drinkIDs:    i.drinkIDs ?? [],
-            owner:       i.owner,          // still present → keeps your “edit” lockout
+            owner:       i.owner,
+            guestOwners: i.guestOwners ?? [],
           })),
         );
-      } catch (e) {
-        Alert.alert('Error', 'Failed to load events');
+      } catch (err) {
+        Alert.alert('Error', 'Could not load events');
       } finally {
         setLoading(false);
       }
     })();
-  }, [liquorbotId, currentUser]);
+  }, [currentUser, liquorbotId]);
 
-  /* ------------------- FILTER + SEARCH ------------------- */
+  /* ---------- filtering / searching ---------- */
   const filteredEvents = useMemo(() => {
     const now = new Date();
-    let list = events.filter((evt) => {
-      const start = new Date(evt.startTime);
-      const end = new Date(evt.endTime);
-      if (filter === 'past')     return end   < now;
-      if (filter === 'current')  return start <= now && end >= now;
-      if (filter === 'upcoming') return start >  now;
-      return true; // 'all'
+    let list  = events.filter((e) => {
+      const s = new Date(e.startTime);
+      const f = new Date(e.endTime);
+      if (filter === 'past')     return f < now;
+      if (filter === 'current')  return s <= now && f >= now;
+      if (filter === 'upcoming') return s > now;
+      return true;
     });
 
     if (searchQuery) {
@@ -121,111 +137,84 @@ export default function EventManager() {
       list = list.filter((e) => e.name.toLowerCase().includes(q));
     }
 
-    if (alphabetical) {
-      list.sort((a, b) => a.name.localeCompare(b.name));
-    } else {
-      list.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
-    }
+    list.sort(alphabetical
+      ? (a, b) => a.name.localeCompare(b.name)
+      : (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+    );
     return list;
   }, [events, filter, searchQuery, alphabetical]);
 
-  /* ------------------- DELETE HANDLER ------------------- */
-  const confirmDelete = (event: Event) => {
-    Alert.alert('Delete Event', `Are you sure you want to delete "${event.name}"?`, [
+  /* ---------- delete ---------- */
+  const confirmDelete = (ev: Event) =>
+    Alert.alert('Delete Event', `Delete “${ev.name}”?`, [
       { text: 'Cancel',  style: 'cancel' },
-      { text: 'Delete',  style: 'destructive', onPress: () => deleteHandler(event.id) },
+      { text: 'Delete',  style: 'destructive', onPress: () => doDelete(ev.id) },
     ]);
-  };
 
-  const deleteHandler = async (id: string) => {
+  const doDelete = async (id: string) => {
     try {
       await client.graphql({ query: deleteEvent, variables: { input: { id } } });
-      setEvents((prev) => prev.filter((e) => e.id !== id));
-    } catch {
-      Alert.alert('Error', 'Failed to delete event');
-    }
+      setEvents((p) => p.filter((e) => e.id !== id));
+    } catch { Alert.alert('Error', 'Delete failed'); }
   };
 
-  /* ------------------- JOIN HANDLER ------------------- */
-  const handleJoinEvent = async () => {
-    const code = inviteCodeInput.trim();
-    if (!code) { setJoinError('Please enter a code.'); return; }
+  /* ---------- join by invite code ---------- */
+  const handleJoin = async () => {
+    const code = inviteCodeInput.trim().toUpperCase();
+    if (!code) { setJoinError('Please enter a code'); return; }
 
-    setJoinLoading(true);
-    setJoinError(null);
+    setJoinLoading(true); setJoinError(null);
     try {
-      const result = await client.graphql({
-        query: listEvents,                                // <- use the generated op
-        variables: { filter: { inviteCode: { eq: code } } },
-        authMode: 'userPool',
-      }) as { data?: any };
+      const { data } = await client.graphql({
+        query: joinEvent,
+        variables: { inviteCode: code },
+        authMode:  'userPool',
+      }) as { data: { joinEvent: Event } };
 
-      const match: Event | undefined = result.data?.listEvents?.items?.[0];
-      if (!match) {
-        setJoinError('Invalid invite code.');
-        return;
-      }
-
-      /* already joined? */
-      if (events.some((e) => e.id === match.id)) {
-        setJoinError('You have already joined this event.');
-        return;
-      }
-
-      /* persist guest membership */
-      await client.graphql({
-        query: createGuestEvent,
-        variables: { input: { eventID: match.id } },
-      });
-
-      /* add to local list (non-owner) */
-      setEvents((prev) => [...prev, { ...match }]);
-      setJoinModalVisible(false);
-      setInviteCodeInput('');
-    } catch (e) {
-      setJoinError('Could not join event.');
+      /* stash locally so it appears immediately */
+      setEvents(prev => [...prev, data.joinEvent]);
+      setJoinModalVisible(false); setInviteCodeInput('');
+    } catch (err: any) {
+      setJoinError(err.errors?.[0]?.message ?? 'Join failed');
     } finally {
       setJoinLoading(false);
     }
   };
 
-  /* ------------------ RENDER HELPERS ------------------- */
-  const formatDateRange = (start: string, end: string) => {
-    const s = new Date(start);
-    const e = new Date(end);
-    const sameDay = s.toDateString() === e.toDateString();
-    const fmtTime = (d: Date) =>
-      d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    return sameDay
-      ? `${s.toLocaleDateString()} ${fmtTime(s)} – ${fmtTime(e)}`
-      : `${s.toLocaleString([], { hour: '2-digit', minute: '2-digit' })} – ${e.toLocaleString([], { hour: '2-digit', minute: '2-digit' })}`;
+  /* ---------- render ---------- */
+  const formatRange = (s: string, e: string) => {
+    const a = new Date(s); const b = new Date(e);
+    const same = a.toDateString() === b.toDateString();
+    const f    = (d: Date) => d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+    return same
+      ? `${a.toLocaleDateString()}  ${f(a)}–${f(b)}`
+      : `${a.toLocaleString([], { hour:'2-digit', minute:'2-digit' })} – ${b.toLocaleString([], { hour:'2-digit', minute:'2-digit' })}`;
   };
 
   const renderItem = ({ item }: { item: Event }) => {
     const isOwner = item.owner === currentUser;
-
     return (
-      <View style={styles.eventCard}>
-        <View style={styles.eventHeader}>
-          <Text style={styles.eventName}>{item.name}</Text>
+      <View style={styles.card}>
+        <View style={styles.head}>
+          <Text style={styles.name}>{item.name}</Text>
           {isOwner && (
-            <View style={styles.eventActions}>
+            <View style={styles.actions}>
               <TouchableOpacity onPress={() => router.push(`/create-event?edit=${item.id}`)}>
-                <Ionicons name="create-outline" size={22} color="#CE975E" />
+                <Ionicons name="create-outline" size={22} color="#CE975E"/>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => confirmDelete(item)}>
-                <Ionicons name="trash-outline" size={22} color="#D9534F" />
+                <Ionicons name="trash-outline" size={22} color="#D9534F"/>
               </TouchableOpacity>
             </View>
           )}
         </View>
 
-        <Text style={styles.eventDetail}>{item.location || 'No location specified'}</Text>
-        <Text style={styles.eventDetail}>{formatDateRange(item.startTime, item.endTime)}</Text>
+        <Text style={styles.detail}>{item.location || 'No location'}</Text>
+        <Text style={styles.detail}>{formatRange(item.startTime, item.endTime)}</Text>
 
-        <View style={styles.eventFooter}>
-          <Text style={styles.inviteCode}>Invite Code: {item.inviteCode}</Text>
-          <Text style={styles.drinkCount}>{item.drinkIDs.length} drinks</Text>
+        <View style={styles.foot}>
+          <Text style={styles.code}>Code: {item.inviteCode}</Text>
+          <Text style={styles.drinks}>{item.drinkIDs.length} drinks</Text>
         </View>
       </View>
     );
@@ -233,108 +222,95 @@ export default function EventManager() {
 
   if (loading) {
     return (
-      <View style={styles.loadingScreen}>
-        <ActivityIndicator size="large" color="#CE975E" />
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color="#CE975E"/>
       </View>
     );
   }
 
-  /* ------------------------- UI ------------------------- */
+  /* ---------- UI ---------- */
   return (
     <View style={styles.container}>
-      {/* ---------- TITLE ---------- */}
+      {/* title */}
       <Text style={styles.title}>Event Manager</Text>
-      <TouchableOpacity style={styles.closeBtn} onPress={() => router.push('/')}>
-        <Ionicons name="close" size={28} color="#DFDCD9" />
+      <TouchableOpacity style={styles.close} onPress={() => router.push('/')}>
+        <Ionicons name="close" size={28} color="#DFDCD9"/>
       </TouchableOpacity>
 
-      {/* ---------- CATEGORY PICKER ---------- */}
-      <View style={styles.horizontalPickerContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontalPicker}
-        >
-          {['All', 'Upcoming', 'Current', 'Past'].map((cat) => {
-            const key = cat.toLowerCase() as typeof filter;
+      {/* cat picker */}
+      <View style={styles.catWrap}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catRow}>
+          {['All','Upcoming','Current','Past'].map((c) => {
+            const k = c.toLowerCase() as typeof filter;
             return (
-              <TouchableOpacity key={cat} onPress={() => setFilter(key)} style={styles.categoryButton}>
-                <View style={styles.categoryButtonContent}>
-                  <Text style={[styles.categoryButtonText, filter === key && styles.selectedCategoryText]}>
-                    {cat}
-                  </Text>
-                  {filter === key && <View style={styles.underline} />}
-                </View>
+              <TouchableOpacity key={c} onPress={() => setFilter(k)} style={styles.catBtn}>
+                <Text style={[styles.catTxt, filter === k && styles.catSel]}>{c}</Text>
+                {filter === k && <View style={styles.under}/>}
               </TouchableOpacity>
             );
           })}
         </ScrollView>
       </View>
 
-      {/* ---------- SEARCH + FILTER ---------- */}
-      <View style={styles.searchBarContainer}>
-        <Ionicons name="search" size={20} color="#4F4F4F" style={styles.searchIcon} />
+      {/* search bar */}
+      <View style={styles.searchRow}>
+        <Ionicons name="search" size={20} color="#4F4F4F" style={{marginRight:10}}/>
         <TextInput
-          style={styles.searchBar}
+          style={styles.search}
           placeholder="Search events"
           placeholderTextColor="#4F4F4F"
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
-        <TouchableOpacity onPress={() => setFilterModalVisible(true)} style={styles.filterIcon}>
-          <Ionicons name="funnel-outline" size={20} color={alphabetical ? '#CE975E' : '#4F4F4F'} />
+        <TouchableOpacity onPress={() => setFilterModalVisible(true)}>
+          <Ionicons name="funnel-outline" size={20} color={alphabetical? '#CE975E':'#4F4F4F'}/>
         </TouchableOpacity>
       </View>
 
-      {/* ---------- EVENT LIST ---------- */}
+      {/* list */}
       <FlatList
         data={filteredEvents}
+        keyExtractor={(i) => i.id}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={styles.list}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="calendar-outline" size={40} color="#CE975E" />
-            <Text style={styles.emptyText}>Tap “New Event” or “Join Event” to get started!</Text>
+          <View style={styles.empty}>
+            <Ionicons name="calendar-outline" size={40} color="#CE975E"/>
+            <Text style={styles.emptyTxt}>Tap “New Event” or “Join Event” to get started</Text>
           </View>
         }
       />
 
-      {/* ---------- BOTTOM BUTTONS ---------- */}
-      <View style={styles.bottomButtons}>
-        {/* join */}
-        <TouchableOpacity style={styles.joinButton} onPress={() => setJoinModalVisible(true)}>
-          <Ionicons name="log-in-outline" size={24} color="#141414" />
-          <Text style={styles.joinText}>Join Event</Text>
+      {/* bottom buttons */}
+      <View style={styles.bottom}>
+        <TouchableOpacity style={styles.joinBtn} onPress={() => setJoinModalVisible(true)}>
+          <Ionicons name="log-in-outline" size={24} color="#141414"/>
+          <Text style={styles.joinTxt}>Join Event</Text>
         </TouchableOpacity>
-
-        {/* new */}
-        <TouchableOpacity style={styles.createButton} onPress={() => router.push('/create-event')}>
-          <Ionicons name="add" size={28} color="#141414" />
-          <Text style={styles.createText}>New Event</Text>
+        <TouchableOpacity style={styles.newBtn} onPress={() => router.push('/create-event')}>
+          <Ionicons name="add" size={28} color="#141414"/>
+          <Text style={styles.newTxt}>New Event</Text>
         </TouchableOpacity>
       </View>
 
-      {/* ---------- FILTER MODAL ---------- */}
+      {/* filter modal */}
       <Modal
         visible={filterModalVisible}
-        transparent
-        animationType="fade"
+        transparent animationType="fade"
         onRequestClose={() => setFilterModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.filterModal}>
-            <TouchableOpacity style={styles.modalCloseButton} onPress={() => setFilterModalVisible(false)}>
-              <Ionicons name="close" size={24} color="#DFDCD9" />
+        <View style={styles.overlay}>
+          <View style={styles.filtCard}>
+            <TouchableOpacity style={styles.filtClose} onPress={() => setFilterModalVisible(false)}>
+              <Ionicons name="close" size={24} color="#DFDCD9"/>
             </TouchableOpacity>
-            <Text style={styles.filterModalTitle}>Filter Options</Text>
-
-            <View style={styles.filterRow}>
-              <Text style={styles.filterLabel}>Sort alphabetically</Text>
+            <Text style={styles.filtTitle}>Filter Options</Text>
+            <View style={styles.switchRow}>
+              <Text style={styles.switchLbl}>Sort alphabetically</Text>
               <Switch
                 value={alphabetical}
                 onValueChange={setAlphabetical}
-                trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
+                trackColor={{ false:'#4F4F4F', true:'#CE975E' }}
                 thumbColor="#DFDCD9"
               />
             </View>
@@ -342,36 +318,29 @@ export default function EventManager() {
         </View>
       </Modal>
 
-      {/* ---------- JOIN MODAL ---------- */}
+      {/* join modal */}
       <Modal
         visible={joinModalVisible}
-        transparent
-        animationType="fade"
+        transparent animationType="fade"
         onRequestClose={() => setJoinModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.joinModal}>
-            <TouchableOpacity style={styles.modalCloseButton} onPress={() => setJoinModalVisible(false)}>
-              <Ionicons name="close" size={24} color="#DFDCD9" />
+        <View style={styles.overlay}>
+          <View style={styles.joinCard}>
+            <TouchableOpacity style={styles.filtClose} onPress={() => setJoinModalVisible(false)}>
+              <Ionicons name="close" size={24} color="#DFDCD9"/>
             </TouchableOpacity>
-            <Text style={styles.filterModalTitle}>Enter Invite Code</Text>
-
+            <Text style={styles.filtTitle}>Enter Invite Code</Text>
             <TextInput
               style={styles.codeInput}
-              placeholder="e.g. ABC123"
+              placeholder="ABC123"
               placeholderTextColor="#4F4F4F"
               autoCapitalize="characters"
               value={inviteCodeInput}
-              onChangeText={(text) => setInviteCodeInput(text.toUpperCase())} // Auto-capitalize input
+              onChangeText={(t) => setInviteCodeInput(t.toUpperCase())}
             />
-            {joinError && <Text style={styles.errorText}>{joinError}</Text>}
-
-            <TouchableOpacity style={styles.joinConfirmBtn} onPress={handleJoinEvent} disabled={joinLoading}>
-              {joinLoading ? (
-                <ActivityIndicator color="#141414" />
-              ) : (
-                <Text style={styles.joinConfirmText}>Join Event</Text>
-              )}
+            {joinError && <Text style={styles.err}>{joinError}</Text>}
+            <TouchableOpacity style={styles.joinGo} onPress={handleJoin} disabled={joinLoading}>
+              {joinLoading ? <ActivityIndicator color="#141414"/> : <Text style={styles.joinGoTxt}>Join Event</Text>}
             </TouchableOpacity>
           </View>
         </View>
@@ -380,62 +349,61 @@ export default function EventManager() {
   );
 }
 
-/* ----------------------------- STYLES ----------------------------- */
+/* ---------- styles ---------- */
 const styles = StyleSheet.create({
-  /* --- layout roots --- */
-  container:           { flex: 1, backgroundColor: '#141414', paddingTop: 70 },
-  loadingScreen:       { flex: 1, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center' },
-  title:               { color: '#DFDCD9', fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
-  closeBtn:            { position: 'absolute', top: 62, left: 25, zIndex: 10, padding: 10 },
+  container:{flex:1,backgroundColor:'#141414',paddingTop:70},
+  loading:{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'#141414'},
+  title:{color:'#DFDCD9',fontSize:24,fontWeight:'bold',textAlign:'center',marginBottom:20},
+  close:{position:'absolute',top:62,left:24,padding:10,zIndex:10},
 
-  /* --- category picker --- */
-  horizontalPickerContainer: { alignItems: 'center', paddingVertical: 5, marginBottom: 5 },
-  horizontalPicker:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10 },
-  categoryButton:      { marginTop: 10, paddingHorizontal: 15, marginHorizontal: 5 },
-  categoryButtonContent:{ alignItems: 'center' },
-  categoryButtonText:  { color: '#4F4F4F' },
-  selectedCategoryText:{ color: '#CE975E' },
-  underline:           { height: 2, backgroundColor: '#CE975E', marginTop: 2, width: '100%' },
+  catWrap:{alignItems:'center',marginBottom:10},
+  catRow:{flexDirection:'row',alignItems:'center',paddingHorizontal:10},
+  catBtn:{paddingHorizontal:15,marginHorizontal:5},
+  catTxt:{color:'#4F4F4F'},
+  catSel:{color:'#CE975E'},
+  under:{height:2,backgroundColor:'#CE975E',marginTop:2,width:'100%'},
 
-  /* --- search bar --- */
-  searchBarContainer:  { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, paddingHorizontal: 15, marginHorizontal: 20, marginBottom: 20 },
-  searchIcon:          { marginRight: 10 },
-  searchBar:           { flex: 1, color: '#DFDCD9', fontSize: 16, paddingVertical: 10 },
-  filterIcon:          { marginLeft: 10 },
+  searchRow:{flexDirection:'row',alignItems:'center',backgroundColor:'#1F1F1F',
+             borderRadius:10,paddingHorizontal:15,marginHorizontal:20,marginBottom:15},
+  search:{flex:1,color:'#DFDCD9',fontSize:16,paddingVertical:10},
 
-  /* --- event list --- */
-  listContent:         { paddingBottom: 140, paddingHorizontal: 20 },
-  eventCard:           { backgroundColor: '#1F1F1F', borderRadius: 12, padding: 16, marginBottom: 12 },
-  eventHeader:         { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  eventName:           { color: '#DFDCD9', fontSize: 18, fontWeight: '600', flexShrink: 1 },
-  eventActions:        { flexDirection: 'row', gap: 12, marginLeft: 10 },
-  eventDetail:         { color: '#8F8F8F', fontSize: 14, marginBottom: 4 },
-  eventFooter:         { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
-  inviteCode:          { color: '#CE975E', fontSize: 12 },
-  drinkCount:          { color: '#8F8F8F', fontSize: 12 },
+  list:{paddingHorizontal:20,paddingBottom:140},
+  card:{backgroundColor:'#1F1F1F',borderRadius:12,padding:16,marginBottom:12},
+  head:{flexDirection:'row',justifyContent:'space-between',marginBottom:6},
+  name:{color:'#DFDCD9',fontSize:18,fontWeight:'600',flexShrink:1},
+  actions:{flexDirection:'row',gap:12,marginLeft:10},
+  detail:{color:'#8F8F8F',fontSize:14,marginBottom:2},
+  foot:{flexDirection:'row',justifyContent:'space-between',marginTop:10},
+  code:{color:'#CE975E',fontSize:12},
+  drinks:{color:'#8F8F8F',fontSize:12},
 
-  emptyContainer:      { alignItems: 'center', marginTop: 150, paddingHorizontal: 40 },
-  emptyText:           { color: '#4F4F4F', textAlign: 'center', marginTop: 20, fontSize: 14 },
+  empty:{alignItems:'center',marginTop:150,paddingHorizontal:40},
+  emptyTxt:{color:'#4F4F4F',textAlign:'center',marginTop:20,fontSize:14},
 
-  /* --- bottom buttons --- */
-  bottomButtons:       { position: 'absolute', bottom: 30, flexDirection: 'row', width: '100%', paddingHorizontal: 20, justifyContent: 'space-between' },
-  joinButton:          { flexDirection: 'row', alignItems: 'center', backgroundColor: '#CE975E', borderRadius: 25, paddingVertical: 12, paddingHorizontal: 20, gap: 8 },
-  joinText:            { color: '#141414', fontSize: 16, fontWeight: '600' },
-  createButton:        { flexDirection: 'row', alignItems: 'center', backgroundColor: '#CE975E', borderRadius: 25, paddingVertical: 12, paddingHorizontal: 20, gap: 8, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 }, android: { elevation: 4 } }) },
-  createText:          { color: '#141414', fontSize: 16, fontWeight: '600' },
+  bottom:{position:'absolute',bottom:30,left:0,right:0,flexDirection:'row',
+          justifyContent:'space-between',paddingHorizontal:20},
+  joinBtn:{flexDirection:'row',alignItems:'center',backgroundColor:'#CE975E',
+           borderRadius:25,paddingVertical:12,paddingHorizontal:20,gap:8},
+  joinTxt:{color:'#141414',fontSize:16,fontWeight:'600'},
+  newBtn:{flexDirection:'row',alignItems:'center',backgroundColor:'#CE975E',
+          borderRadius:25,paddingVertical:12,paddingHorizontal:20,gap:8,
+          ...Platform.select({ios:{shadowColor:'#000',shadowOffset:{width:0,height:2},
+          shadowOpacity:0.2,shadowRadius:4},android:{elevation:4}})},
+  newTxt:{color:'#141414',fontSize:16,fontWeight:'600'},
 
-  /* --- filter modal --- */
-  modalOverlay:        { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  filterModal:         { width: SCREEN_WIDTH * 0.8, backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20 },
-  filterModalTitle:    { color: '#DFDCD9', fontSize: 20, fontWeight: 'bold', marginBottom: 20, alignSelf: 'center' },
-  filterRow:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  filterLabel:         { color: '#DFDCD9', fontSize: 16, flex: 1, flexWrap: 'wrap' },
-  modalCloseButton:    { position: 'absolute', top: 15, right: 15 },
+  overlay:{flex:1,backgroundColor:'rgba(0,0,0,0.6)',justifyContent:'center',alignItems:'center'},
+  filtCard:{width:SCREEN_WIDTH*0.8,backgroundColor:'#1F1F1F',borderRadius:10,padding:20},
+  filtClose:{position:'absolute',top:15,right:15,padding:4},
+  filtTitle:{color:'#DFDCD9',fontSize:20,fontWeight:'bold',alignSelf:'center',marginBottom:20},
+  switchRow:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},
+  switchLbl:{color:'#DFDCD9',fontSize:16},
 
-  /* --- join modal --- */
-  joinModal:           { width: SCREEN_WIDTH * 0.8, backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20, alignItems: 'center' },
-  codeInput:           { width: '100%', borderWidth: 1, borderColor: '#4F4F4F', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 15, color: '#DFDCD9', fontSize: 16, marginBottom: 12, textAlign: 'center' },
-  errorText:           { color: '#D9534F', marginBottom: 8 },
-  joinConfirmBtn:      { backgroundColor: '#CE975E', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 25, alignSelf: 'stretch', alignItems: 'center' },
-  joinConfirmText:     { color: '#141414', fontSize: 16, fontWeight: '600' },
+  joinCard:{width:SCREEN_WIDTH*0.8,backgroundColor:'#1F1F1F',borderRadius:10,padding:20,alignItems:'center'},
+  codeInput:{width:'100%',borderWidth:1,borderColor:'#4F4F4F',borderRadius:8,
+             paddingVertical:10,paddingHorizontal:15,color:'#DFDCD9',fontSize:16,
+             textAlign:'center',marginBottom:10},
+  err:{color:'#D9534F',marginBottom:8},
+  joinGo:{backgroundColor:'#CE975E',borderRadius:8,paddingVertical:12,
+          paddingHorizontal:30,alignSelf:'stretch',alignItems:'center'},
+  joinGoTxt:{color:'#141414',fontSize:16,fontWeight:'600'},
 });

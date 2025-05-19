@@ -76,7 +76,19 @@ export default function Index() {
       try {
         const { data } = await generateClient().graphql({
           query: listEvents,
-          variables: { filter: { liquorbotId: { eq: Number(liquorbotId) } } },
+          variables: {
+            filter: {
+              and: [
+                { liquorbotId: { eq: Number(liquorbotId) } },
+                {
+                  or: [
+                    { owner:       { eq: currentUser } },
+                    { guestOwners: { contains: currentUser } },
+                  ],
+                },
+              ],
+            },
+          },
           authMode: 'userPool',
         });
         

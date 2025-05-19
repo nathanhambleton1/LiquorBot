@@ -20,6 +20,12 @@
       },
       "api": {
         "LiquorBot": {}
+      },
+      "function": {
+        "joinEventFunction": {
+          "deploymentBucketName": "amplify-liquorbot-dev-a9244-deployment",
+          "s3Key": "amplify-builds/joinEventFunction-54434c5168596d516459-build.zip"
+        }
       }
     }
   }

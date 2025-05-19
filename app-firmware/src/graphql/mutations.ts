@@ -446,3 +446,29 @@ export const deleteUserProfile = /* GraphQL */ `mutation DeleteUserProfile(
   APITypes.DeleteUserProfileMutationVariables,
   APITypes.DeleteUserProfileMutation
 >;
+export const joinEvent = /* GraphQL */ `mutation JoinEvent($inviteCode: String!) {
+  joinEvent(inviteCode: $inviteCode) {
+    id
+    name
+    description
+    location
+    startTime
+    endTime
+    liquorbotId
+    inviteCode
+    drinkIDs
+    guestOwners
+    guests {
+      nextToken
+      __typename
+    }
+    createdAt
+    updatedAt
+    owner
+    __typename
+  }
+}
+` as GeneratedMutation<
+  APITypes.JoinEventMutationVariables,
+  APITypes.JoinEventMutation
+>;
