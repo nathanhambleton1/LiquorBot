@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
   },
    mainTile: {
     flex: 1,
-    backgroundColor: '#1F1F1F',
+    backgroundColor: 'rgba(31, 31, 31, 0.1)',
     borderRadius: 20,
     padding: 16,
     marginRight: 12,
@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
   },
   smallTile: {
     height: '48%',
-    backgroundColor: 'rgba(31, 31, 31, 0.95)',
+    backgroundColor: 'rgba(31, 31, 31, 0.1)', // Semi-transparent background
     borderRadius: 16,
     padding: 12,
     overflow: 'hidden',
