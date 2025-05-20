@@ -29,6 +29,7 @@ import { fetchAuthSession } from '@aws-amplify/auth';
 import type { RecipeIngredient, CustomRecipe } from '../src/API';
 import { on } from '../src/event-bus';
 import { useFocusEffect } from 'expo-router';
+import { listCustomRecipes } from '../src/graphql/queries';
 
 Amplify.configure(config);
 const client = generateClient();
@@ -45,42 +46,30 @@ const parseIng = (d: Drink): number[] => {
     ? d.ingredients.split(',').map(c => +c.split(':')[0])
     : [];
 };
-const fetchMyRecipes = async (user: string, setAD: React.Dispatch<React.SetStateAction<Drink[]>>) => {
+const fetchMyRecipes = async (
+  user: string,
+  setAD: React.Dispatch<React.SetStateAction<Drink[]>>
+) => {
   try {
+    /*  No filter → AppSync returns ONLY the caller’s recipes because
+        owner-based auth blocks everything else.                          */
     const { data } = await client.graphql({
-      query: /* GraphQL */ `
-        query ListMyRecipes($owner: String!) {
-          listCustomRecipes(filter: { owner: { eq: $owner } }) {
-            items {
-              id
-              name
-              image
-              owner
-              ingredients {
-                ingredientID
-                amount
-                priority
-              }
-            }
-          }
-        }
-      `,
-      variables: { owner: user },
+      query: listCustomRecipes,
       authMode: 'userPool',
-    }) as { data: { listCustomRecipes: { items: any[] } } };
+    }) as { data: any };
 
-    const customs: Drink[] = data.listCustomRecipes.items      // keep only mine
-      .filter(r => r.owner === user)
-      .map(r => ({
-        id: r.id,
-        name: r.name,
-        category: 'Custom',
-        image: r.image,
-        isCustom: true,
-        ingArr: r.ingredients ?? [],
-      }));
+    const customs: Drink[] =
+      (data.listCustomRecipes?.items ?? [])
+        .filter((r: any) => r && r.owner === user)
+        .map((r: any) => ({
+          id:   r.id,
+          name: r.name,
+          category: 'Custom',
+          image: r.image ?? '',
+          isCustom: true,
+          ingArr:  r.ingredients ?? [],
+        }));
 
-    /* de-duplicate so reopening the screen doesn’t double-add anything */
     setAD(prev => {
       const seen = new Set(prev.map(d => d.id));
       return [...prev, ...customs.filter(c => !seen.has(c.id))];
@@ -261,6 +250,7 @@ export default function EventsScreen(){
           getUrl({key:'drinkMenu/ingredients.json'})]);
         const[dRes,iRes]=await Promise.all([fetch(dUrl.url),fetch(iUrl.url)]);
         setAD(await dRes.json());setIng(await iRes.json());
+        if (currentUser) {await fetchMyRecipes(currentUser, setAD);}
       }catch(e){console.error(e);}finally{setLoad(false);}
     })();
   },[]);
@@ -375,19 +365,24 @@ export default function EventsScreen(){
       };
 
       fetchCustomRecipes();
-
-      // Combine both drink types
-      const standardDrinks = (existingEvent.drinkIDs || [])
-        .map(id => allDrinks.find(d => Number(d.id) === id))
-        .filter(Boolean) as Drink[];
-        
-      const customDrinks = (existingEvent.customRecipeIDs || [])
-        .map(id => allDrinks.find(d => d.id === id))
-        .filter(Boolean) as Drink[];
-
-      setMenu([...standardDrinks, ...customDrinks]);
     }
   }, [existingEvent, allDrinks]);
+
+  // ── whenever either side changes, rebuild menu ─────────────
+  useEffect(() => {
+    if (!existingEvent) return;
+
+    const standard = (existingEvent.drinkIDs || [])
+      .map(id => allDrinks.find(d => Number(d.id) === id))
+      .filter(Boolean) as Drink[];
+
+    const custom   = (existingEvent.customRecipeIDs || [])
+      .map(id => allDrinks.find(d => d.id === id))
+      .filter(Boolean) as Drink[];
+
+    setMenu([...standard, ...custom]);
+  }, [existingEvent, allDrinks]);
+
 
   /* auto‑select today */
   useEffect(() => {
