@@ -49,8 +49,8 @@ const fetchMyRecipes = async (user: string, setAD: React.Dispatch<React.SetState
   try {
     const { data } = await client.graphql({
       query: /* GraphQL */ `
-        query ListMyRecipes {
-          listCustomRecipes {
+        query ListMyRecipes($owner: String!) {
+          listCustomRecipes(filter: { owner: { eq: $owner } }) {
             items {
               id
               name
@@ -65,6 +65,7 @@ const fetchMyRecipes = async (user: string, setAD: React.Dispatch<React.SetState
           }
         }
       `,
+      variables: { owner: user },
       authMode: 'userPool',
     }) as { data: { listCustomRecipes: { items: any[] } } };
 

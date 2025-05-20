@@ -61,7 +61,7 @@ type RecipeIngredient {
   priority: Int
 }
 
-type CustomRecipe @model @auth(rules: [{allow: public}, {allow: owner}]) {
+type CustomRecipe @model @auth(rules: [{ allow: public, provider: apiKey, operations: [read] }, { allow: owner, provider: userPools, operations: [create, read, update, delete] }]) {
   id: ID!
   name: String!
   description: String

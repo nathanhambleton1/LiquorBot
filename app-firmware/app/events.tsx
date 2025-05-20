@@ -155,13 +155,22 @@ export default function EventManager() {
       const fetchedRecipes = [];
       for (const id of uniqueIDs) {
         try {
-          const { data } = await client.graphql({
-            query: getCustomRecipe,
-            variables: { id },
-            authMode: 'apiKey',
-          });
-          if (data.getCustomRecipe) {
-            fetchedRecipes.push(data.getCustomRecipe);
+          try {
+            const { data } = await client.graphql({
+              query: getCustomRecipe,
+              variables: { id },
+              authMode: 'apiKey',
+            });
+            if(data?.getCustomRecipe) {
+              fetchedRecipes.push(data.getCustomRecipe);
+            }
+          } catch (error) {
+            console.error(`Error fetching recipe ${id}:`, error);
+            // Add fallback
+            fetchedRecipes.push({ 
+              id, 
+              name: `Custom Drink (${id.slice(0,6)})` 
+            });
           }
         } catch (error) {
           console.error(`Error fetching custom recipe ${id}:`, error);
