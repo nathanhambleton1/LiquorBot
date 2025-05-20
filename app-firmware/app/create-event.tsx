@@ -46,20 +46,16 @@ const parseIng = (d: Drink): number[] => {
     ? d.ingredients.split(',').map(c => +c.split(':')[0])
     : [];
 };
-const fetchMyRecipes = async (
-  user: string,
-  setAD: React.Dispatch<React.SetStateAction<Drink[]>>
-) => {
+const fetchMyRecipes = async (user: string, setAD: React.Dispatch<React.SetStateAction<Drink[]>>) => {
   try {
-    /*  No filter → AppSync returns ONLY the caller’s recipes because
-        owner-based auth blocks everything else.                          */
-    const { data } = await client.graphql({
-      query: listCustomRecipes,
+    const result = await client.graphql({
+      query: listCustomRecipesWithIngredients, // Use the updated query
       authMode: 'userPool',
-    }) as { data: any };
+    });
+    const data = (result as any).data;
 
     const customs: Drink[] =
-      (data.listCustomRecipes?.items ?? [])
+      (data?.listCustomRecipes?.items ?? [])
         .filter((r: any) => r && r.owner === user)
         .map((r: any) => ({
           id:   r.id,
@@ -78,6 +74,24 @@ const fetchMyRecipes = async (
     console.error('Could not load custom recipes', err);
   }
 };
+
+const listCustomRecipesWithIngredients = /* GraphQL */ `
+  query ListCustomRecipes {
+    listCustomRecipes {
+      items {
+        id
+        name
+        image
+        ingredients {
+          ingredientID
+          amount
+          priority
+        }
+        owner
+      }
+    }
+  }
+`;
 
 /* ───────────────── types ───────────────── */
 type Drink = {
@@ -241,20 +255,6 @@ export default function EventsScreen(){
     .setLayoutAnimationEnabledExperimental){UIManager
       .setLayoutAnimationEnabledExperimental(true);} },[]);
 
-  /* fetch drinks */
-  useEffect(()=>{
-    (async()=>{
-      try{
-        const[dUrl,iUrl]=await Promise.all([
-          getUrl({key:'drinkMenu/drinks.json'}),
-          getUrl({key:'drinkMenu/ingredients.json'})]);
-        const[dRes,iRes]=await Promise.all([fetch(dUrl.url),fetch(iUrl.url)]);
-        setAD(await dRes.json());setIng(await iRes.json());
-        if (currentUser) {await fetchMyRecipes(currentUser, setAD);}
-      }catch(e){console.error(e);}finally{setLoad(false);}
-    })();
-  },[]);
-
   /* current user */
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   useEffect(() => {
@@ -268,6 +268,38 @@ export default function EventsScreen(){
       }
     })();
   }, []);
+
+  /* fetch drinks */
+  useEffect(() => {
+    (async() => {
+      try {
+        // First get the storage URLs
+        const [drinksUrl, ingredientsUrl] = await Promise.all([
+          getUrl({ key: 'drinkMenu/drinks.json' }),
+          getUrl({ key: 'drinkMenu/ingredients.json' })
+        ]);
+
+        // Then fetch the actual data
+        const [dRes, iRes] = await Promise.all([
+          fetch(drinksUrl.url), 
+          fetch(ingredientsUrl.url)
+        ]);
+        
+        const defaultDrinks = await dRes.json();
+        setAD(defaultDrinks);
+        setIng(await iRes.json());
+
+        // Fetch custom recipes when currentUser is available
+        if (currentUser) {
+          await fetchMyRecipes(currentUser, setAD);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoad(false);
+      }
+    })();
+  }, [currentUser]);
 
   useEffect(() => {
   const unsub = on('recipe-created', (r: CustomRecipe) => {
@@ -370,18 +402,19 @@ export default function EventsScreen(){
 
   // ── whenever either side changes, rebuild menu ─────────────
   useEffect(() => {
-    if (!existingEvent) return;
+  if (!existingEvent) return;
 
-    const standard = (existingEvent.drinkIDs || [])
-      .map(id => allDrinks.find(d => Number(d.id) === id))
-      .filter(Boolean) as Drink[];
+  // This will re-run when allDrinks updates, including custom drinks
+  const standardDrinks = existingEvent.drinkIDs?.map(id => 
+    allDrinks.find(d => Number(d.id) === id)
+  ).filter(Boolean) as Drink[];
+  
+  const customDrinks = existingEvent.customRecipeIDs?.map(id => 
+    allDrinks.find(d => d.id === id)
+  ).filter(Boolean) as Drink[];
 
-    const custom   = (existingEvent.customRecipeIDs || [])
-      .map(id => allDrinks.find(d => d.id === id))
-      .filter(Boolean) as Drink[];
-
-    setMenu([...standard, ...custom]);
-  }, [existingEvent, allDrinks]);
+  setMenu([...standardDrinks, ...customDrinks]);
+}, [existingEvent, allDrinks]);
 
 
   /* auto‑select today */
