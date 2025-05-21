@@ -8,7 +8,7 @@
 // Created:  March 1, 2025
 // -----------------------------------------------------------------------------
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ImageBackground } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { resetPassword, confirmResetPassword } from 'aws-amplify/auth';
@@ -66,127 +66,91 @@ export default function ForgotPassword() {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Back Arrow */}
-      <TouchableOpacity style={styles.backArrow} onPress={() => router.replace('/auth/sign-in')}>
-        <Ionicons name="chevron-back-outline" size={28} color="#fff" />
-      </TouchableOpacity>
+    <ImageBackground
+      source={require('@/assets/images/dark-gradient.png')}
+      style={styles.background}
+      resizeMode="cover"
+      blurRadius={5}
+    >
+      <View style={styles.container}>
+        {/* Back Arrow */}
+        <TouchableOpacity style={styles.backArrow} onPress={() => router.replace('/auth/sign-in')}>
+          <Ionicons name="chevron-back-outline" size={28} color="#fff" />
+        </TouchableOpacity>
 
-      <Text style={styles.title}>Forgot Password</Text>
+        <Text style={styles.title}>Forgot Password</Text>
 
-      {step === 'REQUEST' && (
-        <>
-          {/* Username Input */}
-          <Text style={styles.label}>Username</Text>
-          <TextInput
-            onChangeText={setUsername}
-            value={username}
-            style={styles.input}
-            autoCapitalize="none"
-          />
+        {step === 'REQUEST' && (
+          <>
+            {/* Username Input */}
+            <Text style={styles.label}>Username</Text>
+            <TextInput
+              onChangeText={setUsername}
+              value={username}
+              style={styles.input}
+              autoCapitalize="none"
+              placeholder="Enter your username"
+              placeholderTextColor="#666"
+            />
 
-          {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
-          {!!infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
+            {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+            {!!infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
 
-          {/* Submit Button */}
-          <TouchableOpacity style={styles.button} onPress={onRequestResetPress}>
-            <Text style={styles.buttonText}>Send Reset Code</Text>
-          </TouchableOpacity>
-        </>
-      )}
+            {/* Submit Button */}
+            <TouchableOpacity style={styles.button} onPress={onRequestResetPress}>
+              <Text style={styles.buttonText}>Send Reset Code</Text>
+            </TouchableOpacity>
+          </>
+        )}
 
-      {step === 'CONFIRM' && (
-        <>
-          {/* Confirmation Code Input */}
-          <Text style={styles.label}>Confirmation Code</Text>
-          <TextInput
-            onChangeText={setConfirmationCode}
-            value={confirmationCode}
-            style={styles.input}
-            autoCapitalize="none"
-          />
+        {step === 'CONFIRM' && (
+          <>
+            {/* Confirmation Code Input */}
+            <Text style={styles.label}>Confirmation Code</Text>
+            <TextInput
+              onChangeText={setConfirmationCode}
+              value={confirmationCode}
+              style={styles.input}
+              autoCapitalize="none"
+              placeholder="Enter 6-digit code"
+              placeholderTextColor="#666"
+              keyboardType="number-pad"
+            />
 
-          {/* New Password Input */}
-          <Text style={styles.label}>New Password</Text>
-          <TextInput
-            onChangeText={setNewPassword}
-            value={newPassword}
-            secureTextEntry
-            style={styles.input}
-          />
+            {/* New Password Input */}
+            <Text style={styles.label}>New Password</Text>
+            <TextInput
+              onChangeText={setNewPassword}
+              value={newPassword}
+              secureTextEntry
+              style={styles.input}
+              placeholder="Enter new password"
+              placeholderTextColor="#666"
+            />
 
-          {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
-          {!!infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
+            {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+            {!!infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
 
-          {/* Confirm Reset Button */}
-          <TouchableOpacity style={styles.button} onPress={onConfirmResetPress}>
-            <Text style={styles.buttonText}>Confirm Reset</Text>
-          </TouchableOpacity>
-        </>
-      )}
-    </View>
+            {/* Confirm Reset Button */}
+            <TouchableOpacity style={styles.button} onPress={onConfirmResetPress}>
+              <Text style={styles.buttonText}>Confirm Reset</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-    padding: 24,
-    justifyContent: 'center',
-  },
-  backArrow: {
-    position: 'absolute',
-    top: 80,
-    left: 20,
-    zIndex: 10,
-  },
-  backArrowText: {
-    fontSize: 24,
-    color: '#CE975E', // Gold color for the back arrow
-    fontWeight: 'bold',
-  },
-  title: {
-    fontSize: 36,
-    color: '#fff',
-    marginBottom: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  label: {
-    fontSize: 16,
-    color: '#fff',
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  input: {
-    backgroundColor: '#141414',
-    marginBottom: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    fontSize: 16,
-    color: '#DFDCD9',
-  },
-  button: {
-    backgroundColor: '#CE975E',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  buttonText: {
-    color: '#DFDCD9',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  error: {
-    color: 'red',
-    marginBottom: 8,
-  },
-  info: {
-    color: '#CE975E',
-    marginBottom: 10,
-  },
+  background:            { flex: 1, resizeMode: 'cover' },
+  container:             { flex: 1, padding: 24, justifyContent: 'center' },
+  backArrow:             { position: 'absolute', top: 60, left: 20, zIndex: 10 },
+  title:                 { fontSize: 36, color: '#fff', marginBottom: 24, fontWeight: 'bold', textAlign: 'center' },
+  label:                 { fontSize: 16, color: '#fff', marginTop: 12, marginBottom: 4 },
+  input:                 { backgroundColor: 'rgba(20, 20, 20, 0.5)', marginBottom: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, color: '#DFDCD9' },
+  button:                { backgroundColor: '#CE975E', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8, alignItems: 'center', marginTop: 20 },
+  buttonText:            { color: '#DFDCD9', fontSize: 18, fontWeight: 'bold' },
+  error:                 { color: 'red', marginBottom: 8 },
+  info:                  { color: '#CE975E', marginBottom: 10 },
 });
