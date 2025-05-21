@@ -6,6 +6,7 @@ import React, {
   useContext,
   ReactNode,
   useRef,
+  useCallback,
 } from 'react';
 import { PubSub } from '@aws-amplify/pubsub';
 import { Amplify } from 'aws-amplify';
@@ -25,6 +26,7 @@ interface LiquorBotContextValue {
   forceDisconnect: () => void;
   updateSlots: (newSlots: number[]) => void;
   setLiquorbotId: (id: string) => void;
+  reconnect: () => void;
 }
 
 const LiquorBotContext = createContext<LiquorBotContextValue>({
@@ -34,6 +36,7 @@ const LiquorBotContext = createContext<LiquorBotContextValue>({
   forceDisconnect: () => {},
   updateSlots: () => {},
   setLiquorbotId: () => {},
+  reconnect: () => {},
 });
 
 export function LiquorBotProvider({ children }: { children: ReactNode }) {
@@ -42,6 +45,11 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
   const [slots, setSlots] = useState<number[]>(Array(15).fill(0));
   const [liquorbotId, setLiquorbotId] = useState('000');
   const lastHeartbeatRef = useRef(lastHeartbeat);
+  const [reconnectTrigger, setReconnectTrigger] = useState(0);
+
+  const reconnect = useCallback(() => {
+    setReconnectTrigger(prev => prev + 1);
+  }, []);
 
   // Sync ref with state
   useEffect(() => {
@@ -83,7 +91,7 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
       if (subscription) subscription.unsubscribe();
       if (retryTimeout) clearTimeout(retryTimeout);
     };
-  }, [liquorbotId]);
+  }, [liquorbotId, reconnectTrigger]);
 
   // Fetch config when connected
   useEffect(() => {
@@ -122,7 +130,7 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
       if (subscription) subscription.unsubscribe();
       if (retryTimeout) clearTimeout(retryTimeout);
     };
-  }, [liquorbotId]);
+  }, [liquorbotId, reconnectTrigger]);
 
   // Connection status check interval
   useEffect(() => {
@@ -152,7 +160,8 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
           slots: newSlots
         }
       }).catch(console.error);
-    }
+    },
+    reconnect,
   };
 
   return (

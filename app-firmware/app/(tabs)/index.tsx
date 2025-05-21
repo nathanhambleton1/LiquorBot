@@ -40,7 +40,7 @@ export default function Index() {
   const glowAnimation = useRef(new Animated.Value(1)).current;
 
   /* LiquorBot connectivity (UI only) */
-  const { isConnected, liquorbotId } = useLiquorBot();
+  const { isConnected, liquorbotId, reconnect } = useLiquorBot();
 
   /* Ensure we attempt the attach only once per app‑launch */
   const attemptedAttach = useRef(false);
@@ -150,6 +150,10 @@ export default function Index() {
             new AttachPolicyCommand({ policyName: POLICY_NAME, target: identityId }),
           );
           console.log('✔ IoT policy attached to', identityId);
+
+          // Force credentials refresh and reconnect
+          await fetchAuthSession({ forceRefresh: true });
+          reconnect(); // Trigger reconnection
         } catch (err: any) {
           /* Ignore “already exists”, warn on anything else */
           if (err?.name !== 'ResourceAlreadyExistsException') {
