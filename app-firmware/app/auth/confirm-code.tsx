@@ -6,16 +6,16 @@
 // Author: Nathan Hambleton
 // Updated: Apr 23 2025
 // -----------------------------------------------------------------------------
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ImageBackground } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { confirmSignUp, signIn } from 'aws-amplify/auth';
+import { confirmSignUp, signIn, resendSignUpCode } from 'aws-amplify/auth';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function ConfirmCode() {
   const router = useRouter();
-  const { username, password: routePwd } =
-    useLocalSearchParams<{ username?: string; password?: string }>();
+  const { username, password: routePwd, fromSignup } = 
+    useLocalSearchParams<{ username?: string; password?: string; fromSignup?: string }>();
 
   const [confirmationCode, setConfirmationCode] = useState('');
   const [confirmationSuccess, setConfirmationSuccess] = useState(false);
@@ -23,19 +23,42 @@ export default function ConfirmCode() {
   const [infoMessage, setInfoMessage] = useState('');
   const pwd = routePwd ?? '';
 
+  // Resend logic with sign-up context check
+  useEffect(() => {
+    const handleResend = async () => {
+      if (!username || confirmationSuccess) return;
+      
+      try {
+        // Only resend if NOT coming from sign-up flow
+        if (fromSignup !== '1') {
+          await resendSignUpCode({ username });
+          setInfoMessage('A new verification code has been sent to your email.');
+        }
+      } catch (error: any) {
+        if (error.name === 'InvalidParameterException' && 
+            error.message.includes('already confirmed')) {
+          setConfirmationSuccess(true);
+          setInfoMessage('Your account is already confirmed!');
+        } else {
+          setErrorMessage(error.message || 'Failed to send new code. Try again later.');
+        }
+      }
+    };
+
+    handleResend();
+  }, []);
+
   /* ───────────────────────── handlers ───────────────────────── */
   const doConfirm = async () => {
-    setErrorMessage(''); setInfoMessage('');
+    setErrorMessage(''); 
+    setInfoMessage('');
     try {
       await confirmSignUp({ username: username!, confirmationCode });
       setConfirmationSuccess(true);
       setInfoMessage('Your account has been confirmed!');
     } catch (e: any) {
-      // if it was already confirmed, treat that as success
-      if (
-        (e?.code === 'NotAuthorizedException' || e?.name === 'NotAuthorizedException') &&
-        /already.*confirmed/i.test(e?.message ?? '')
-      ) {
+      if ((e?.code === 'NotAuthorizedException' || e?.name === 'NotAuthorizedException') &&
+          /already.*confirmed/i.test(e?.message ?? '')) {
         setConfirmationSuccess(true);
         setInfoMessage('Your account is already confirmed!');
         return;
