@@ -41,7 +41,11 @@
     "serviceName": "Cognito",
     "useDefault": "manual",
     "userPoolGroups": false,
-    "userPoolGroupList": [],
+    "userPoolGroupList": [
+      "EventAttendee",
+      "EventManager",
+      "Owner"
+    ],
     "adminQueries": false,
     "thirdPartyAuth": false,
     "authProviders": [],

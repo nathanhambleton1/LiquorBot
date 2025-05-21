@@ -1,0 +1,14 @@
+[
+  {
+    "groupName": "EventAttendee",
+    "precedence": 1
+  },
+  {
+    "groupName": "EventManager",
+    "precedence": 2
+  },
+  {
+    "groupName": "Owner",
+    "precedence": 3
+  }
+]

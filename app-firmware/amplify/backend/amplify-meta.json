@@ -97,11 +97,28 @@
         "IdentityPoolName": "testAuthIdentityPool__dev",
         "UserPoolName": "LiquorBot"
       },
-      "lastPushTimeStamp": "2025-05-19T23:18:00.804Z",
+      "lastPushTimeStamp": "2025-05-21T02:52:53.472Z",
       "providerMetadata": {
         "s3TemplateURL": "https://s3.amazonaws.com/amplify-liquorbot-dev-a9244-deployment/amplify-cfn-templates/auth/LiquorBot-cloudformation-template.json",
         "logicalId": "authLiquorBot"
       }
+    },
+    "userPoolGroups": {
+      "service": "Cognito-UserPool-Groups",
+      "providerPlugin": "awscloudformation",
+      "dependsOn": [
+        {
+          "category": "auth",
+          "resourceName": "LiquorBot",
+          "attributes": [
+            "UserPoolId",
+            "AppClientIDWeb",
+            "AppClientID",
+            "IdentityPoolId"
+          ]
+        }
+      ],
+      "lastPushTimeStamp": "2025-05-21T02:52:53.481Z"
     }
   },
   "function": {
