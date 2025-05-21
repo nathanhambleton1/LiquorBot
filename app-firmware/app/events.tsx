@@ -475,7 +475,6 @@ export default function EventManager() {
         </TouchableOpacity>
         <TouchableOpacity style={styles.newBtn} onPress={() => router.push('/create-event')}>
           <Ionicons name="add" size={28} color="#141414"/>
-          <Text style={styles.newTxt}>New Event</Text>
         </TouchableOpacity>
       </View>
 
@@ -567,12 +566,12 @@ const styles = StyleSheet.create({
   emptyTxt:{color:'#4F4F4F',textAlign:'center',marginTop:20,fontSize:14},
 
   bottom:{position:'absolute',bottom:30,left:0,right:0,flexDirection:'row',
-          justifyContent:'space-between',paddingHorizontal:20},
+            justifyContent:'flex-end',paddingHorizontal:20},
   joinBtn:{flexDirection:'row',alignItems:'center',backgroundColor:'#CE975E',
-           borderRadius:25,paddingVertical:12,paddingHorizontal:20,gap:8},
+            borderRadius:25,paddingVertical:12,paddingHorizontal:20, marginRight:12},
   joinTxt:{color:'#141414',fontSize:16,fontWeight:'600'},
   newBtn:{flexDirection:'row',alignItems:'center',backgroundColor:'#CE975E',
-          borderRadius:25,paddingVertical:12,paddingHorizontal:20,gap:8,
+          borderRadius:25,paddingVertical:12,paddingHorizontal:12,gap:8,
           ...Platform.select({ios:{shadowColor:'#000',shadowOffset:{width:0,height:2},
           shadowOpacity:0.2,shadowRadius:4},android:{elevation:4}})},
   newTxt:{color:'#141414',fontSize:16,fontWeight:'600'},
