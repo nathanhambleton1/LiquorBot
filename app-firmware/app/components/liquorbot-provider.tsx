@@ -5,6 +5,7 @@ import React, {
   useEffect,
   useContext,
   ReactNode,
+  useRef,
 } from 'react';
 import { PubSub } from '@aws-amplify/pubsub';
 import { Amplify } from 'aws-amplify';
@@ -40,6 +41,12 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
   const [lastHeartbeat, setLastHeartbeat] = useState<number>(0);
   const [slots, setSlots] = useState<number[]>(Array(15).fill(0));
   const [liquorbotId, setLiquorbotId] = useState('000');
+  const lastHeartbeatRef = useRef(lastHeartbeat);
+
+  // Sync ref with state
+  useEffect(() => {
+    lastHeartbeatRef.current = lastHeartbeat;
+  }, [lastHeartbeat]);
 
   const handleSlotConfig = (message: any) => {
     if (message.action === 'CURRENT_CONFIG' && Array.isArray(message.slots)) {
@@ -54,16 +61,29 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Subscribe to config updates
+  // Subscribe to config updates with retry logic
   useEffect(() => {
     const slotConfigTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
-    const subscription = pubsub.subscribe({ topics: [slotConfigTopic] }).subscribe({
-      next: (data) => handleSlotConfig((data as any)?.value ?? data),
-      error: (error) => console.error('Config subscription error:', error),
-    });
+    let subscription: any;
+    let retryTimeout: NodeJS.Timeout;
 
-    return () => subscription.unsubscribe();
-  }, [liquorbotId]); // Add liquorbotId as dependency
+    const subscribe = () => {
+      subscription = pubsub.subscribe({ topics: [slotConfigTopic] }).subscribe({
+        next: (data) => handleSlotConfig((data as any)?.value ?? data),
+        error: (error) => {
+          console.error('Config subscription error:', error);
+          retryTimeout = setTimeout(subscribe, 5000);
+        },
+      });
+    };
+
+    subscribe();
+
+    return () => {
+      if (subscription) subscription.unsubscribe();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
+  }, [liquorbotId]);
 
   // Fetch config when connected
   useEffect(() => {
@@ -74,27 +94,45 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
         message: { action: 'GET_CONFIG' }
       }).catch(error => console.error('Config fetch error:', error));
     }
-  }, [isConnected, liquorbotId]); // Add liquorbotId as dependency
+  }, [isConnected, liquorbotId]);
 
-  // Heartbeat and connection management
+  // Heartbeat subscription with retry logic
   useEffect(() => {
     const heartbeatTopic = `liquorbot/liquorbot${liquorbotId}/heartbeat`;
-    const subscription = pubsub.subscribe({ topics: [heartbeatTopic] }).subscribe({
-      next: (data) => {
-        setLastHeartbeat(Date.now());
-      },
-      error: (error) => console.error('Heartbeat subscription error:', error),
-    });
+    let subscription: any;
+    let retryTimeout: NodeJS.Timeout;
 
-    const intervalId = setInterval(() => {
-      setIsConnected(Date.now() - lastHeartbeat < 7000);
-    }, 1000);
+    const subscribe = () => {
+      subscription = pubsub.subscribe({ topics: [heartbeatTopic] }).subscribe({
+        next: (data) => {
+          const now = Date.now();
+          setLastHeartbeat(now);
+          lastHeartbeatRef.current = now;
+        },
+        error: (error) => {
+          console.error('Heartbeat subscription error:', error);
+          retryTimeout = setTimeout(subscribe, 5000);
+        },
+      });
+    };
+
+    subscribe();
 
     return () => {
-      subscription.unsubscribe();
-      clearInterval(intervalId);
+      if (subscription) subscription.unsubscribe();
+      if (retryTimeout) clearTimeout(retryTimeout);
     };
-  }, [liquorbotId, lastHeartbeat]); // Add liquorbotId as dependency
+  }, [liquorbotId]);
+
+  // Connection status check interval
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const timeSince = Date.now() - lastHeartbeatRef.current;
+      setIsConnected(timeSince < 7000);
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   const contextValue: LiquorBotContextValue = {
     isConnected,
