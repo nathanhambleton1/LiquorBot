@@ -88,19 +88,18 @@ export default function SignIn() {
       source={require('@/assets/images/dark-gradient.png')}
       style={styles.background}
       resizeMode="cover"
+      blurRadius={5}
     >
       <View style={styles.container}>
         <Text style={styles.title}>Sign In</Text>
 
         <Text style={styles.label}>Username</Text>
-        <View style={styles.inputContainer}>
-          <TextInput
-            value={username}
-            onChangeText={setUsername}
-            style={styles.input}
-            autoCapitalize="none"
-          />
-        </View>
+        <TextInput
+          value={username}
+          onChangeText={setUsername}
+          style={styles.input}
+          autoCapitalize="none"
+        />
 
         <Text style={styles.label}>Password</Text>
         <View style={styles.inputContainer}>
@@ -149,37 +148,18 @@ export default function SignIn() {
 }
 
 const styles = StyleSheet.create({
-  background: { flex: 1, resizeMode: 'cover' },
-  container: { flex: 1, justifyContent: 'center', padding: 24 },
-  title: { fontSize: 48, color: '#fff', marginBottom: 24, fontWeight: 'bold' },
-  label: { fontSize: 16, color: '#fff', marginBottom: -5, marginTop: 10 },
-  input: {
-    backgroundColor: 'rgba(20, 20, 20, 0.5)',
-    marginVertical: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    fontSize: 16,
-    color: '#DFDCD9',
-  },
-  inputContainer: {
-    marginVertical: 12,
-    borderRadius: 8,
-    backgroundColor: 'rgba(20, 20, 20, 0.5)',
-  },
-  eyeIcon: { position: 'absolute', right: 16, top: '50%', transform: [{ translateY: -12 }] },
-  button: {
-    backgroundColor: '#CE975E',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  buttonText: { color: '#DFDCD9', fontSize: 18, fontWeight: 'bold' },
-  forgotPassword: { alignSelf: 'flex-end', marginTop: 8, marginBottom: 16 },
-  forgotPasswordText: { color: '#CE975E', fontSize: 14, fontWeight: 'bold' },
-  signUpContainer: { marginTop: 100, alignItems: 'center' },
-  signUpText: { fontSize: 14, color: '#fff' },
-  signUpLink: { color: '#CE975E', fontWeight: 'bold' },
+  background:          { flex: 1, resizeMode: 'cover' },
+  container:           { flex: 1, justifyContent: 'center', padding: 24 },
+  title:               { fontSize: 48, color: '#fff', marginBottom: 24, fontWeight: 'bold' },
+  label:               { fontSize: 16, color: '#fff', marginBottom: -5, marginTop: 10 },
+  input:               { backgroundColor: 'rgba(20, 20, 20, 0.5)', marginVertical: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, color: '#DFDCD9' },
+  inputContainer:      { position: 'relative' },
+  eyeIcon:             { position: 'absolute', right: 16, top: '50%', transform: [{ translateY: -12 }] },
+  button:              { backgroundColor: '#CE975E', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8, alignItems: 'center', marginTop: 20 },
+  buttonText:          { color: '#DFDCD9', fontSize: 18, fontWeight: 'bold' },
+  forgotPassword:      { alignSelf: 'flex-end', marginTop: 8, marginBottom: 16 },
+  forgotPasswordText:  { color: '#CE975E', fontSize: 14, fontWeight: 'bold' },
+  signUpContainer:     { marginTop: 100, alignItems: 'center' },
+  signUpText:          { fontSize: 14, color: '#fff' },
+  signUpLink:          { color: '#CE975E', fontWeight: 'bold' },
 });

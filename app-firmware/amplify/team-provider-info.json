@@ -13,7 +13,8 @@
     },
     "categories": {
       "auth": {
-        "LiquorBot": {}
+        "LiquorBot": {},
+        "userPoolGroups": {}
       },
       "storage": {
         "s3liquorbotstorage8cb6bcd8": {}
