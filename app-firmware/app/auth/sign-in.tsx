@@ -13,6 +13,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  ImageBackground,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { signIn, getCurrentUser } from 'aws-amplify/auth';
@@ -83,73 +84,102 @@ export default function SignIn() {
 
   /* ───────────────────────── UI ───────────────────────── */
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Sign In</Text>
+    <ImageBackground
+      source={require('@/assets/images/dark-gradient.png')}
+      style={styles.background}
+      resizeMode="cover"
+    >
+      <View style={styles.container}>
+        <Text style={styles.title}>Sign In</Text>
 
-      <Text style={styles.label}>Username</Text>
-      <TextInput
-        value={username}
-        onChangeText={setUsername}
-        style={styles.input}
-        autoCapitalize="none"
-      />
-
-      <Text style={styles.label}>Password</Text>
-      <View style={{ position: 'relative' }}>
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          style={styles.input}
-          secureTextEntry={!isPasswordVisible}
-        />
-        <TouchableOpacity
-          onPress={() => setIsPasswordVisible(!isPasswordVisible)}
-          style={styles.eyeIcon}
-        >
-          <MaterialIcons
-            name={isPasswordVisible ? 'visibility' : 'visibility-off'}
-            size={24}
-            color="#4f4f4f"
+        <Text style={styles.label}>Username</Text>
+        <View style={styles.inputContainer}>
+          <TextInput
+            value={username}
+            onChangeText={setUsername}
+            style={styles.input}
+            autoCapitalize="none"
           />
+        </View>
+
+        <Text style={styles.label}>Password</Text>
+        <View style={styles.inputContainer}>
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            style={styles.input}
+            secureTextEntry={!isPasswordVisible}
+          />
+          <TouchableOpacity
+            onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+            style={styles.eyeIcon}
+          >
+            <MaterialIcons
+              name={isPasswordVisible ? 'visibility' : 'visibility-off'}
+              size={24}
+              color="#4f4f4f"
+            />
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          onPress={() => router.push('./forgot-password')}
+          style={styles.forgotPassword}
+        >
+          <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
         </TouchableOpacity>
-      </View>
 
-      <TouchableOpacity
-        onPress={() => router.push('./forgot-password')}
-        style={styles.forgotPassword}
-      >
-        <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-      </TouchableOpacity>
+        {!!error && <Text style={{ color: 'red', marginTop: 10 }}>{error}</Text>}
 
-      {!!error && <Text style={{ color: 'red', marginTop: 10 }}>{error}</Text>}
+        <TouchableOpacity style={styles.button} onPress={onSignInPress}>
+          <Text style={styles.buttonText}>Sign In</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity style={styles.button} onPress={onSignInPress}>
-        <Text style={styles.buttonText}>Sign In</Text>
-      </TouchableOpacity>
-
-      <View style={styles.signUpContainer}>
-        <Text style={styles.signUpText}>
-          Don&apos;t have an account?{' '}
-          <Text style={styles.signUpLink} onPress={() => router.push('/auth/sign-up')}>
-            Sign Up
+        <View style={styles.signUpContainer}>
+          <Text style={styles.signUpText}>
+            Don&apos;t have an account?{' '}
+            <Text style={styles.signUpLink} onPress={() => router.push('/auth/sign-up')}>
+              Sign Up
+            </Text>
           </Text>
-        </Text>
+        </View>
       </View>
-    </View>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container:{ flex:1, backgroundColor:'#000', justifyContent:'center', padding:24 },
-  title:{ fontSize:48, color:'#fff', marginBottom:24, fontWeight:'bold' },
-  label:{ fontSize:16, color:'#fff', marginBottom:-5, marginTop:10 },
-  input:{ backgroundColor:'#141414', marginVertical:12, paddingHorizontal:16, paddingVertical:12, borderRadius:8, fontSize:16, color:'#DFDCD9' },
-  eyeIcon:{ position:'absolute', right:16, top:'50%', transform:[{ translateY:-12 }] },
-  button:{ backgroundColor:'#CE975E', paddingVertical:12, paddingHorizontal:16, borderRadius:8, alignItems:'center', marginTop:20 },
-  buttonText:{ color:'#DFDCD9', fontSize:18, fontWeight:'bold' },
-  forgotPassword:{ alignSelf:'flex-end', marginTop:8, marginBottom:16 },
-  forgotPasswordText:{ color:'#CE975E', fontSize:14, fontWeight:'bold' },
-  signUpContainer:{ marginTop:100, alignItems:'center' },
-  signUpText:{ fontSize:14, color:'#fff' },
-  signUpLink:{ color:'#CE975E', fontWeight:'bold' },
+  background: { flex: 1, resizeMode: 'cover' },
+  container: { flex: 1, justifyContent: 'center', padding: 24 },
+  title: { fontSize: 48, color: '#fff', marginBottom: 24, fontWeight: 'bold' },
+  label: { fontSize: 16, color: '#fff', marginBottom: -5, marginTop: 10 },
+  input: {
+    backgroundColor: 'rgba(20, 20, 20, 0.5)',
+    marginVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    fontSize: 16,
+    color: '#DFDCD9',
+  },
+  inputContainer: {
+    marginVertical: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(20, 20, 20, 0.5)',
+  },
+  eyeIcon: { position: 'absolute', right: 16, top: '50%', transform: [{ translateY: -12 }] },
+  button: {
+    backgroundColor: '#CE975E',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  buttonText: { color: '#DFDCD9', fontSize: 18, fontWeight: 'bold' },
+  forgotPassword: { alignSelf: 'flex-end', marginTop: 8, marginBottom: 16 },
+  forgotPasswordText: { color: '#CE975E', fontSize: 14, fontWeight: 'bold' },
+  signUpContainer: { marginTop: 100, alignItems: 'center' },
+  signUpText: { fontSize: 14, color: '#fff' },
+  signUpLink: { color: '#CE975E', fontWeight: 'bold' },
 });
