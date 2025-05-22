@@ -218,7 +218,7 @@ export default function Index() {
                 <Ionicons name="calendar" size={32} color="#DFDCD9" />
               </View>
               <View style={styles.mainTextContainer}>
-                <Text style={styles.mainTileTitle}>Manage Events</Text>
+                <Text style={styles.mainTileTitle}>Events</Text>
                 <Text style={styles.mainTileSubtext}>Upcoming Events</Text>
               </View>
             </View>
