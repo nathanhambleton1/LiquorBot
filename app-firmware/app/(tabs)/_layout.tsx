@@ -24,12 +24,15 @@ export default function TabLayout() {
   return (
     <SafeAreaView 
       style={{ 
-        flex: 1, 
-        backgroundColor: '#000',
-        paddingTop: insets.top // Apply top inset manually
+        flex: 1,
+        backgroundColor: 'transparent', // Changed from #000
       }}
     >
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <StatusBar 
+        barStyle="light-content" 
+        translucent 
+        backgroundColor="transparent" 
+      />
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: '#CE975E',
@@ -47,8 +50,8 @@ export default function TabLayout() {
             bottom: 0,
             elevation: 0,
             shadowOpacity: 0,
-            height: 40 + insets.bottom, // Include bottom inset in height
-            paddingBottom: insets.bottom > 0 ? 10 : 0 // Add padding if bottom inset exists
+            height: 40 + insets.bottom,
+            paddingBottom: insets.bottom > 0 ? 5 : 0
           },
         }}
       >
