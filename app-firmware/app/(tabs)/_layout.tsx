@@ -11,6 +11,7 @@ import { Tabs, Redirect } from 'expo-router';
 import { useAuthenticator } from '@aws-amplify/ui-react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { SafeAreaView, StatusBar } from 'react-native';
+import { SafeAreaView as SAView } from 'react-native-safe-area-context';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabLayout() {
@@ -22,12 +23,9 @@ export default function TabLayout() {
   }
 
   return (
-    <SafeAreaView 
-      style={{ 
-        flex: 1, 
-        backgroundColor: '#000',
-        paddingTop: insets.top // Apply top inset manually
-      }}
+    <SAView
+      edges={['left', 'right']}
+      style={{ flex: 1, backgroundColor: 'transparent' }}
     >
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       <Tabs
@@ -47,8 +45,8 @@ export default function TabLayout() {
             bottom: 0,
             elevation: 0,
             shadowOpacity: 0,
-            height: 40 + insets.bottom, // Include bottom inset in height
-            paddingBottom: insets.bottom > 0 ? 10 : 0 // Add padding if bottom inset exists
+            height: 40 + insets.bottom,
+            paddingBottom: insets.bottom,
           },
         }}
       >
@@ -109,6 +107,6 @@ export default function TabLayout() {
           }}
         />
       </Tabs>
-    </SafeAreaView>
+    </SAView>
   );
 }
