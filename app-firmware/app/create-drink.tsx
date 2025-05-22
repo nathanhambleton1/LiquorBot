@@ -764,13 +764,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#141414',
     padding: 20,
   },
-  modalCloseButton: { position: 'absolute', top: 30, left: 20, zIndex: 10 },
+  modalCloseButton: { position: 'absolute', top: 70, left: 20, zIndex: 10 },
   modalHeaderText: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#DFDCD9',
     textAlign: 'center',
-    marginTop: 10,
+    marginTop: 50,
     marginBottom: 10,
   },
   previewCanvas: {
