@@ -23,6 +23,7 @@ import { useLiquorBot }     from '../components/liquorbot-provider';
 import { fetchAuthSession } from '@aws-amplify/auth';
 import { generateClient } from 'aws-amplify/api';
 import { listEvents } from '../../src/graphql/queries';
+import { Asset } from 'expo-asset';
 
 /* ---------- AWS IoT SDK (static import) ---------- */
 import {
@@ -34,10 +35,6 @@ import {
 /* ───────────────────────── constants ───────────────────────── */
 const REGION      = 'us-east-1';          // update if you deploy elsewhere
 const POLICY_NAME = 'Amplify-App-Policy'; // must match the console
-
-export const options = {
-  gestureEnabled: false, 
-};
 
 export default function Index() {
   const router        = useRouter();
@@ -70,6 +67,16 @@ export default function Index() {
         const u   = ses.tokens?.idToken?.payload['cognito:username'];
         setCurrentUser(typeof u === 'string' ? u : null);
       } catch { setCurrentUser(null); }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        await Asset.loadAsync(require('@/assets/images/home-background.jpg'));
+      } catch (error) {
+        console.warn('Error preloading image:', error);
+      }
     })();
   }, []);
 
