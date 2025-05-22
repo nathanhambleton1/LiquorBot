@@ -179,7 +179,7 @@ export default function Index() {
   return (
     <ImageBackground
       source={require('@/assets/images/home-background.jpg')}
-      style={styles.background}
+      style={[styles.background, { backgroundColor: '#1F1F1F' }]}
       resizeMode="cover"
     >
       {/* chip‑icon shortcut to Device Settings */}
