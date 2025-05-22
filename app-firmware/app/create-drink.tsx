@@ -715,14 +715,14 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: 'absolute',
-    top: 55,
+    top: 75,
     left: 20,
     zIndex: 10,
     padding: 10,
   },
   listButton: {
     position: 'absolute',
-    top: 55,
+    top: 75,
     right: 20,
     zIndex: 10,
     padding: 10,
@@ -733,6 +733,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 10,
+    marginTop: 20,
   },
   contentContainer: { paddingVertical: 20 },
 

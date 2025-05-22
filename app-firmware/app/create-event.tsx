@@ -919,7 +919,7 @@ const styles=StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between', // Distribute space between elements
     width: '100%',
-    marginBottom: 16,
+    marginBottom: 30,
   },
   chevronButton: {
     // Keeps the chevron on the left

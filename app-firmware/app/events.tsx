@@ -565,7 +565,7 @@ const styles = StyleSheet.create({
   empty:{alignItems:'center',marginTop:150,paddingHorizontal:40},
   emptyTxt:{color:'#4F4F4F',textAlign:'center',marginTop:20,fontSize:14},
 
-  bottom:{position:'absolute',bottom:40,left:0,right:0,flexDirection:'row',
+  bottom:{position:'absolute',bottom:50,left:0,right:0,flexDirection:'row',
             justifyContent:'flex-end',paddingHorizontal:20},
   joinBtn:{flexDirection:'row',alignItems:'center',backgroundColor:'#CE975E',
             borderRadius:25,paddingVertical:12,paddingHorizontal:20, marginRight:12},
