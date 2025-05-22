@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 16,
     lineHeight: 20,
-    marginBottom: 30,
+    marginBottom: 60,
     textAlign: 'center',
   },
   link: { color: '#CE975E' },

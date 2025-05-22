@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
   },
   clearButtonWrapper: {
     position: 'absolute',
-    bottom: 50,
+    bottom: 60,
     left: 20,
     right: 20,
     zIndex: 10, // Ensure it floats above other content
