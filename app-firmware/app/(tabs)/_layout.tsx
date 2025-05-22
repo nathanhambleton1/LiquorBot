@@ -45,7 +45,7 @@ export default function TabLayout() {
             bottom: 0,
             elevation: 0,
             shadowOpacity: 0,
-            height: 40 + insets.bottom,
+            height: 60 + insets.bottom,
             paddingBottom: insets.bottom,
           },
         }}
