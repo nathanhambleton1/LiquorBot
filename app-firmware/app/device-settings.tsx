@@ -4,7 +4,7 @@
 //              publishes commands on the maintenance topic, plus UX polish.
 // Author: Nathan Hambleton – updated 15 May 2025 by ChatGPT
 // -----------------------------------------------------------------------------
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -216,7 +216,7 @@ export default function DeviceSettings() {
   const [discoveryModalVisible, setDiscoveryModalVisible] = useState(false);
   const [discoveredDevices, setDiscoveredDevices]         = useState<BluetoothDevice[]>([]);
   const [isScanning, setIsScanning]                       = useState(false);
-  const manager                                           = new BleManager();
+  const managerRef = useRef<BleManager | null>(null);
   const DEVICE_SERVICE_UUID                               = '1fb68313-bd17-4fd8-b615-554ddfd462d6';
 
   /*──────────────────────── BLUETOOTH HELPERS ───────────────────────*/
@@ -239,6 +239,11 @@ export default function DeviceSettings() {
   const scanForDevices = async () => {
     const ok = await requestBluetoothPermissions();
     if (!ok) return;
+
+    if (!managerRef.current) {
+      managerRef.current = new BleManager();
+    }
+    const manager = managerRef.current;
 
     setIsScanning(true);
     setDiscoveredDevices([]);
@@ -263,11 +268,23 @@ export default function DeviceSettings() {
     }, 5000);
   };
 
+  // Cleanup on unmount
+  useEffect(
+    () => () => {
+      managerRef.current?.destroy();
+      managerRef.current = null;
+    },
+    []
+  );
+
   // Connect to a chosen device
   const handleConnectDevice = async (deviceId: string) => {
     try {
       setDiscoveryModalVisible(false);
-      const dev = await manager.connectToDevice(deviceId, { requestMTU: 256 });
+      if (!managerRef.current) return;
+      const dev = await managerRef.current.connectToDevice(deviceId, {
+        requestMTU: 256
+      });
       await dev.discoverAllServicesAndCharacteristics();
       // TODO: update your LiquorBot provider with the connection
     } catch (err) {
