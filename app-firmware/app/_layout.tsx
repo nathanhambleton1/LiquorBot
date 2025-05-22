@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: _layout.tsx
+// File: _layout.tsx (app)
 // Description: Root layout for the LiquorBot app. Configures AWS Amplify, 
 //              PubSub, and wraps the app with authentication and LiquorBot 
 //              context providers.

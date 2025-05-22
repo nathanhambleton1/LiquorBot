@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: _layout.tsx
+// File: _layout.tsx (tabs)
 // Description: Defines the tab layout for the LiquorBot app, including routing 
 //              and authentication checks. Utilizes Expo Router and AWS Amplify 
 //              for navigation and authentication, respectively.
@@ -25,7 +25,7 @@ export default function TabLayout() {
     <SafeAreaView 
       style={{ 
         flex: 1, 
-        backgroundColor: 'transparent',
+        backgroundColor: '#000',
         paddingTop: insets.top // Apply top inset manually
       }}
     >
