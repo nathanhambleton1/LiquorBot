@@ -35,6 +35,10 @@ import {
 const REGION      = 'us-east-1';          // update if you deploy elsewhere
 const POLICY_NAME = 'Amplify-App-Policy'; // must match the console
 
+export const options = {
+  gestureEnabled: false, 
+};
+
 export default function Index() {
   const router        = useRouter();
   const glowAnimation = useRef(new Animated.Value(1)).current;
