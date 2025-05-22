@@ -538,10 +538,10 @@ export default function EventManager() {
 const styles = StyleSheet.create({
   container:{flex:1,backgroundColor:'#141414',paddingTop:70},
   loading:{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'#141414'},
-  title:{color:'#DFDCD9',fontSize:24,fontWeight:'bold',textAlign:'center',marginBottom:20},
+  title:{color:'#DFDCD9',fontSize:24,fontWeight:'bold',textAlign:'center',marginBottom:30},
   close:{position:'absolute',top:62,left:24,padding:10,zIndex:10},
 
-  catWrap:{alignItems:'center',marginBottom:10},
+  catWrap:{alignItems:'center',marginBottom:20},
   catRow:{flexDirection:'row',alignItems:'center',paddingHorizontal:10},
   catBtn:{paddingHorizontal:15,marginHorizontal:5},
   catTxt:{color:'#4F4F4F'},
@@ -549,7 +549,7 @@ const styles = StyleSheet.create({
   under:{height:2,backgroundColor:'#CE975E',marginTop:2,width:'100%'},
 
   searchRow:{flexDirection:'row',alignItems:'center',backgroundColor:'#1F1F1F',
-             borderRadius:10,paddingHorizontal:15,marginHorizontal:20,marginBottom:15},
+             borderRadius:10,paddingHorizontal:15,marginHorizontal:20,marginBottom:20},
   search:{flex:1,color:'#DFDCD9',fontSize:16,paddingVertical:10},
 
   list:{paddingHorizontal:20,paddingBottom:140},
@@ -565,7 +565,7 @@ const styles = StyleSheet.create({
   empty:{alignItems:'center',marginTop:150,paddingHorizontal:40},
   emptyTxt:{color:'#4F4F4F',textAlign:'center',marginTop:20,fontSize:14},
 
-  bottom:{position:'absolute',bottom:30,left:0,right:0,flexDirection:'row',
+  bottom:{position:'absolute',bottom:40,left:0,right:0,flexDirection:'row',
             justifyContent:'flex-end',paddingHorizontal:20},
   joinBtn:{flexDirection:'row',alignItems:'center',backgroundColor:'#CE975E',
             borderRadius:25,paddingVertical:12,paddingHorizontal:20, marginRight:12},
