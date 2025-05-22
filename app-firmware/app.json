@@ -10,7 +10,13 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.appfirmware"
+      "bundleIdentifier": "com.anonymous.appfirmware",
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription":
+          "LiquorBot needs Bluetooth to discover and connect to your LiquorBot dispenser.",
+        "NSBluetoothPeripheralUsageDescription":
+          "LiquorBot uses Bluetooth to communicate with your LiquorBot dispenser."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -27,6 +33,11 @@
     "plugins": [
       "expo-router",
       [
+        "react-native-ble-plx",
+        {
+          "bluetoothAlwaysPermission":
+            "LiquorBot needs Bluetooth to discover and connect to your LiquorBot dispenser."
+        },
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
