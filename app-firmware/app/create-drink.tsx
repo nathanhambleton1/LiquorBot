@@ -764,13 +764,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#141414',
     padding: 20,
   },
-  modalCloseButton: { position: 'absolute', top: 70, left: 20, zIndex: 10 },
+  modalCloseButton: { position: 'absolute', top: 80, left: 20, zIndex: 10 },
   modalHeaderText: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#DFDCD9',
     textAlign: 'center',
-    marginTop: 50,
+    marginTop: 60,
     marginBottom: 10,
   },
   previewCanvas: {
@@ -928,7 +928,7 @@ const styles = StyleSheet.create({
   horizontalPickerContainer: { alignItems: 'center', paddingVertical: 5 },
   horizontalPicker: { flexDirection: 'row', alignItems: 'center' },
   categoryButton: {
-    marginTop: 40,
+    marginTop: 10,
     paddingVertical: 10,
     paddingHorizontal: 5,
     marginHorizontal: 15,
