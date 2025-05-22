@@ -11,17 +11,24 @@ import { Tabs, Redirect } from 'expo-router';
 import { useAuthenticator } from '@aws-amplify/ui-react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { SafeAreaView, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabLayout() {
   const { authStatus } = useAuthenticator((context) => [context.authStatus]);
-  
-  // If not authenticated, reroute to sign-in
+  const insets = useSafeAreaInsets();
+
   if (authStatus !== 'authenticated') {
     return <Redirect href="/auth/sign-in" />;
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#141414' }}>
+    <SafeAreaView 
+      style={{ 
+        flex: 1, 
+        backgroundColor: '#000',
+        paddingTop: insets.top // Apply top inset manually
+      }}
+    >
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       <Tabs
         screenOptions={{
@@ -40,7 +47,8 @@ export default function TabLayout() {
             bottom: 0,
             elevation: 0,
             shadowOpacity: 0,
-            height: 60, // Increased height
+            height: 60 + insets.bottom, // Include bottom inset in height
+            paddingBottom: insets.bottom > 0 ? 10 : 0 // Add padding if bottom inset exists
           },
         }}
       >
