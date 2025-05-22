@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
   },
   buttonGrid: {
     position: 'absolute',
-    bottom: 90,
+    bottom: 110,
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '90%',
