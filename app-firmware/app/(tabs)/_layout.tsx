@@ -47,7 +47,7 @@ export default function TabLayout() {
             bottom: 0,
             elevation: 0,
             shadowOpacity: 0,
-            height: 60 + insets.bottom, // Include bottom inset in height
+            height: 40 + insets.bottom, // Include bottom inset in height
             paddingBottom: insets.bottom > 0 ? 10 : 0 // Add padding if bottom inset exists
           },
         }}
