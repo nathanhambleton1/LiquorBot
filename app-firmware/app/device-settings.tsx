@@ -219,101 +219,143 @@ export default function DeviceSettings() {
   const managerRef = useRef<BleManager | null>(null);
   const DEVICE_SERVICE_UUID                               = '1fb68313-bd17-4fd8-b615-554ddfd462d6';
 
-  /*──────────────────────── BLUETOOTH HELPERS ───────────────────────*/
-  // Ask Android‑only runtime permissions
-  const requestBluetoothPermissions = async () => {
-    if (Platform.OS !== 'android') return true;
-    const granted = await PermissionsAndroid.requestMultiple([
-      PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-      PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-    ]);
-    return (
-      granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN]    === PermissionsAndroid.RESULTS.GRANTED &&
-      granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED &&
-      granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED
-    );
-  };
+  // Updated Bluetooth helpers in device-settings.tsx
 
-  // Scan for LiquorBot peripherals
+  /*──────────────────────── BLUETOOTH HELPERS ───────────────────────*/
   const getManager = () => {
     if (!managerRef.current) {
       managerRef.current = new BleManager({
         restoreStateIdentifier: 'liquorbot-ble',
-        restoreStateFunction: () => {
-          // called if iOS wakes the app to restore BLE state
-        },
+        restoreStateFunction: () => {},
+        // Remove the iOS queue parameter entirely
+        ...(Platform.OS === 'ios' ? {} : {})
       });
     }
     return managerRef.current!;
   };
 
-  /** One-shot scanner that waits for PoweredOn, then scans */
-  const scanForDevices = async () => {
-    if (Platform.OS === 'android' && !(await requestBluetoothPermissions())) {
-      return;
+  /** Request Bluetooth permissions on Android */
+  const requestBluetoothPermissions = async () => {
+    if (Platform.OS === 'android') {
+      const granted = await PermissionsAndroid.requestMultiple([
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      ]);
+      return (
+        granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] ===
+          PermissionsAndroid.RESULTS.GRANTED &&
+        granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] ===
+          PermissionsAndroid.RESULTS.GRANTED &&
+        granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] ===
+          PermissionsAndroid.RESULTS.GRANTED
+      );
     }
 
+    // iOS - BleManager handles permissions internally
     const manager = getManager();
+    const state = await manager.state();
+    return state === 'PoweredOn';
+  };
 
-    // reset UI
-    setDiscoveredDevices([]);
-    setIsScanning(true);
+  /** Enhanced scanner with permission checks and error handling */
+  const scanForDevices = async () => {
+    try {
+      const manager = getManager();
+      const state = await manager.state();
 
-    // wait until Bluetooth is ready
-    const sub = manager.onStateChange((state) => {
-      if (state === 'PoweredOn') {
-        sub.remove();             // state listener no longer needed
+      if (state !== 'PoweredOn') {
+        Alert.alert(
+          'Bluetooth Required',
+          'Please enable Bluetooth in Settings',
+          [{ text: 'OK', onPress: () => manager.enable() }] // iOS only
+        );
+        return;
+      }
+      if (Platform.OS === 'android' && !(await requestBluetoothPermissions())) {
+        Alert.alert('Permissions required', 'Bluetooth permissions needed to continue');
+        return;
+      }
 
-        manager.startDeviceScan(null, null, (error, device) => {
-          if (error) {
-            console.error('BLE scan error:', error);
-            manager.stopDeviceScan();
+      setDiscoveredDevices([]);
+      setIsScanning(true);
+
+      const stateSub = manager.onStateChange(async (state) => {
+        if (state === 'PoweredOn') {
+          stateSub.remove();
+          
+          // iOS specific check
+          if (Platform.OS === 'ios' && (await manager.state()) !== 'PoweredOn') {
+            Alert.alert('Bluetooth Off', 'Please enable Bluetooth in Settings');
             setIsScanning(false);
             return;
           }
 
-          // keep every unique device (show all, or filter later in UI)
-          if (device?.id) {
-            setDiscoveredDevices((prev) =>
-              prev.find((d) => d.id === device.id)
-                ? prev
-                : [...prev, { id: device.id, name: device.name ?? 'Unnamed' }],
-            );
-          }
-        });
+          // Start scanning with service UUID filter
+          manager.startDeviceScan([DEVICE_SERVICE_UUID], null, (error, device) => {
+            if (error) {
+              console.error('Scan error:', error);
+              manager.stopDeviceScan();
+              setIsScanning(false);
+              Alert.alert('Scan Failed', error.message);
+              return;
+            }
 
-        // auto-stop after 10 s
-        setTimeout(() => {
-          manager.stopDeviceScan();
-          setIsScanning(false);
-        }, 10000);
-      }
-    }, true); // “true” invokes the callback immediately with current state
+            if (device?.name) {
+              setDiscoveredDevices(prev => {
+                const exists = prev.some(d => d.id === device.id);
+                const deviceName = device.name || 'Unnamed Device'; // Provide default name
+                return exists ? prev : [
+                  ...prev,
+                  { id: device.id, name: deviceName }
+                ].sort((a, b) => a.name.localeCompare(b.name));
+              });
+            }
+          });
+
+          // Timeout after 15 seconds
+          setTimeout(() => {
+            manager.stopDeviceScan();
+            setIsScanning(false);
+            if (discoveredDevices.length === 0) {
+              Alert.alert('No Devices Found', 'Ensure your LiquorBot is powered on and nearby');
+            }
+          }, 15000);
+        }
+      }, true);
+    } catch (error) {
+      console.error('Scan setup failed:', error);
+      setIsScanning(false);
+      Alert.alert('Error', 'Failed to start Bluetooth scanning');
+    }
   };
 
-  // Cleanup on unmount
-  useEffect(
-    () => () => {
-      managerRef.current?.destroy();
-      managerRef.current = null;
-    },
-    []
-  );
+  // Add loading state for better UX
+  const [isConnecting, setIsConnecting] = useState(false);
 
-  // Connect to a chosen device
   const handleConnectDevice = async (deviceId: string) => {
     try {
+      setIsConnecting(true);
       setDiscoveryModalVisible(false);
-      if (!managerRef.current) return;
-      const dev = await managerRef.current.connectToDevice(deviceId, {
-        requestMTU: 256
+      
+      const manager = getManager();
+      const device = await manager.connectToDevice(deviceId, {
+        requestMTU: 256,
+        autoConnect: false
       });
-      await dev.discoverAllServicesAndCharacteristics();
-      // TODO: update your LiquorBot provider with the connection
+      
+      await device.discoverAllServicesAndCharacteristics();
+      
+      // Update connection state
+      // (Implement your actual connection handling here)
+      Alert.alert('Connected', `Successfully connected to ${device.name}`);
+      
     } catch (err) {
-      console.error('BLE connect error:', err);
-      Alert.alert('Bluetooth', 'Unable to connect. Please try again.');
+      console.error('Connection failed:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      Alert.alert('Connection Failed', errorMessage);
+    } finally {
+      setIsConnecting(false);
     }
   };
 
@@ -365,6 +407,17 @@ export default function DeviceSettings() {
       console.error('Slot publish error:', err);
     }
   };
+
+  useEffect(() => {
+    if (discoveryModalVisible) {
+      scanForDevices();
+    } else {
+      // Cleanup when modal closes
+      const manager = getManager();
+      manager.stopDeviceScan();
+      setDiscoveredDevices([]);
+    }
+  }, [discoveryModalVisible]);
 
   useEffect(() => {
     const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
@@ -445,8 +498,8 @@ export default function DeviceSettings() {
         <View style={styles.connectionBox}>
           <TouchableOpacity
             style={styles.bluetoothIconContainer}
-            onPress={() => setBluetoothModalVisible(true)}
-            activeOpacity={0.7}
+            onPress={() => setDiscoveryModalVisible(true)}
+            activeOpacity={0.6}
           >
             <Ionicons name="bluetooth-outline" size={24} color="#DFDCD9" />
           </TouchableOpacity>
@@ -599,39 +652,6 @@ export default function DeviceSettings() {
         )}
       </ScrollView>
 
-      {/* Bluetooth Connection Modal */}
-      <Modal
-        visible={bluetoothModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setBluetoothModalVisible(false)}
-      >
-        <View style={styles.bluetoothModalContainer}>
-          <View style={styles.bluetoothModalContent}>
-            <Text style={styles.bluetoothModalTitle}>Connect New Device</Text>
-            <Text style={styles.bluetoothModalSubtitle}>
-              You can only have one device connected at a time.
-            </Text>
-            <TouchableOpacity
-              style={styles.bluetoothModalButton}
-              onPress={() => {
-                setBluetoothModalVisible(false);
-                setDiscoveryModalVisible(true);
-                scanForDevices();
-              }}
-            >
-              <Text style={styles.bluetoothModalButtonText}>Setup</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.bluetoothModalCancelButton}
-              onPress={() => setBluetoothModalVisible(false)}
-            >
-              <Text style={styles.bluetoothModalCancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
       {/* Device Discovery Modal */}
       <Modal
         visible={discoveryModalVisible}
@@ -663,14 +683,27 @@ export default function DeviceSettings() {
               <TouchableOpacity
                 style={styles.deviceItem}
                 onPress={() => handleConnectDevice(item.id)}
+                disabled={isConnecting}
               >
                 <Text style={styles.deviceName}>{item.name}</Text>
-                <Ionicons name="bluetooth" size={20} color="#DFDCD9" />
+                {isConnected && item.id === liquorbotId ? (
+                  <Ionicons name="checkmark-circle" size={20} color="#63d44a" />
+                ) : (
+                  <Ionicons name="bluetooth" size={20} color="#DFDCD9" />
+                )}
               </TouchableOpacity>
             )}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.deviceList}
           />
+          {!isScanning && discoveredDevices.length === 0 && (
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={scanForDevices}
+            >
+              <Text style={styles.retryButtonText}>Retry Scan</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </Modal>
 
@@ -789,415 +822,77 @@ export default function DeviceSettings() {
 
 // ------------------- STYLES -------------------
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#141414',
-  },
-  closeButton: {
-    position: 'absolute',
-    top: 70,
-    left: 25,
-    zIndex: 1001,
-  },
-  headerText: {
-    position: 'absolute',
-    top: 70,
-    alignSelf: 'center',
-    fontSize: 24,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  scrollContainer: {
-    paddingTop: 130,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  connectionBox: {
-    backgroundColor: '#1F1F1F',
-    borderRadius: 10,
-    padding: 20,
-    marginBottom: 20,
-    alignItems: 'center',
-    minHeight: 100,
-  },
-  liquorBotText: {
-    fontSize: 24,
-    color: '#DFDCD9',
-    fontWeight: 'bold',
-    textAlign: 'left',
-    width: '100%',
-  },
-  connectionStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 5,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 5,
-    marginTop: 5,
-  },
-  connectionStatusText: {
-    fontSize: 14,
-    color: '#4F4F4F',
-    textAlign: 'left',
-    width: '100%',
-    marginTop: 5,
-  },
-  bluetoothIconContainer: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
-    zIndex: 999,
-    padding: 10,
-    backgroundColor: 'transparent',
-  },
-  slotsContainer: {
-    backgroundColor: '#1F1F1F',
-    borderRadius: 10,
-    padding: 20,
-  },
-  slotsHeaderContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  slotsHeader: {
-    color: '#DFDCD9',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  connectDeviceMessage: {
-    color: '#d44a4a',
-    fontSize: 12,
-    textAlign: 'center',
-    marginBottom: 25,
-  },
-  slotRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  slotLabel: {
-    color: '#DFDCD9',
-    fontSize: 16,
-    marginRight: 10,
-    width: 80,
-  },
-  pickerButtonContainer: {
-    flex: 1,
-    position: 'relative',
-  },
-  pickerButton: {
-    flex: 1,
-    backgroundColor: '#141414',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  pickerButtonDisconnected: {
-    borderColor: '#d44a4a',
-  },
-  pickerButtonText: {
-    color: '#4f4f4f',
-    fontSize: 16,
-  },
-  selectedPickerButtonText: {
-    color: '#dfdcd9',
-  },
-  clearSlotOverlay: {
-    position: 'absolute',
-    top: 6,
-    right: 10,
-    backgroundColor: 'transparent',
-    padding: 5,
-  },
-  clearSlotOverlayDisabled: {
-    opacity: 0.5,
-  },
-  clearSlotOverlayText: {
-    color: '#808080',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  connectPrompt: {
-    position: 'absolute',
-    bottom: 20,
-    alignSelf: 'center',
-    backgroundColor: '#1F1F1F',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#CE975E',
-  },
-  connectPromptText: {
-    color: '#DFDCD9',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-
-  // 'Clear All' text
-  clearAllButtonText: {
-    color: '#4F4F4F',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-
-  // Modal
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#141414',
-    padding: 20,
-  },
-  modalCloseButton: {
-    position: 'absolute',
-    top: 30,
-    left: 20,
-    zIndex: 10,
-  },
-  modalHeaderText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#DFDCD9',
-    textAlign: 'center',
-    marginTop: 10,
-    marginBottom: -20,
-  },
-  horizontalPickerContainer: {
-    alignItems: 'center',
-    borderBottomLeftRadius: 10,
-    borderBottomRightRadius: 10,
-    paddingVertical: 5,
-  },
-  horizontalPicker: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  categoryButton: {
-    marginTop: 40,
-    paddingVertical: 10,
-    paddingHorizontal: 5,
-    marginHorizontal: 15,
-  },
-  categoryButtonContent: {
-    alignItems: 'center',
-  },
-  categoryButtonText: {
-    color: '#4F4F4F',
-    fontSize: 14,
-  },
-  selectedCategoryText: {
-    color: '#CE975E',
-  },
-  underline: {
-    height: 2,
-    backgroundColor: '#CE975E',
-    marginTop: 2,
-    width: '100%',
-  },
-  searchBarContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1F1F1F',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    marginBottom: 15,
-    marginTop: 10,
-  },
-  searchIcon: {
-    marginRight: 10,
-  },
-  searchBar: {
-    flex: 1,
-    color: '#DFDCD9',
-    fontSize: 16,
-    paddingVertical: 10,
-  },
-  ingredientItem: {
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333333',
-  },
-  ingredientText: {
-    color: '#DFDCD9',
-    fontSize: 16,
-  },
-
-  // Bluetooth modals
-  bluetoothModalContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  bluetoothModalContent: {
-    backgroundColor: '#1F1F1F',
-    borderRadius: 10,
-    padding: 20,
-    width: '80%',
-    alignItems: 'center',
-  },
-  bluetoothModalTitle: {
-    color: '#DFDCD9',
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  bluetoothModalSubtitle: {
-    color: '#4F4F4F',
-    fontSize: 12,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  bluetoothModalButton: {
-    backgroundColor: '#CE975E',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  bluetoothModalButtonText: {
-    color: '#141414',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  bluetoothModalCancelButton: {
-    backgroundColor: '#141414',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    width: '100%',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#4F4F4F',
-  },
-  bluetoothModalCancelButtonText: {
-    color: '#DFDCD9',
-    fontSize: 16,
-  },
-  discoveryModalContainer: {
-    flex: 1,
-    backgroundColor: '#141414',
-    padding: 20,
-  },
-  discoveryModalTitle: {
-    fontSize: 24,
-    color: '#DFDCD9',
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginTop: 50,
-    marginBottom: 20,
-  },
-  scanningContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  scanningText: {
-    color: '#4F4F4F',
-    textAlign: 'center',
-    marginLeft: 10,
-  },
-  deviceItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#1F1F1F',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 10,
-  },
-  deviceName: {
-    color: '#DFDCD9',
-    fontSize: 16,
-  },
-  deviceList: {
-    paddingBottom: 20,
-  },
-
-  // Loading overlay
-  loadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
-  },
-  maintenanceContainer: {
-    backgroundColor: '#1F1F1F',
-    borderRadius: 10,
-    padding: 20,
-    marginBottom: 20,
-  },
-  sectionHeader: {
-    color: '#DFDCD9',
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 15,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#141414',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    marginBottom: 10,
-  },
-  actionLabel: {
-    color: '#DFDCD9',
-    fontSize: 16,
-  },
-  maintenanceHeader: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-},
-infoModalContainer: {
-  flex: 1,
-  justifyContent: 'center',
-  alignItems: 'center',
-  backgroundColor: 'rgba(0, 0, 0, 0.5)',
-},
-infoModalContent: {
-  backgroundColor: '#1F1F1F',
-  borderRadius: 15,
-  padding: 20,
-  width: '80%',
-},
-infoModalTitle: {
-  color: '#CE975E',
-  fontSize: 18,
-  fontWeight: 'bold',
-  marginBottom: 10,
-},
-infoModalText: {
-  color: '#DFDCD9',
-  fontSize: 14,
-  lineHeight: 20,
-  marginBottom: 20,
-},
-infoModalButton: {
-  backgroundColor: '#CE975E',
-  borderRadius: 8,
-  paddingVertical: 12,
-  alignItems: 'center',
-},
-infoModalButtonText: {
-  color: '#141414',
-  fontWeight: 'bold',
-},
+  container:                  { flex: 1, backgroundColor: '#141414' },
+  closeButton:                { position: 'absolute', top: 70, left: 25, zIndex: 1001 },
+  headerText:                 { position: 'absolute', top: 70, alignSelf: 'center', fontSize: 24, color: '#FFFFFF', fontWeight: 'bold' },
+  scrollContainer:            { paddingTop: 130, paddingHorizontal: 20, paddingBottom: 20 },
+  connectionBox:              { backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20, marginBottom: 20, alignItems: 'center', minHeight: 100 },
+  liquorBotText:              { fontSize: 24, color: '#DFDCD9', fontWeight: 'bold', textAlign: 'left', width: '100%' },
+  connectionStatusRow:        { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
+  statusDot:                  { width: 6, height: 6, borderRadius: 3, marginRight: 5, marginTop: 5 },
+  connectionStatusText:       { fontSize: 14, color: '#4F4F4F', textAlign: 'left', width: '100%', marginTop: 5 },
+  bluetoothIconContainer:     { position: 'absolute', top: 20, right: 20, zIndex: 999, padding: 10, backgroundColor: 'transparent' },
+  slotsContainer:             { backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20 },
+  slotsHeaderContainer:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  slotsHeader:                { color: '#DFDCD9', fontSize: 20, fontWeight: 'bold' },
+  connectDeviceMessage:       { color: '#d44a4a', fontSize: 12, textAlign: 'center', marginBottom: 25 },
+  slotRow:                    { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+  slotLabel:                  { color: '#DFDCD9', fontSize: 16, marginRight: 10, width: 80 },
+  pickerButtonContainer:      { flex: 1, position: 'relative' },
+  pickerButton:               { flex: 1, backgroundColor: '#141414', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 15, borderWidth: 1, borderColor: 'transparent' },
+  pickerButtonDisconnected:   { borderColor: '#d44a4a' },
+  pickerButtonText:           { color: '#4f4f4f', fontSize: 16 },
+  selectedPickerButtonText:   { color: '#dfdcd9' },
+  clearSlotOverlay:           { position: 'absolute', top: 6, right: 10, backgroundColor: 'transparent', padding: 5 },
+  clearSlotOverlayDisabled:   { opacity: 0.5 },
+  clearSlotOverlayText:       { color: '#808080', fontSize: 14, fontWeight: 'bold' },
+  connectPrompt:              { position: 'absolute', bottom: 20, alignSelf: 'center', backgroundColor: '#1F1F1F', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10, borderWidth: 1, borderColor: '#CE975E' },
+  connectPromptText:          { color: '#DFDCD9', fontSize: 14, textAlign: 'center' },
+  clearAllButtonText:         { color: '#4F4F4F', fontSize: 14, fontWeight: 'bold' },
+  modalContainer:             { flex: 1, backgroundColor: '#141414', padding: 20 },
+  modalCloseButton:           { position: 'absolute', top: 30, left: 20, zIndex: 10 },
+  modalHeaderText:            { fontSize: 20, fontWeight: 'bold', color: '#DFDCD9', textAlign: 'center', marginTop: 10, marginBottom: -20 },
+  horizontalPickerContainer:  { alignItems: 'center', borderBottomLeftRadius: 10, borderBottomRightRadius: 10, paddingVertical: 5 },
+  horizontalPicker:           { flexDirection: 'row', alignItems: 'center' },
+  categoryButton:             { marginTop: 40, paddingVertical: 10, paddingHorizontal: 5, marginHorizontal: 15 },
+  categoryButtonContent:      { alignItems: 'center' },
+  categoryButtonText:         { color: '#4F4F4F', fontSize: 14 },
+  selectedCategoryText:       { color: '#CE975E' },
+  underline:                  { height: 2, backgroundColor: '#CE975E', marginTop: 2, width: '100%' },
+  searchBarContainer:         { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, paddingHorizontal: 15, marginBottom: 15, marginTop: 10 },
+  searchIcon:                 { marginRight: 10 },
+  searchBar:                  { flex: 1, color: '#DFDCD9', fontSize: 16, paddingVertical: 10 },
+  ingredientItem:             { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#333333' },
+  ingredientText:             { color: '#DFDCD9', fontSize: 16 },
+  bluetoothModalContainer:    { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' },
+  bluetoothModalContent:      { backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20, width: '80%', alignItems: 'center' },
+  bluetoothModalTitle:        { color: '#DFDCD9', fontSize: 20, fontWeight: 'bold', marginBottom: 10 },
+  bluetoothModalSubtitle:     { color: '#4F4F4F', fontSize: 12, marginBottom: 20, textAlign: 'center' },
+  bluetoothModalButton:       { backgroundColor: '#CE975E', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 20, width: '100%', alignItems: 'center', marginBottom: 10 },
+  bluetoothModalButtonText:   { color: '#141414', fontSize: 16, fontWeight: 'bold' },
+  bluetoothModalCancelButton: { backgroundColor: '#141414', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 20, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: '#4F4F4F' },
+  bluetoothModalCancelButtonText: { color: '#DFDCD9', fontSize: 16 },
+  discoveryModalContainer:    { flex: 1, backgroundColor: '#141414', padding: 20 },
+  discoveryModalTitle:        { fontSize: 24, color: '#DFDCD9', fontWeight: 'bold', textAlign: 'center', marginTop: 50, marginBottom: 20 },
+  scanningContainer:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  scanningText:               { color: '#4F4F4F', textAlign: 'center', marginLeft: 10 },
+  deviceName:                 { color: '#DFDCD9', fontSize: 16 },
+  deviceList:                 { paddingBottom: 20 },
+  loadingOverlay:             { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
+  maintenanceContainer:       { backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20, marginBottom: 20 },
+  sectionHeader:              { color: '#DFDCD9', fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
+  actionRow:                  { flexDirection: 'row', alignItems: 'center', backgroundColor: '#141414', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 15, marginBottom: 10 },
+  actionLabel:                { color: '#DFDCD9', fontSize: 16 },
+  maintenanceHeader:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  infoModalContainer:         { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' },
+  infoModalContent:           { backgroundColor: '#1F1F1F', borderRadius: 15, padding: 20, width: '80%' },
+  infoModalTitle:             { color: '#CE975E', fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
+  infoModalText:              { color: '#DFDCD9', fontSize: 14, lineHeight: 20, marginBottom: 20 },
+  infoModalButton:            { backgroundColor: '#CE975E', borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
+  infoModalButtonText:        { color: '#141414', fontWeight: 'bold' },
+  connectingOverlay:          { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(31, 31, 31, 0.9)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
+  connectingText:             { color: '#DFDCD9', marginTop: 10 },
+  deviceItem:                 { opacity: 1 },
+  retryButton:                { backgroundColor: '#CE975E', borderRadius: 8, padding: 12, marginTop: 20, alignSelf: 'center' },
+  retryButtonText:            { color: '#141414', fontWeight: 'bold' },
 });
