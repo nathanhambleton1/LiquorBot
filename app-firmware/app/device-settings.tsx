@@ -217,6 +217,7 @@ export default function DeviceSettings() {
   const [discoveredDevices, setDiscoveredDevices]         = useState<BluetoothDevice[]>([]);
   const [isScanning, setIsScanning]                       = useState(false);
   const managerRef = useRef<BleManager | null>(null);
+  const DEVICE_SERVICE_UUID = '1fb68313-bd17-4fd8-b615-554ddfd462d6';
 
   // Updated Bluetooth helpers in device-settings.tsx
 
@@ -286,8 +287,11 @@ export default function DeviceSettings() {
           }
 
           // Start scanning with service UUID filter
-          manager.startDeviceScan(null, null, (error, device) => {
-            if (error) {
+          manager.startDeviceScan(
+            [DEVICE_SERVICE_UUID],          // ❶  filter
+            { allowDuplicates: false },     // ❷  no spam
+            (error, device) => {
+              if (error) {
               console.error('Scan error:', error);
               manager.stopDeviceScan();
               setIsScanning(false);
@@ -295,17 +299,15 @@ export default function DeviceSettings() {
               return;
             }
 
-            if (device?.name) {
-              setDiscoveredDevices(prev => {
-                const exists = prev.some(d => d.id === device.id);
-                const deviceName = device.name || 'Unnamed Device'; // Provide default name
-                return exists ? prev : [
-                  ...prev,
-                  { id: device.id, name: deviceName }
-                ].sort((a, b) => a.name.localeCompare(b.name));
-              });
-            }
-          });
+            if (device?.name?.startsWith('LiquorBot')) {
+                  setDiscoveredDevices(prev => {
+                    if (prev.some(d => d.id === device.id)) return prev;
+                    return [...prev, { id: device.id, name: device.name! }]
+                          .sort((a, b) => a.name.localeCompare(b.name));
+                  });
+                }
+              }
+            );
 
           // Timeout after 15 seconds
           setTimeout(() => {
@@ -679,7 +681,13 @@ export default function DeviceSettings() {
                 onPress={() => handleConnectDevice(item.id)}
                 disabled={isConnecting}
               >
-                <Text style={styles.deviceName}>{item.name}</Text>
+                <Text style={styles.deviceName}>
+                  {item.name}         {/* e.g. LiquorBot-A3F7 */}
+                  {"  "}              {/* small gap */}
+                  <Text style={{ color: '#4F4F4F', fontSize: 12 }}>
+                    ({item.id.slice(-5)})   {/* show last 5 chars of MAC for tech users */}
+                  </Text>
+                </Text>
                 {isConnected && item.id === liquorbotId ? (
                   <Ionicons name="checkmark-circle" size={20} color="#63d44a" />
                 ) : (
@@ -844,7 +852,7 @@ const styles = StyleSheet.create({
   connectPromptText:          { color: '#DFDCD9', fontSize: 14, textAlign: 'center' },
   clearAllButtonText:         { color: '#4F4F4F', fontSize: 14, fontWeight: 'bold' },
   modalContainer:             { flex: 1, backgroundColor: '#141414', padding: 20 },
-  modalCloseButton:           { position: 'absolute', top: 30, left: 20, zIndex: 10 },
+  modalCloseButton:           { position: 'absolute', top: 70, left: 20, zIndex: 10 },
   modalHeaderText:            { fontSize: 20, fontWeight: 'bold', color: '#DFDCD9', textAlign: 'center', marginTop: 10, marginBottom: -20 },
   horizontalPickerContainer:  { alignItems: 'center', borderBottomLeftRadius: 10, borderBottomRightRadius: 10, paddingVertical: 5 },
   horizontalPicker:           { flexDirection: 'row', alignItems: 'center' },
