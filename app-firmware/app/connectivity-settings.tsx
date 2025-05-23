@@ -85,10 +85,6 @@ export default function ConnectivitySettings() {
       Alert.alert('Bluetooth permissions required');
       return;
     }
-    if ((await manager.state()) !== 'PoweredOn') {
-      Alert.alert('Enable Bluetooth first');
-      return;
-    }
     setDiscoveredDevices([]); setIsScanning(true);
     manager.startDeviceScan([SERVICE_UUID], { allowDuplicates: false }, (err, device) => {
       if (err) { console.error(err); stopScan(); return; }
