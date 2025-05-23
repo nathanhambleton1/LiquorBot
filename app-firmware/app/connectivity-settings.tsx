@@ -49,6 +49,9 @@ export default function ConnectivitySettings() {
     return managerRef.current;
   };
 
+  const [wifiLoading, setWifiLoading] = useState(false);
+  const [wifiError,   setWifiError]   = useState<string | null>(null);
+
   /*────────── Permissions helpers ──────────*/
   const requestBluetoothPermissions = async () => {
     if (Platform.OS !== 'android') return true;
@@ -132,20 +135,36 @@ export default function ConnectivitySettings() {
   };
 
   /*────────── Wi-Fi scan (Android only) ──────────*/
-  const loadWifiList = async () => {                                  // ← NEW
+  const loadWifiList = async () => {
+    if (Platform.OS !== 'android') return;   // iOS – nothing to do
+    setWifiLoading(true);
+    setWifiError(null);
     setWifiList([]);
-    if (Platform.OS !== 'android') return;
+
     try {
-      if (!(await requestWifiPermissions())) return;
-      // reScanAndLoadWifiList gives strongest -> weakest already
-      const list = await WifiManager.reScanAndLoadWifiList();
-      const ssids = list
+        if (!(await requestWifiPermissions()))
+        throw new Error('Location/Wi-Fi permission denied');
+
+        // Some devices need Wi-Fi enabled first
+        await WifiManager.setEnabled(true);
+
+        // API 33+ has to re-scan every time; older can use cached list
+        const list = Platform.Version >= 33
+        ? await WifiManager.reScanAndLoadWifiList()
+        : await WifiManager.loadWifiList();
+
+        const ssids = list
         .map((n: any) => n.SSID)
         .filter((s: string) => !!s && s !== '<unknown ssid>')
         .sort((a: string, b: string) => a.localeCompare(b));
-      setWifiList(ssids);
-    } catch (e) { console.warn('Wi-Fi scan', e); }
-  };
+
+        if (!ssids.length) setWifiError('No networks found');
+        setWifiList(ssids);
+    } catch (e: any) {
+        console.warn('Wi-Fi scan failed', e);
+        setWifiError(e?.message ?? 'Scan failed');
+    } finally { setWifiLoading(false); }
+    };
 
   /*────────── Effects ──────────*/
   useEffect(() => {
@@ -220,33 +239,39 @@ export default function ConnectivitySettings() {
             <Text style={styles.modalTitle}>Configure Wi-Fi</Text>
 
             {/* SSID input / list */}
-            <TextInput
-              placeholder="SSID"
-              placeholderTextColor="#4F4F4F"
-              value={ssid}
-              onChangeText={setSsid}
-              style={styles.input}
-            />
-            {wifiList.length > 0 && (
-              <FlatList
-                data={wifiList}
-                keyExtractor={(item, idx) => item + idx}
-                style={styles.wifiList}
-                nestedScrollEnabled
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.wifiRow}
-                    onPress={() => {
-                      setSsid(item);
-                      // collapse list after pick to shorten scrolling
-                      setWifiList([]);
-                    }}
-                  >
-                    <Text style={styles.wifiName}>{item}</Text>
-                  </TouchableOpacity>
+            {wifiLoading && (
+                <View style={styles.wifiLoadingRow}>
+                    <ActivityIndicator size="small" color="#CE975E" />
+                    <Text style={styles.wifiLoadingText}>Scanning Wi-Fi…</Text>
+                </View>
                 )}
-              />
-            )}
+
+                {wifiError && !wifiLoading && (
+                <TouchableOpacity style={styles.wifiRefresh} onPress={loadWifiList}>
+                    <Ionicons name="refresh" size={16} color="#DFDCD9" />
+                    <Text style={styles.wifiRefreshText}>{wifiError} – Tap to rescan</Text>
+                </TouchableOpacity>
+                )}
+
+                {!wifiLoading && wifiList.length > 0 && (
+                <FlatList
+                    data={wifiList}
+                    keyExtractor={(item, idx) => item + idx}
+                    style={styles.wifiList}
+                    nestedScrollEnabled
+                    renderItem={({ item }) => (
+                    <TouchableOpacity
+                        style={styles.wifiRow}
+                        onPress={() => {
+                        setSsid(item);
+                        // keep list open so user can pick again if they mis-tap
+                        }}
+                    >
+                        <Text style={styles.wifiName}>{item}</Text>
+                    </TouchableOpacity>
+                    )}
+                />
+                )}
 
             {/* password */}
             <TextInput
@@ -302,4 +327,8 @@ const styles = StyleSheet.create({
 
   modalBtn:     { backgroundColor: '#CE975E', borderRadius: 8, paddingVertical: 12, alignItems: 'center', marginTop: 4 },
   modalBtnText: { color: '#141414', fontWeight: 'bold' },
+  wifiLoadingRow:{ flexDirection:'row',alignItems:'center',marginBottom:8 },
+wifiLoadingText:{ color:'#4F4F4F',marginLeft:8 },
+wifiRefresh:{ flexDirection:'row',alignItems:'center',marginBottom:8 },
+wifiRefreshText:{ color:'#4F4F4F',marginLeft:6 },
 });
