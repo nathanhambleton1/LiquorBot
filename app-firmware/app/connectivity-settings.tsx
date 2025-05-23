@@ -227,68 +227,86 @@ export default function ConnectivitySettings() {
         />
       </Animated.View>
 
-      {/* Wi-Fi modal */}
-      <Modal visible={wifiModalVisible} transparent animationType="fade" onRequestClose={() => setWifiModalVisible(false)}>
+      {/* ─── Wi-Fi modal ───────────────────────────────────────────── */}
+        <Modal
+        visible={wifiModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setWifiModalVisible(false)}
+        >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalBox}>
-            {/* CLOSE on modal */}
+            <View style={styles.modalBox}>
+
+            {/* close (X) */}
             <TouchableOpacity style={styles.modalClose} onPress={() => setWifiModalVisible(false)}>
-              <Ionicons name="close" size={22} color="#DFDCD9" />
+                <Ionicons name="close" size={22} color="#DFDCD9" />
             </TouchableOpacity>
 
             <Text style={styles.modalTitle}>Configure Wi-Fi</Text>
 
-            {/* SSID input / list */}
-            {wifiLoading && (
-                <View style={styles.wifiLoadingRow}>
+            {/* SSID textbox (always visible so user can type, or gets filled from list) */}
+            <TextInput
+                placeholder="SSID"
+                placeholderTextColor="#4F4F4F"
+                value={ssid}
+                onChangeText={setSsid}
+                style={styles.input}
+                autoCapitalize="none"
+            />
+
+            {/* Android-only scan indicators / list */}
+            {Platform.OS === 'android' && (
+                <>
+                {wifiLoading && (
+                    <View style={styles.wifiLoadingRow}>
                     <ActivityIndicator size="small" color="#CE975E" />
                     <Text style={styles.wifiLoadingText}>Scanning Wi-Fi…</Text>
-                </View>
+                    </View>
                 )}
 
                 {wifiError && !wifiLoading && (
-                <TouchableOpacity style={styles.wifiRefresh} onPress={loadWifiList}>
+                    <TouchableOpacity style={styles.wifiRefresh} onPress={loadWifiList}>
                     <Ionicons name="refresh" size={16} color="#DFDCD9" />
-                    <Text style={styles.wifiRefreshText}>{wifiError} – Tap to rescan</Text>
-                </TouchableOpacity>
+                    <Text style={styles.wifiRefreshText}>{wifiError} – tap to rescan</Text>
+                    </TouchableOpacity>
                 )}
 
                 {!wifiLoading && wifiList.length > 0 && (
-                <FlatList
+                    <FlatList
                     data={wifiList}
                     keyExtractor={(item, idx) => item + idx}
                     style={styles.wifiList}
                     nestedScrollEnabled
                     renderItem={({ item }) => (
-                    <TouchableOpacity
+                        <TouchableOpacity
                         style={styles.wifiRow}
-                        onPress={() => {
-                        setSsid(item);
-                        // keep list open so user can pick again if they mis-tap
-                        }}
-                    >
+                        onPress={() => setSsid(item)}
+                        >
                         <Text style={styles.wifiName}>{item}</Text>
-                    </TouchableOpacity>
+                        </TouchableOpacity>
                     )}
-                />
+                    />
                 )}
+                </>
+            )}
 
             {/* password */}
             <TextInput
-              placeholder="Password"
-              placeholderTextColor="#4F4F4F"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-              style={styles.input}
+                placeholder="Password"
+                placeholderTextColor="#4F4F4F"
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+                style={styles.input}
             />
 
+            {/* send creds */}
             <TouchableOpacity style={styles.modalBtn} onPress={sendWifiCredentials}>
-              <Text style={styles.modalBtnText}>Connect Device</Text>
+                <Text style={styles.modalBtnText}>Connect Device</Text>
             </TouchableOpacity>
-          </View>
+            </View>
         </View>
-      </Modal>
+        </Modal>
     </View>
   );
 }
