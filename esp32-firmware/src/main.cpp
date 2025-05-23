@@ -29,14 +29,14 @@ void setup() {
     initializeState();   // IDLE by default
 
     // Initialize BLE and Wi-Fi setup
-    setupBluetoothWiFiAWS();
+    //setupBluetoothWiFiAWS();
 
-    //setWiFiCredentials("WhiteSky-TheWilde", "qg3v2zyr");
+    setWiFiCredentials("WhiteSky-TheWilde", "qg3v2zyr");
     //setWiFiCredentials("USuites_legacy", "onmyhonor");
-    //connectToWiFi();
-    //setupAWS();
-    //initDrinkController();
-    //initLED();
+    connectToWiFi();
+    setupAWS();
+    initDrinkController();
+    initLED();
 }
 
 unsigned long lastHeartbeatTime = 0; // Track the last heartbeat time
