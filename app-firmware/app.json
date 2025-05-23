@@ -12,10 +12,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.appfirmware",
       "infoPlist": {
-        "NSBluetoothAlwaysUsageDescription":
-          "LiquorBot needs Bluetooth to discover and connect to your LiquorBot dispenser.",
-        "NSBluetoothPeripheralUsageDescription":
-          "LiquorBot uses Bluetooth to communicate with your LiquorBot dispenser."
+        "NSBluetoothAlwaysUsageDescription": "LiquorBot needs Bluetooth to discover and connect to your LiquorBot dispenser.",
+        "NSBluetoothPeripheralUsageDescription": "LiquorBot uses Bluetooth to communicate with your LiquorBot dispenser."
       }
     },
     "android": {
@@ -23,7 +21,12 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.anonymous.appfirmware"
+      "package": "com.anonymous.appfirmware",
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -32,17 +35,12 @@
     },
     "plugins": [
       "expo-router",
-
-      // BLE-PLX plugin, with its options
       [
         "react-native-ble-plx",
         {
-          "bluetoothAlwaysPermission":
-            "LiquorBot needs Bluetooth to discover and connect to your LiquorBot dispenser."
+          "bluetoothAlwaysPermission": "LiquorBot needs Bluetooth to discover and connect to your LiquorBot dispenser."
         }
       ],
-
-      // Splash-screen plugin, with its options
       [
         "expo-splash-screen",
         {
@@ -52,11 +50,18 @@
           "backgroundColor": "#ffffff"
         }
       ],
-
       "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "2998de15-4c52-4397-904d-b7278c2d2e85"
+      }
     }
   }
 }
