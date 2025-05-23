@@ -79,6 +79,34 @@ export default function ConnectivitySettings() {
   };
 
   /*────────── BLE scan ──────────*/
+
+  useEffect(() => {
+    const manager = getManager();
+    let isMounted = true;
+
+    // Set up Bluetooth state listener
+    const stateSubscription = manager.onStateChange(async (state) => {
+      if (!isMounted) return;
+      
+      if (state === 'PoweredOn') {
+        await scanForDevices();
+      } else {
+        manager.stopDeviceScan();
+        setIsScanning(false);
+        setDiscoveredDevices([]);
+        if (state === 'PoweredOff') {
+          Alert.alert('Bluetooth Off', 'Please enable Bluetooth to connect to devices');
+        }
+      }
+    }, true); // Immediately emit current state
+
+    return () => {
+      isMounted = false;
+      stateSubscription.remove();
+      manager.stopDeviceScan();
+    };
+  }, []);
+  
   const scanForDevices = async () => {
     const manager = getManager();
     if (Platform.OS === 'android' && !(await requestBluetoothPermissions())) {
