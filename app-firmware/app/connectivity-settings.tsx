@@ -8,7 +8,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, Text, FlatList, Modal,
-  PermissionsAndroid, Platform, ActivityIndicator, TextInput, Alert, Animated,
+  PermissionsAndroid, Platform, ActivityIndicator, TextInput, Alert, Animated, RefreshControl
 } from 'react-native';
 import Ionicons         from '@expo/vector-icons/Ionicons';
 import { BleManager }   from 'react-native-ble-plx';
@@ -106,7 +106,7 @@ export default function ConnectivitySettings() {
       manager.stopDeviceScan();
     };
   }, []);
-  
+
   const scanForDevices = async () => {
     const manager = getManager();
     if (Platform.OS === 'android' && !(await requestBluetoothPermissions())) {
@@ -230,25 +230,25 @@ export default function ConnectivitySettings() {
           </Text>
         )}
         <FlatList
-          data={discoveredDevices}
-          keyExtractor={i => i.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.deviceRow}
-              disabled={isConnecting}
-              onPress={() => handleConnectDevice(item.id)}
-            >
-              <Text style={styles.deviceName}>
-                {item.name}{' '}
-                <Text style={{ color: '#4F4F4F', fontSize: 12 }}>
-                  ({item.id.slice(-5)})
+            data={discoveredDevices}
+            keyExtractor={i => i.id}
+            renderItem={({ item }) => (
+                <TouchableOpacity
+                style={styles.deviceRow}
+                disabled={isConnecting}
+                onPress={() => handleConnectDevice(item.id)}
+                >
+                <Text style={styles.deviceName}>
+                    {item.name}{' '}
+                    <Text style={{ color: '#4F4F4F', fontSize: 12 }}>
+                    ({item.id.slice(-5)})
+                    </Text>
                 </Text>
-              </Text>
-              <Ionicons name="bluetooth" size={18} color="#DFDCD9" />
-            </TouchableOpacity>
-          )}
-          contentContainerStyle={{ paddingBottom: 40 }}
-        />
+                <Ionicons name="bluetooth" size={18} color="#DFDCD9" />
+                </TouchableOpacity>
+            )}
+            contentContainerStyle={{ paddingBottom: 40 }}
+            />
       </Animated.View>
 
       {/* ─── Wi-Fi modal ───────────────────────────────────────────── */}
