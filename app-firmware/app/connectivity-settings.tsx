@@ -115,10 +115,10 @@ export default function ConnectivitySettings() {
 
       {/* status */}
       <View style={styles.statusBox}>
-        <Text style={styles.statusTitle}>Cloud Status</Text>
+        <Text style={styles.statusTitle}>Device Connectivity</Text>
         <View style={styles.statusRow}>
           <View style={[styles.statusDot,{backgroundColor:isConnected?'#63d44a':'#d44a4a'}]}/>
-          <Text style={styles.statusText}>{isConnected?'Online':'Offline'} – Bot #{liquorbotId||'--'}</Text>
+          <Text style={styles.statusText}>{isConnected?'Connected':'Disconnected'}</Text>
         </View>
       </View>
 
@@ -135,17 +135,24 @@ export default function ConnectivitySettings() {
           </Text>
         )}
         <FlatList
-          data={discoveredDevices} keyExtractor={i=>i.id}
-          onRefresh={scanForDevices} refreshing={isScanning}
-          renderItem={({item})=>(
-            <TouchableOpacity style={styles.deviceRow} disabled={isConnecting} onPress={()=>handleConnectDevice(item.id)}>
-              <Text style={styles.deviceName}>{item.name}{' '}
-                <Text style={{color:'#4F4F4F',fontSize:12}}>({item.id.slice(-5)})</Text>
-              </Text>
-              <Ionicons name="bluetooth" size={18} color="#DFDCD9"/>
-            </TouchableOpacity>
-          )}
-          contentContainerStyle={{paddingBottom:40}}
+            data={discoveredDevices}
+            keyExtractor={i => i.id}
+            renderItem={({ item }) => (
+                <TouchableOpacity
+                style={styles.deviceRow}
+                disabled={isConnecting}
+                onPress={() => handleConnectDevice(item.id)}
+                >
+                <Text style={styles.deviceName}>
+                    {item.name}{' '}
+                    <Text style={{ color: '#4F4F4F', fontSize: 12 }}>
+                    ({item.id.slice(-5)})
+                    </Text>
+                </Text>
+                <Ionicons name="bluetooth" size={18} color="#DFDCD9" />
+                </TouchableOpacity>
+            )}
+            contentContainerStyle={{ paddingBottom: 40 }}
         />
       </Animated.View>
 
@@ -165,7 +172,7 @@ export default function ConnectivitySettings() {
               style={styles.input}
             />
             <TouchableOpacity style={styles.modalBtn} onPress={sendWifiCredentials}>
-              <Text style={styles.modalBtnText}>Send Credentials</Text>
+              <Text style={styles.modalBtnText}>Connect Device</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -180,7 +187,7 @@ const styles = StyleSheet.create({
   closeButton:{position:'absolute',top:70,left:20},
   headerText:{position:'absolute',top:70,alignSelf:'center',fontSize:24,color:'#FFFFFF',fontWeight:'bold'},
 
-  statusBox:{backgroundColor:'#1F1F1F',borderRadius:10,padding:20,marginBottom:20},
+  statusBox:{backgroundColor:'#1F1F1F',borderRadius:10,padding:20,marginBottom:20, marginTop:20},
   statusTitle:{color:'#DFDCD9',fontSize:16,fontWeight:'bold',marginBottom:8},
   statusRow:{flexDirection:'row',alignItems:'center'},
   statusDot:{width:6,height:6,borderRadius:3,marginRight:6},
