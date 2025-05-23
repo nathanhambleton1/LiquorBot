@@ -236,36 +236,60 @@ export default function DeviceSettings() {
   };
 
   // Scan for LiquorBot peripherals
-  const scanForDevices = async () => {
-    const ok = await requestBluetoothPermissions();
-    if (!ok) return;
-
+  const getManager = () => {
     if (!managerRef.current) {
-      managerRef.current = new BleManager();
+      managerRef.current = new BleManager({
+        restoreStateIdentifier: 'liquorbot-ble',
+        restoreStateFunction: () => {
+          // called if iOS wakes the app to restore BLE state
+        },
+      });
     }
-    const manager = managerRef.current;
+    return managerRef.current!;
+  };
 
-    setIsScanning(true);
+  /** One-shot scanner that waits for PoweredOn, then scans */
+  const scanForDevices = async () => {
+    if (Platform.OS === 'android' && !(await requestBluetoothPermissions())) {
+      return;
+    }
+
+    const manager = getManager();
+
+    // reset UI
     setDiscoveredDevices([]);
-    manager.startDeviceScan(null, null, (error, device) => {
-      if (error) {
-        console.error('BLE scan error:', error);
-        manager.stopDeviceScan();
-        setIsScanning(false);
-        return;
-      }
-      if (device?.name?.toLowerCase().includes('liquorbot')) {
-        setDiscoveredDevices((prev) =>
-          prev.find((d) => d.id === device.id) ? prev : [...prev, { id: device.id, name: device.name! }],
-        );
-      }
-    });
+    setIsScanning(true);
 
-    // stop after 5 s
-    setTimeout(() => {
-      manager.stopDeviceScan();
-      setIsScanning(false);
-    }, 5000);
+    // wait until Bluetooth is ready
+    const sub = manager.onStateChange((state) => {
+      if (state === 'PoweredOn') {
+        sub.remove();             // state listener no longer needed
+
+        manager.startDeviceScan(null, null, (error, device) => {
+          if (error) {
+            console.error('BLE scan error:', error);
+            manager.stopDeviceScan();
+            setIsScanning(false);
+            return;
+          }
+
+          // keep every unique device (show all, or filter later in UI)
+          if (device?.id) {
+            setDiscoveredDevices((prev) =>
+              prev.find((d) => d.id === device.id)
+                ? prev
+                : [...prev, { id: device.id, name: device.name ?? 'Unnamed' }],
+            );
+          }
+        });
+
+        // auto-stop after 10 s
+        setTimeout(() => {
+          manager.stopDeviceScan();
+          setIsScanning(false);
+        }, 10000);
+      }
+    }, true); // “true” invokes the callback immediately with current state
   };
 
   // Cleanup on unmount
@@ -634,9 +658,7 @@ export default function DeviceSettings() {
           )}
 
           <FlatList
-            data={discoveredDevices.filter((device) =>
-              device.name.startsWith('Liquorbot')
-            )}
+            data={discoveredDevices}
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.deviceItem}
