@@ -78,65 +78,26 @@ export default function ConnectivitySettings() {
     return granted === PermissionsAndroid.RESULTS.GRANTED;
   };
 
-    /*────────── Scan & connect ──────────*/
-  useEffect(() => {
-    const manager = getManager();
-    let isMounted = true;
-
-    // Set up Bluetooth state listener
-    const stateSubscription = manager.onStateChange(async (state) => {
-      if (!isMounted) return;
-      
-      if (state === 'PoweredOn') {
-        await scanForDevices();
-      } else {
-        manager.stopDeviceScan();
-        setIsScanning(false);
-        setDiscoveredDevices([]);
-        if (state === 'PoweredOff') {
-          Alert.alert('Bluetooth Off', 'Please enable Bluetooth to connect to devices');
-        }
-      }
-    }, true); // Immediately emit current state
-
-    return () => {
-      isMounted = false;
-      stateSubscription.remove();
-      manager.stopDeviceScan();
-    };
-  }, []);
-
+  /*────────── BLE scan ──────────*/
   const scanForDevices = async () => {
     const manager = getManager();
-    setDiscoveredDevices([]);
-    
-    try {
-      // Check Bluetooth state
-      const currentState = await manager.state();
-      if (currentState !== 'PoweredOn') {
-        setIsScanning(false);
-        return;
-      }
-
-      // Check permissions
-      if (Platform.OS === 'android' && !(await requestBluetoothPermissions())) {
-        Alert.alert('Bluetooth permissions required');
-        setIsScanning(false);
-        return;
-      }
-
-      // Start scanning
-      setIsScanning(true);
-      manager.startDeviceScan([SERVICE_UUID], { allowDuplicates: false }, (err, device) => {
-        // ... (existing scan logic remains the same)
-      });
-      
-      const stopScan = () => { manager.stopDeviceScan(); setIsScanning(false); };
-      setTimeout(stopScan, 15_000);
-    } catch (error) {
-      console.error('Scan error:', error);
-      setIsScanning(false);
+    if (Platform.OS === 'android' && !(await requestBluetoothPermissions())) {
+      Alert.alert('Bluetooth permissions required');
+      return;
     }
+    setDiscoveredDevices([]); setIsScanning(true);
+    manager.startDeviceScan([SERVICE_UUID], { allowDuplicates: false }, (err, device) => {
+      if (err) { console.error(err); stopScan(); return; }
+      if (device?.name?.startsWith('LiquorBot')) {
+        setDiscoveredDevices(prev =>
+          prev.some(d => d.id === device.id)
+            ? prev
+            : [...prev, { id: device.id, name: device.name! }].sort((a, b) => a.name.localeCompare(b.name)),
+        );
+      }
+    });
+    const stopScan = () => { manager.stopDeviceScan(); setIsScanning(false); };
+    setTimeout(stopScan, 15_000);
   };
 
   /*────────── Connect & send Wi-Fi ──────────*/
