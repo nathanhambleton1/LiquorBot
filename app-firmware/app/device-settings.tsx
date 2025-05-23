@@ -223,16 +223,11 @@ export default function DeviceSettings() {
 
   /*──────────────────────── BLUETOOTH HELPERS ───────────────────────*/
   const getManager = () => {
-    if (!managerRef.current) {
-      managerRef.current = new BleManager({
-        restoreStateIdentifier: 'liquorbot-ble',
-        restoreStateFunction: () => {},
-        // Remove the iOS queue parameter entirely
-        ...(Platform.OS === 'ios' ? {} : {})
-      });
-    }
-    return managerRef.current!;
-  };
+  if (!managerRef.current) {
+    managerRef.current = new BleManager();
+  }
+  return managerRef.current!;
+};
 
   /** Request Bluetooth permissions on Android */
   const requestBluetoothPermissions = async () => {
