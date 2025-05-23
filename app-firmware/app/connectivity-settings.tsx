@@ -110,37 +110,76 @@ export default function ConnectivitySettings() {
   const scanForDevices = async () => {
     const manager = getManager();
     if (Platform.OS === 'android' && !(await requestBluetoothPermissions())) {
-      Alert.alert('Bluetooth permissions required');
-      return;
+        Alert.alert('Bluetooth permissions required');
+        return;
     }
-    setDiscoveredDevices([]); setIsScanning(true);
+    
+    setIsScanning(true);
+    
+    // Get already connected devices first
+    const connected = await manager.connectedDevices([SERVICE_UUID]);
+    const connectedDevices = connected.map(d => ({ id: d.id, name: d.name || 'LiquorBot' }));
+    
+    setDiscoveredDevices(prev => [
+        ...connectedDevices,
+        ...prev.filter(p => !connectedDevices.some(c => c.id === p.id))
+    ]);
+
+    // Then scan for new devices
     manager.startDeviceScan([SERVICE_UUID], { allowDuplicates: false }, (err, device) => {
-      if (err) { console.error(err); stopScan(); return; }
-      if (device?.name?.startsWith('LiquorBot')) {
-        setDiscoveredDevices(prev =>
-          prev.some(d => d.id === device.id)
-            ? prev
-            : [...prev, { id: device.id, name: device.name! }].sort((a, b) => a.name.localeCompare(b.name)),
+        if (err || !device?.name?.startsWith('LiquorBot')) return;
+        
+        setDiscoveredDevices(prev => 
+        prev.some(d => d.id === device.id) 
+            ? prev 
+            : [...prev, { id: device.id, name: device.name ?? 'LiquorBot' }]
         );
-      }
     });
-    const stopScan = () => { manager.stopDeviceScan(); setIsScanning(false); };
-    setTimeout(stopScan, 15_000);
-  };
+
+    setTimeout(() => {
+        manager.stopDeviceScan();
+        setIsScanning(false);
+    }, 15000);
+    };
 
   /*────────── Connect & send Wi-Fi ──────────*/
   const handleConnectDevice = async (devId: string) => {
     try {
-      setIsConnecting(true);
-      const dev = await getManager().connectToDevice(devId, { requestMTU: 256 });
-      await dev.discoverAllServicesAndCharacteristics();
-      setConnectedDevice(dev);
-      setWifiModalVisible(true);
-    } catch (e: any) {
-      console.error('BLE connect', e);
-      Alert.alert('Connection failed', e?.message ?? 'Unknown error');
-    } finally { setIsConnecting(false); }
-  };
+        setIsConnecting(true);
+        const manager = getManager();
+        
+        // Check if already connected
+        const connected = await manager.connectedDevices([SERVICE_UUID]);
+        const existing = connected.find(d => d.id === devId);
+        
+        const device = existing 
+        ? existing 
+        : await manager.connectToDevice(devId, { requestMTU: 256 });
+
+        if (!existing) await device.discoverAllServicesAndCharacteristics();
+        
+        setConnectedDevice(device);
+        setWifiModalVisible(true);
+    } catch (e) {
+        Alert.alert('Error', `Connection failed: ${e instanceof Error ? e.message : e}`);
+    } finally {
+        setIsConnecting(false);
+    }
+    };
+
+    /*────────── Check connected devices ──────────*/
+    useEffect(() => {
+        const checkConnected = async () => {
+            const connected = await getManager().connectedDevices([SERVICE_UUID]);
+            setDiscoveredDevices(prev => [
+            ...connected.map(d => ({ id: d.id, name: d.name || 'LiquorBot' })),
+            ...prev.filter(p => !connected.some(c => c.id === p.id))
+            ]);
+        };
+        
+        const interval = setInterval(checkConnected, 3000);
+        return () => clearInterval(interval);
+        }, []);
 
   const sendWifiCredentials = async () => {
     if (!connectedDevice) return;
