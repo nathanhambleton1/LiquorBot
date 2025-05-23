@@ -247,7 +247,15 @@ export default function ConnectivitySettings() {
                 <Ionicons name="bluetooth" size={18} color="#DFDCD9" />
                 </TouchableOpacity>
             )}
-            contentContainerStyle={{ paddingBottom: 40 }}
+            contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
+            refreshControl={
+                <RefreshControl
+                refreshing={false} // ← FORCE TO FALSE TO HIDE LOADER
+                onRefresh={scanForDevices}
+                tintColor="transparent" // ← HIDE THE DEFAULT INDICATOR
+                colors={['transparent']} // ← HIDE ON ANDROID
+                />
+            }
             />
       </Animated.View>
 
