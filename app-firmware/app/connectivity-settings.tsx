@@ -51,6 +51,8 @@ export default function ConnectivitySettings() {
 
   const [wifiLoading, setWifiLoading] = useState(false);
   const [wifiError,   setWifiError]   = useState<string | null>(null);
+  const disconnectSubscriptionRef = useRef<any | null>(null);
+  const disconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   /*────────── Permissions helpers ──────────*/
   const requestBluetoothPermissions = async () => {
@@ -104,6 +106,13 @@ export default function ConnectivitySettings() {
       isMounted = false;
       stateSubscription.remove();
       manager.stopDeviceScan();
+    };
+  }, []);
+
+   useEffect(() => {
+    return () => {
+      disconnectSubscriptionRef.current?.remove();
+      if (disconnectTimeoutRef.current) clearTimeout(disconnectTimeoutRef.current);
     };
   }, []);
 
@@ -181,16 +190,49 @@ export default function ConnectivitySettings() {
         return () => clearInterval(interval);
         }, []);
 
+  const checkIfDeviceConnected = async (deviceId: string) => {
+    const manager = getManager();
+    const connectedDevices = await manager.connectedDevices([SERVICE_UUID]);
+    return connectedDevices.some(d => d.id === deviceId);
+  };
+
   const sendWifiCredentials = async () => {
     if (!connectedDevice) return;
     try {
-      const ssidB64 = Buffer.from(ssid,     'utf8').toString('base64');
+      // Cleanup previous listeners and timeouts
+      disconnectSubscriptionRef.current?.remove();
+      if (disconnectTimeoutRef.current) clearTimeout(disconnectTimeoutRef.current);
+
+      const ssidB64 = Buffer.from(ssid, 'utf8').toString('base64');
       const passB64 = Buffer.from(password, 'utf8').toString('base64');
       await connectedDevice.writeCharacteristicWithResponseForService(SERVICE_UUID, SSID_CHAR_UUID, ssidB64);
       await connectedDevice.writeCharacteristicWithResponseForService(SERVICE_UUID, PASS_CHAR_UUID, passB64);
-      Alert.alert('Sent', 'Credentials transmitted – device will reboot and join Wi-Fi.');
+
       setWifiModalVisible(false);
       setPassword('');
+
+      const device = connectedDevice;
+      
+      // Handle successful disconnection (Wi-Fi connected)
+      const onDisconnected = (error: any) => {
+        if (error) return;
+        disconnectSubscriptionRef.current?.remove();
+        if (disconnectTimeoutRef.current) clearTimeout(disconnectTimeoutRef.current);
+        Alert.alert('Success!', 'Device connected to Wi-Fi successfully!');
+      };
+
+      // Listen for disconnection event
+      disconnectSubscriptionRef.current = device.onDisconnected(onDisconnected);
+
+      // Set timeout to check connection status
+      disconnectTimeoutRef.current = setTimeout(async () => {
+        const isConnected = await checkIfDeviceConnected(device.id);
+        if (isConnected) {
+          Alert.alert('Error', 'Invalid credentials - device remains on Bluetooth');
+        }
+        disconnectSubscriptionRef.current?.remove();
+      }, 15000); // 15-second timeout
+
     } catch (e: any) {
       console.error('Write creds', e);
       Alert.alert('Error', e?.message ?? 'Failed to send credentials');
