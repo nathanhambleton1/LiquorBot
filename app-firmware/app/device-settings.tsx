@@ -217,7 +217,6 @@ export default function DeviceSettings() {
   const [discoveredDevices, setDiscoveredDevices]         = useState<BluetoothDevice[]>([]);
   const [isScanning, setIsScanning]                       = useState(false);
   const managerRef = useRef<BleManager | null>(null);
-  const DEVICE_SERVICE_UUID                               = '1fb68313-bd17-4fd8-b615-554ddfd462d6';
 
   // Updated Bluetooth helpers in device-settings.tsx
 
@@ -287,7 +286,7 @@ export default function DeviceSettings() {
           }
 
           // Start scanning with service UUID filter
-          manager.startDeviceScan([DEVICE_SERVICE_UUID], null, (error, device) => {
+          manager.startDeviceScan(null, null, (error, device) => {
             if (error) {
               console.error('Scan error:', error);
               manager.stopDeviceScan();
