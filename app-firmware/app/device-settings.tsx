@@ -1,54 +1,46 @@
 // -----------------------------------------------------------------------------
-// File: device-settings.tsx
-// Description: Adds a Maintenance section (ready, empty, deep‑clean) that
-//              publishes commands on the maintenance topic, plus UX polish.
-// Author: Nathan Hambleton – updated 15 May 2025 by ChatGPT
+// File: device-settings.tsx          (REPLACEMENT – 23 May 2025)
+// Purpose:  • Scan & connect to any LiquorBot BLE peripheral
+//           • Filter out non-LiquorBot devices
+//           • Prompt for Wi-Fi SSID / password and send them to the board
+//           • Existing maintenance + slot-config UX kept intact
 // -----------------------------------------------------------------------------
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  Text,
-  ScrollView,
-  Modal,
-  TextInput,
-  FlatList,
-  Platform,
-  ActivityIndicator,
-  PermissionsAndroid,
-  Alert,
-  Animated,
+  View, StyleSheet, TouchableOpacity, Text, ScrollView, Modal,
+  TextInput, FlatList, Platform, ActivityIndicator, PermissionsAndroid,
+  Alert, Animated,
 } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { useRouter } from 'expo-router';
-import { useLiquorBot } from './components/liquorbot-provider';
-import { getUrl } from 'aws-amplify/storage';
-import { BleManager } from 'react-native-ble-plx';
+import Ionicons            from '@expo/vector-icons/Ionicons';
+import { useRouter }       from 'expo-router';
+import { BleManager }      from 'react-native-ble-plx';
+import { Buffer }          from 'buffer';           // ← base64 helper
+import { useLiquorBot }    from './components/liquorbot-provider';
+import { getUrl }          from 'aws-amplify/storage';
 
-// --- Amplify & PubSub ---
+// --------------------------------- Amplify / MQTT ----------------------------
 import { Amplify } from 'aws-amplify';
-import config from '../src/amplifyconfiguration.json';
-import { PubSub } from '@aws-amplify/pubsub';
-
+import config       from '../src/amplifyconfiguration.json';
+import { PubSub }   from '@aws-amplify/pubsub';
 Amplify.configure(config);
 const pubsub = new PubSub({
-  region: 'us-east-1',
-  endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
+  region   : 'us-east-1',
+  endpoint : 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
 
-/*───────────────────────── types ─────────────────────────*/
-interface Ingredient {
-  id: number;
-  name: string;
-  type: 'Alcohol' | 'Mixer' | 'Sour' | 'Sweet' | 'Misc';
-  description: string;
-}
+// -------------------------------- BLE UUIDs ----------------------------------
+const SERVICE_UUID     = 'e0be0301-718e-4700-8f55-a24d6160db08';  // main service
+const SSID_CHAR_UUID   = 'e0be0302-718e-4700-8f55-a24d6160db08';  // SSID write
+const PASS_CHAR_UUID   = 'e0be0303-718e-4700-8f55-a24d6160db08';  // PASS write
 
-interface BluetoothDevice {
-  id: string;
-  name: string;
-}
+// -----------------------------------------------------------------------------
+// Types
+// -----------------------------------------------------------------------------
+interface Ingredient     { id:number; name:string; type:'Alcohol'|'Mixer'|'Sour'|'Sweet'|'Misc'; description:string }
+interface BluetoothDevice{ id:string; name:string }
+
+// Ensure Buffer polyfill for React Native
+(global as any).Buffer = (global as any).Buffer || Buffer;
 
 /*──────────────────────── helper components ────────────────────────*/
 const AnimatedIngredientItem = ({ item, index, onPress }: { 
@@ -130,53 +122,131 @@ const ActionRow = ({
   );
 };
 
-/*───────────────────────── component ─────────────────────────*/
+/*───────────────────────── MAIN COMPONENT ───────────────────────────────────*/
 export default function DeviceSettings() {
   const router = useRouter();
   const { isConnected, liquorbotId } = useLiquorBot();
 
-  // State moved INSIDE the component
-  const [infoModalVisible, setInfoModalVisible] = React.useState(false);
-  const [selectedInfo, setSelectedInfo] = React.useState<{title: string, message: string} | null>(null);
+  // ----------- State ---------------------------------------------------------
+  const [infoModalVisible, setInfoModalVisible] = useState(false);
+  const [selectedInfo, setSelectedInfo]         = useState<{title:string;message:string}|null>(null);
 
   const [isMaintenanceCollapsed, setIsMaintenanceCollapsed] = useState(true);
   const rotationAnim = useState(new Animated.Value(0))[0];
 
-  const toggleMaintenance = () => {
-    Animated.timing(rotationAnim, {
-      toValue: isMaintenanceCollapsed ? 1 : 0,
-      duration: 200,
-      useNativeDriver: true
-    }).start();
-    setIsMaintenanceCollapsed(!isMaintenanceCollapsed);
+  const [slots, setSlots]                     = useState<number[]>(Array(15).fill(0));
+  const [modalVisible, setModalVisible]       = useState(false);
+  const [selectedSlot, setSelectedSlot]       = useState<number|null>(null);
+  const [searchQuery, setSearchQuery]         = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [ingredients, setIngredients]         = useState<Ingredient[]>([]);
+  const [loading, setLoading]                 = useState(false);
+  const [configLoading, setConfigLoading]     = useState(false);
+
+  // ---------- BLE / discovery ------------------------------------------------
+  const [discoveryModalVisible, setDiscoveryModalVisible] = useState(false);
+  const [discoveredDevices, setDiscoveredDevices]         = useState<BluetoothDevice[]>([]);
+  const [isScanning, setIsScanning]                       = useState(false);
+  const [isConnecting, setIsConnecting]                   = useState(false);
+  const [connectedDevice, setConnectedDevice]             = useState<any|null>(null);
+
+  // ---------- Wi-Fi credential modal ----------------------------------------
+  const [wifiModalVisible, setWifiModalVisible] = useState(false);
+  const [ssid, setSsid]             = useState('');
+  const [password, setPassword]     = useState('');
+
+  const managerRef = useRef<BleManager|null>(null);
+  const getManager = () => {
+    if (!managerRef.current) managerRef.current = new BleManager();
+    return managerRef.current;
   };
 
-  const rotate = rotationAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '180deg']
-  });
+  // ---------------- Animation helpers ---------------------------------------
+  const toggleMaintenance = () => {
+    Animated.timing(rotationAnim,{ toValue:isMaintenanceCollapsed?1:0, duration:200, useNativeDriver:true }).start();
+    setIsMaintenanceCollapsed(!isMaintenanceCollapsed);
+  };
+  const rotate = rotationAnim.interpolate({ inputRange:[0,1], outputRange:['0deg','180deg'] });
 
-  /* Slots -------------------------------------------------------------------*/
-  const [slots, setSlots]                 = useState<number[]>(Array(15).fill(0));
-  const [modalVisible, setModalVisible]   = useState(false);
-  const [selectedSlot, setSelectedSlot]   = useState<number | null>(null);
-  const [searchQuery, setSearchQuery]     = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [ingredients, setIngredients]     = useState<Ingredient[]>([]);
-  const [loading, setLoading]             = useState(false);
-  const [configLoading, setConfigLoading] = useState(false);
-
-  /* Maintenance -------------------------------------------------------------*/
+  // ---------------- MQTT maintenance helpers --------------------------------
   const maintenanceTopic = `liquorbot/liquorbot${liquorbotId}/maintenance`;
+  const publishMaintenance = async (msg:any) => {
+    try { await pubsub.publish({ topics:[maintenanceTopic], message:msg }); }
+    catch(e){ console.error('Maintenance publish error',e); }
+  };
 
-  const publishMaintenance = async (payload: any) => {
+  const bumpIfDisconnected = (fn:()=>void) => {
+    if (!isConnected) { Alert.alert('Connect to a device first'); return; }
+    fn();
+  };
+
+  // ─────────────────────────── BLE PERMISSIONS & SCAN ───────────────────────
+  const requestBluetoothPermissions = async () => {
+    if (Platform.OS !== 'android') return true;
+    const granted = await PermissionsAndroid.requestMultiple([
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+    ]);
+    return Object.values(granted).every(v => v === PermissionsAndroid.RESULTS.GRANTED);
+  };
+
+  const scanForDevices = async () => {
+    const manager = getManager();
+    // permissions / state
+    if (Platform.OS==='android' && !(await requestBluetoothPermissions())) {
+      Alert.alert('Bluetooth permissions needed'); return;
+    }
+    if ((await manager.state())!=='PoweredOn') {
+      Alert.alert('Enable Bluetooth first'); return;
+    }
+
+    setDiscoveredDevices([]); setIsScanning(true);
+    manager.startDeviceScan([SERVICE_UUID],{ allowDuplicates:false },(err,device)=>{
+      if (err) { console.error(err); manager.stopDeviceScan(); setIsScanning(false); return; }
+      if (device?.name?.startsWith('LiquorBot')) {
+        setDiscoveredDevices(prev=> prev.some(d=>d.id===device.id) ? prev
+                                : [...prev,{ id:device.id,name:device.name! }]
+                                   .sort((a,b)=>a.name.localeCompare(b.name)));
+      }
+    });
+
+    setTimeout(()=>{ manager.stopDeviceScan(); setIsScanning(false); },15000);
+  };
+
+  // ─────────────────────────── CONNECT + Wi-Fi WRITE ────────────────────────
+  const handleConnectDevice = async (devId:string) => {
     try {
-      await pubsub.publish({ topics: [maintenanceTopic], message: payload });
-    } catch (err) {
-      console.error('Maintenance publish error:', err);
+      setIsConnecting(true);
+      const manager = getManager();
+      const dev     = await manager.connectToDevice(devId,{ requestMTU:256 });
+      await dev.discoverAllServicesAndCharacteristics();
+      setConnectedDevice(dev);
+      Alert.alert('Connected',`Now configure Wi-Fi for ${dev.name}`);
+      setWifiModalVisible(true);
+      setDiscoveryModalVisible(false);
+    } catch(e:any) {
+      console.error('BLE connect',e);
+      Alert.alert('Connection failed', e?.message ?? 'Unknown error');
+    } finally { setIsConnecting(false); }
+  };
+
+  const sendWifiCredentials = async () => {
+    if (!connectedDevice) return;
+    try {
+      const ssidB64 = Buffer.from(ssid    ,'utf8').toString('base64');
+      const passB64 = Buffer.from(password,'utf8').toString('base64');
+      await connectedDevice.writeCharacteristicWithResponseForService(SERVICE_UUID, SSID_CHAR_UUID, ssidB64);
+      await connectedDevice.writeCharacteristicWithResponseForService(SERVICE_UUID, PASS_CHAR_UUID, passB64);
+      Alert.alert('Sent','Credentials transmitted – the device will reboot and join Wi-Fi.');
+      setWifiModalVisible(false);
+    } catch(e:any) {
+      console.error('Write creds',e);
+      Alert.alert('Error',e?.message ?? 'Failed to send credentials');
     }
   };
 
+  /* Maintenance -------------------------------------------------------------*/
   const handleReadySystem = () => {
     publishMaintenance({ action: 'READY_SYSTEM' });
   };
@@ -202,158 +272,6 @@ export default function DeviceSettings() {
 
   /* UX helpers --------------------------------------------------------------*/
   const [showConnectPrompt, setShowConnectPrompt] = useState(false);
-  const bumpIfDisconnected = (fn: () => void) => {
-    if (!isConnected) {
-      setShowConnectPrompt(true);
-      setTimeout(() => setShowConnectPrompt(false), 2000);
-      return;
-    }
-    fn();
-  };
-
-  /* Bluetooth (unchanged) ---------------------------------------------------*/
-  const [bluetoothModalVisible, setBluetoothModalVisible] = useState(false);
-  const [discoveryModalVisible, setDiscoveryModalVisible] = useState(false);
-  const [discoveredDevices, setDiscoveredDevices]         = useState<BluetoothDevice[]>([]);
-  const [isScanning, setIsScanning]                       = useState(false);
-  const managerRef = useRef<BleManager | null>(null);
-  const DEVICE_SERVICE_UUID = '1fb68313-bd17-4fd8-b615-554ddfd462d6';
-
-  // Updated Bluetooth helpers in device-settings.tsx
-
-  /*──────────────────────── BLUETOOTH HELPERS ───────────────────────*/
-  const getManager = () => {
-  if (!managerRef.current) {
-    managerRef.current = new BleManager();
-  }
-  return managerRef.current!;
-};
-
-  /** Request Bluetooth permissions on Android */
-  const requestBluetoothPermissions = async () => {
-    if (Platform.OS === 'android') {
-      const granted = await PermissionsAndroid.requestMultiple([
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      ]);
-      return (
-        granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] ===
-          PermissionsAndroid.RESULTS.GRANTED &&
-        granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] ===
-          PermissionsAndroid.RESULTS.GRANTED &&
-        granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] ===
-          PermissionsAndroid.RESULTS.GRANTED
-      );
-    }
-
-    // iOS - BleManager handles permissions internally
-    const manager = getManager();
-    const state = await manager.state();
-    return state === 'PoweredOn';
-  };
-
-  /** Enhanced scanner with permission checks and error handling */
-  const scanForDevices = async () => {
-    try {
-      const manager = getManager();
-      const state = await manager.state();
-
-      if (state !== 'PoweredOn') {
-        Alert.alert(
-          'Bluetooth Required',
-          'Please enable Bluetooth in Settings',
-          [{ text: 'OK', onPress: () => manager.enable() }] // iOS only
-        );
-        return;
-      }
-      if (Platform.OS === 'android' && !(await requestBluetoothPermissions())) {
-        Alert.alert('Permissions required', 'Bluetooth permissions needed to continue');
-        return;
-      }
-
-      setDiscoveredDevices([]);
-      setIsScanning(true);
-
-      const stateSub = manager.onStateChange(async (state) => {
-        if (state === 'PoweredOn') {
-          stateSub.remove();
-          
-          // iOS specific check
-          if (Platform.OS === 'ios' && (await manager.state()) !== 'PoweredOn') {
-            Alert.alert('Bluetooth Off', 'Please enable Bluetooth in Settings');
-            setIsScanning(false);
-            return;
-          }
-
-          // Start scanning with service UUID filter
-          manager.startDeviceScan(
-            [DEVICE_SERVICE_UUID],          // ❶  filter
-            { allowDuplicates: false },     // ❷  no spam
-            (error, device) => {
-              if (error) {
-              console.error('Scan error:', error);
-              manager.stopDeviceScan();
-              setIsScanning(false);
-              Alert.alert('Scan Failed', error.message);
-              return;
-            }
-
-            if (device?.name?.startsWith('LiquorBot')) {
-                  setDiscoveredDevices(prev => {
-                    if (prev.some(d => d.id === device.id)) return prev;
-                    return [...prev, { id: device.id, name: device.name! }]
-                          .sort((a, b) => a.name.localeCompare(b.name));
-                  });
-                }
-              }
-            );
-
-          // Timeout after 15 seconds
-          setTimeout(() => {
-            manager.stopDeviceScan();
-            setIsScanning(false);
-            if (discoveredDevices.length === 0) {
-              Alert.alert('No Devices Found', 'Ensure your LiquorBot is powered on and nearby');
-            }
-          }, 15000);
-        }
-      }, true);
-    } catch (error) {
-      console.error('Scan setup failed:', error);
-      setIsScanning(false);
-      Alert.alert('Error', 'Failed to start Bluetooth scanning');
-    }
-  };
-
-  // Add loading state for better UX
-  const [isConnecting, setIsConnecting] = useState(false);
-
-  const handleConnectDevice = async (deviceId: string) => {
-    try {
-      setIsConnecting(true);
-      setDiscoveryModalVisible(false);
-      
-      const manager = getManager();
-      const device = await manager.connectToDevice(deviceId, {
-        requestMTU: 256,
-        autoConnect: false
-      });
-      
-      await device.discoverAllServicesAndCharacteristics();
-      
-      // Update connection state
-      // (Implement your actual connection handling here)
-      Alert.alert('Connected', `Successfully connected to ${device.name}`);
-      
-    } catch (err) {
-      console.error('Connection failed:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      Alert.alert('Connection Failed', errorMessage);
-    } finally {
-      setIsConnecting(false);
-    }
-  };
 
   /*──────────────────── INGREDIENT‑ASSIGN HELPER ───────────────────*/
   const assignIngredientToSlot = (ingredientId: number) => {
@@ -648,64 +566,36 @@ export default function DeviceSettings() {
         )}
       </ScrollView>
 
-      {/* Device Discovery Modal */}
-      <Modal
-        visible={discoveryModalVisible}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setDiscoveryModalVisible(false)}
-      >
+      {/* ──────────────── Device Discovery Modal ──────────────── */}
+      <Modal visible={discoveryModalVisible} animationType="slide">
         <View style={styles.discoveryModalContainer}>
-          <TouchableOpacity
-            style={styles.modalCloseButton}
-            onPress={() => setDiscoveryModalVisible(false)}
-          >
+          <TouchableOpacity style={styles.modalCloseButton} onPress={()=>setDiscoveryModalVisible(false)}>
             <Ionicons name="close" size={30} color="#DFDCD9" />
           </TouchableOpacity>
           <Text style={styles.discoveryModalTitle}>Available Devices</Text>
 
-          {isScanning ? (
-            <View style={styles.scanningContainer}>
-              <ActivityIndicator size="small" color="#CE975E" />
-              <Text style={styles.scanningText}>Scanning for devices...</Text>
-            </View>
-          ) : (
-            <Text style={styles.scanningText}>Tap a device to connect</Text>
-          )}
+          {isScanning
+            ? (<View style={styles.scanningContainer}>
+                 <ActivityIndicator size="small" color="#CE975E" />
+                 <Text style={styles.scanningText}>Scanning…</Text>
+               </View>)
+            : (<Text style={styles.scanningText}>Tap a device to connect</Text>)}
 
-          <FlatList
-            data={discoveredDevices}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.deviceItem}
-                onPress={() => handleConnectDevice(item.id)}
-                disabled={isConnecting}
-              >
-                <Text style={styles.deviceName}>
-                  {item.name}         {/* e.g. LiquorBot-A3F7 */}
-                  {"  "}              {/* small gap */}
-                  <Text style={{ color: '#4F4F4F', fontSize: 12 }}>
-                    ({item.id.slice(-5)})   {/* show last 5 chars of MAC for tech users */}
-                  </Text>
+          <FlatList data={discoveredDevices} keyExtractor={i=>i.id}
+            renderItem={({item})=>(
+              <TouchableOpacity style={styles.deviceItem} disabled={isConnecting}
+                                onPress={()=>handleConnectDevice(item.id)}>
+                <Text style={styles.deviceName}>{item.name}
+                  {'  '}<Text style={{color:'#4F4F4F',fontSize:12}}>({item.id.slice(-5)})</Text>
                 </Text>
-                {isConnected && item.id === liquorbotId ? (
-                  <Ionicons name="checkmark-circle" size={20} color="#63d44a" />
-                ) : (
-                  <Ionicons name="bluetooth" size={20} color="#DFDCD9" />
-                )}
-              </TouchableOpacity>
-            )}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.deviceList}
-          />
-          {!isScanning && discoveredDevices.length === 0 && (
-            <TouchableOpacity
-              style={styles.retryButton}
-              onPress={scanForDevices}
-            >
+                <Ionicons name="bluetooth" size={20} color="#DFDCD9" />
+              </TouchableOpacity>)}
+            contentContainerStyle={styles.deviceList} />
+
+          {!isScanning && discoveredDevices.length===0 && (
+            <TouchableOpacity style={styles.retryButton} onPress={scanForDevices}>
               <Text style={styles.retryButtonText}>Retry Scan</Text>
-            </TouchableOpacity>
-          )}
+            </TouchableOpacity>)}
         </View>
       </Modal>
 
@@ -812,7 +702,28 @@ export default function DeviceSettings() {
         </View>
       </Modal>
 
-      {/* Loading overlay */}
+      {/* ──────────────── Wi-Fi Credential Modal ──────────────── */}
+      <Modal visible={wifiModalVisible} transparent animationType="fade" onRequestClose={()=>setWifiModalVisible(false)}>
+        <View style={styles.infoModalContainer}>
+          <View style={styles.infoModalContent}>
+            <Text style={styles.infoModalTitle}>Configure Wi-Fi</Text>
+
+            <TextInput placeholder="SSID" placeholderTextColor="#4F4F4F"
+              value={ssid} onChangeText={setSsid}
+              style={[styles.searchBar,{ marginBottom:10 }]} />
+
+            <TextInput placeholder="Password" placeholderTextColor="#4F4F4F"
+              secureTextEntry value={password} onChangeText={setPassword}
+              style={styles.searchBar} />
+
+            <TouchableOpacity style={[styles.infoModalButton,{marginTop:20}]}
+              onPress={sendWifiCredentials}>
+              <Text style={styles.infoModalButtonText}>Send Credentials</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {configLoading && (
         <View style={styles.loadingOverlay} pointerEvents="none">
           <ActivityIndicator size="large" color="#CE975E" />
@@ -821,7 +732,6 @@ export default function DeviceSettings() {
     </View>
   );
 }
-
 // ------------------- STYLES -------------------
 const styles = StyleSheet.create({
   container:                  { flex: 1, backgroundColor: '#141414' },
@@ -863,7 +773,7 @@ const styles = StyleSheet.create({
   underline:                  { height: 2, backgroundColor: '#CE975E', marginTop: 2, width: '100%' },
   searchBarContainer:         { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, paddingHorizontal: 15, marginBottom: 15, marginTop: 10 },
   searchIcon:                 { marginRight: 10 },
-  searchBar:                  { flex: 1, color: '#DFDCD9', fontSize: 16, paddingVertical: 10 },
+  searchBar:                  { flex: 1, color: '#DFDCD9', fontSize: 16, paddingVertical: 10, backgroundColor:'#1F1F1F', borderRadius:10, paddingHorizontal:15 },
   ingredientItem:             { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#333333' },
   ingredientText:             { color: '#DFDCD9', fontSize: 16 },
   bluetoothModalContainer:    { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' },

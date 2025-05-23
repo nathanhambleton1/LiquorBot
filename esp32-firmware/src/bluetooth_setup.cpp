@@ -1,102 +1,75 @@
 /*
  * -----------------------------------------------------------------------------
  *  Project: Liquor Bot
- *  File: bluetooth_setup.cpp
- *  Description: Manages Bluetooth Low Energy (BLE) functionality for receiving 
- *               Wi-Fi credentials and initializing wireless connectivity.
- *               This module handles BLE communication, stores received SSID 
- *               and password, and attempts to connect to Wi-Fi.
- * 
- *  Author: Nathan Hambleton
+ *  File   : bluetooth_setup.cpp         (REPLACEMENT – 23 May 2025)
+ *  Purpose: Advertise a unique LiquorBot BLE peripheral, receive Wi-Fi creds,
+ *           then hand off to Wi-Fi / AWS.
  * -----------------------------------------------------------------------------
  */
-
 #include "bluetooth_setup.h"
-#include "wifi_setup.h"
+#include "wifi_setup.h"          // setWiFiCredentials(), connectToWiFi()
+#include <esp_mac.h>
 #include <NimBLEDevice.h>
 
-// Global variables
-NimBLEServer *bleServer = nullptr;
-NimBLECharacteristic *ssidCharacteristic = nullptr;
-NimBLECharacteristic *passwordCharacteristic = nullptr;
-std::string receivedSSID = ""; // Temporary storage for SSID
-std::string receivedPassword = ""; // Temporary storage for password
-bool credentialsReceived = false;
+// ----------- Private UUIDs ----------------------------------------------------
+static const NimBLEUUID SERVICE_UUID ("e0be0301-718e-4700-8f55-a24d6160db08");
+static const NimBLEUUID SSID_UUID    ("e0be0302-718e-4700-8f55-a24d6160db08");
+static const NimBLEUUID PASS_UUID    ("e0be0303-718e-4700-8f55-a24d6160db08");
 
-// Custom callback for BLE write events
-class WiFiCredentialsCallback : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic *characteristic, NimBLEConnInfo &connInfo) override {
-        std::string value = characteristic->getValue();
+// ----------- Globals ----------------------------------------------------------
+static NimBLECharacteristic *ssidCharacteristic     = nullptr;
+static NimBLECharacteristic *passwordCharacteristic = nullptr;
+static bool credentialsReceived = false;
 
-        if (characteristic == ssidCharacteristic) {
-            receivedSSID = value;
-            Serial.print("Received SSID: ");
-            Serial.println(receivedSSID.c_str());
-        } else if (characteristic == passwordCharacteristic) {
-            receivedPassword = value;
-            Serial.print("Received Password: ");
-            Serial.println(receivedPassword.c_str());
-        }
-
-        // If both SSID and password are received, set them and connect to Wi-Fi
-        if (!receivedSSID.empty() && !receivedPassword.empty()) {
-            setWiFiCredentials(receivedSSID, receivedPassword);
+// ----------- Characteristic callback -----------------------------------------
+class CredCallback : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic *c, NimBLEConnInfo& /*info*/) override {
+        const std::string ssidVal = ssidCharacteristic    ->getValue();
+        const std::string passVal = passwordCharacteristic->getValue();
+        if (!ssidVal.empty() && !passVal.empty()) {
+            setWiFiCredentials(ssidVal, passVal);
             credentialsReceived = true;
-            Serial.println("Wi-Fi credentials received.");
-            // Connect to Wi-Fi
-            if (!connectToWiFi()) {
-                ssidCharacteristic = nullptr;
-                passwordCharacteristic = nullptr;
-                credentialsReceived = false;
-                Serial.println("Credentials reset. Try again.");
-            }
+            connectToWiFi();
         }
     }
 };
 
+// ----------- Public helpers ---------------------------------------------------
+bool areCredentialsReceived() { return credentialsReceived; }
+
+// ----------- Initialiser ------------------------------------------------------
 void setupBluetoothWiFiAWS() {
-    NimBLEDevice::init("LiquorBot");
+    // Use MAC tail to give every board a unique, human-readable name
+    uint8_t mac[6];
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    char devName[18];                          // "LiquorBot-XXXX\0"
+    sprintf(devName, "LiquorBot-%02X%02X", mac[4], mac[5]);
 
-    std::string suffix = NimBLEDevice::getAddress().toString().substr(15,2) +
-                         NimBLEDevice::getAddress().toString().substr(18,2); // last 2 bytes
-    std::string advName = "LiquorBot-" + suffix;    // e.g. "LiquorBot-A3F7"
+    NimBLEDevice::init(devName);
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9);    // full power for easier discovery
 
-    // Get the BLE MAC address and print it
-    Serial.print("BLE Device Address: ");
-    Serial.println(NimBLEDevice::getAddress().toString().c_str());
-    
-    bleServer = NimBLEDevice::createServer();
+    // --- GATT server, service & characteristics ------------------------------
+    NimBLEServer  *server = NimBLEDevice::createServer();
+    NimBLEService *svc    = server->createService(SERVICE_UUID);
 
-    // Create BLE service
-    NimBLEService *wifiService = bleServer->createService("1fb68313-bd17-4fd8-b615-554ddfd462d6");
+    ssidCharacteristic     = svc->createCharacteristic(SSID_UUID , NIMBLE_PROPERTY::WRITE);
+    passwordCharacteristic = svc->createCharacteristic(PASS_UUID , NIMBLE_PROPERTY::WRITE);
 
-    // Create SSID characteristic
-    ssidCharacteristic = wifiService->createCharacteristic(
-        "20168ad5-9429-489e-b2b2-dc1902398f44",
-        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::READ
-    );
-    ssidCharacteristic->setCallbacks(new WiFiCredentialsCallback());
+    static CredCallback cb;
+    ssidCharacteristic    ->setCallbacks(&cb);
+    passwordCharacteristic->setCallbacks(&cb);
 
-    // Create Password characteristic
-    passwordCharacteristic = wifiService->createCharacteristic(
-        "3f1d29eb-c1b6-44a5-a99e-dd147761dee7",
-        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::READ
-    );
-    passwordCharacteristic->setCallbacks(new WiFiCredentialsCallback());
+    svc->start();
 
-    // Start the BLE service
-    wifiService->start();
-
-    // Start BLE advertising
+    // --- Advertising ---------------------------------------------------------
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
-    adv->setName(advName);
-    adv->enableScanResponse(true);  
-    adv->setPreferredParams(0x06, 0x12);
+    adv->addServiceUUID(SERVICE_UUID);
+    adv->enableScanResponse(true);                    // ← renamed
+    std::string mdata = "LQBT";
+    mdata.push_back(static_cast<char>(mac[4]));
+    mdata.push_back(static_cast<char>(mac[5]));
+    adv->setManufacturerData(mdata);                  // ← renamed
+    adv->setPreferredParams(0x06, 0x12);              // ← consolidated
     adv->start();
-
-    Serial.println("BLE Advertising started. Waiting for Wi-Fi credentials...");
-}
-
-bool areCredentialsReceived() {
-    return credentialsReceived;
+    Serial.printf("BLE advertising as %s – service %s\n",devName, SERVICE_UUID.toString().c_str());
 }
