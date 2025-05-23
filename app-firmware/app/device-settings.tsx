@@ -1,497 +1,256 @@
 // -----------------------------------------------------------------------------
 // File: device-settings.tsx          (REPLACEMENT – 23 May 2025)
-// Purpose:  • Scan & connect to any LiquorBot BLE peripheral
-//           • Filter out non-LiquorBot devices
-//           • Prompt for Wi-Fi SSID / password and send them to the board
-//           • Existing maintenance + slot-config UX kept intact
+// Purpose:  • Maintenance & slot-configuration only
+//           • “Connectivity” button navigates to /connectivity-settings
 // -----------------------------------------------------------------------------
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, Text, ScrollView, Modal,
-  TextInput, FlatList, Platform, ActivityIndicator, PermissionsAndroid,
-  Alert, Animated,
+  TextInput, FlatList, Platform, ActivityIndicator, Alert, Animated,
 } from 'react-native';
-import Ionicons            from '@expo/vector-icons/Ionicons';
-import { useRouter }       from 'expo-router';
-import { BleManager }      from 'react-native-ble-plx';
-import { Buffer }          from 'buffer';           // ← base64 helper
-import { useLiquorBot }    from './components/liquorbot-provider';
-import { getUrl }          from 'aws-amplify/storage';
-
-// --------------------------------- Amplify / MQTT ----------------------------
-import { Amplify } from 'aws-amplify';
-import config       from '../src/amplifyconfiguration.json';
-import { PubSub }   from '@aws-amplify/pubsub';
+import Ionicons          from '@expo/vector-icons/Ionicons';
+import { useRouter }     from 'expo-router';
+import { useLiquorBot }  from './components/liquorbot-provider';
+import { getUrl }        from 'aws-amplify/storage';
+import { Amplify }       from 'aws-amplify';
+import config            from '../src/amplifyconfiguration.json';
+import { PubSub }        from '@aws-amplify/pubsub';
 Amplify.configure(config);
 const pubsub = new PubSub({
   region   : 'us-east-1',
   endpoint : 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
 
-// -------------------------------- BLE UUIDs ----------------------------------
-const SERVICE_UUID     = 'e0be0301-718e-4700-8f55-a24d6160db08';  // main service
-const SSID_CHAR_UUID   = 'e0be0302-718e-4700-8f55-a24d6160db08';  // SSID write
-const PASS_CHAR_UUID   = 'e0be0303-718e-4700-8f55-a24d6160db08';  // PASS write
-
 // -----------------------------------------------------------------------------
 // Types
 // -----------------------------------------------------------------------------
-interface Ingredient     { id:number; name:string; type:'Alcohol'|'Mixer'|'Sour'|'Sweet'|'Misc'; description:string }
-interface BluetoothDevice{ id:string; name:string }
+interface Ingredient {
+  id: number;
+  name: string;
+  type: 'Alcohol' | 'Mixer' | 'Sour' | 'Sweet' | 'Misc';
+  description: string;
+}
 
-// Ensure Buffer polyfill for React Native
-(global as any).Buffer = (global as any).Buffer || Buffer;
-
-/*──────────────────────── helper components ────────────────────────*/
-const AnimatedIngredientItem = ({ item, index, onPress }: { 
-  item: Ingredient; 
-  index: number; 
-  onPress: () => void 
-}) => {
-  const anim = React.useRef(new Animated.Value(0)).current;
-
-  React.useEffect(() => {
-    Animated.spring(anim, {
-      toValue: 1,
-      delay: index * 50,
-      useNativeDriver: true
-    }).start();
-  }, []);
-
-  return (
-    <Animated.View
-      style={{
-        opacity: anim,
-        transform: [{ translateY: anim.interpolate({
-          inputRange: [0, 1],
-          outputRange: [50, 0]
-        }) }]
-      }}
-    >
-      <TouchableOpacity style={styles.ingredientItem} onPress={onPress}>
-        <Text style={styles.ingredientText}>{item.name}</Text>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-};
-
-const ActionRow = ({ 
-  label, 
-  icon, 
-  onPress, 
-  info,
-  onInfoPress 
-}: { 
-  label: string; 
-  icon: any; 
-  onPress: () => void; 
-  info: string;
-  onInfoPress: () => void;
-}) => {
-  const anim = React.useRef(new Animated.Value(1)).current;
-
-  const pressIn = () => Animated.timing(anim, { 
-    toValue: 0.97, 
-    duration: 90,  
-    useNativeDriver: true 
-  }).start();
-
-  const pressOut = () => Animated.timing(anim, { 
-    toValue: 1,    
-    duration: 90,  
-    useNativeDriver: true 
-  }).start();
-
-  return (
-    <Animated.View style={{ transform: [{ scale: anim }] }}>
-      <TouchableOpacity
-        style={styles.actionRow}
-        activeOpacity={0.8}
-        onPressIn={pressIn}
-        onPressOut={pressOut}
-        onPress={onPress}
-      >
-        <Ionicons name={icon} size={20} color="#CE975E" style={{ marginRight: 15 }} />
-        <Text style={styles.actionLabel}>{label}</Text>
-        <View style={{ flex: 1 }} />
-        <TouchableOpacity onPress={onInfoPress}>
-          <Ionicons name="information-circle-outline" size={20} color="#4F4F4F" />
-        </TouchableOpacity>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-};
-
-/*───────────────────────── MAIN COMPONENT ───────────────────────────────────*/
+// -----------------------------------------------------------------------------
 export default function DeviceSettings() {
   const router = useRouter();
   const { isConnected, liquorbotId } = useLiquorBot();
 
-  // ----------- State ---------------------------------------------------------
+  /*────────── State ──────────*/
   const [infoModalVisible, setInfoModalVisible] = useState(false);
   const [selectedInfo, setSelectedInfo]         = useState<{title:string;message:string}|null>(null);
 
   const [isMaintenanceCollapsed, setIsMaintenanceCollapsed] = useState(true);
   const rotationAnim = useState(new Animated.Value(0))[0];
 
-  const [slots, setSlots]                     = useState<number[]>(Array(15).fill(0));
-  const [modalVisible, setModalVisible]       = useState(false);
-  const [selectedSlot, setSelectedSlot]       = useState<number|null>(null);
-  const [searchQuery, setSearchQuery]         = useState('');
+  const [slots, setSlots]                 = useState<number[]>(Array(15).fill(0));
+  const [modalVisible, setModalVisible]   = useState(false);
+  const [selectedSlot, setSelectedSlot]   = useState<number|null>(null);
+  const [searchQuery, setSearchQuery]     = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [ingredients, setIngredients]         = useState<Ingredient[]>([]);
-  const [loading, setLoading]                 = useState(false);
-  const [configLoading, setConfigLoading]     = useState(false);
+  const [ingredients, setIngredients]     = useState<Ingredient[]>([]);
+  const [loading, setLoading]             = useState(false);
+  const [configLoading, setConfigLoading] = useState(false);
 
-  // ---------- BLE / discovery ------------------------------------------------
-  const [discoveryModalVisible, setDiscoveryModalVisible] = useState(false);
-  const [discoveredDevices, setDiscoveredDevices]         = useState<BluetoothDevice[]>([]);
-  const [isScanning, setIsScanning]                       = useState(false);
-  const [isConnecting, setIsConnecting]                   = useState(false);
-  const [connectedDevice, setConnectedDevice]             = useState<any|null>(null);
+  const [showConnectPrompt, setShowConnectPrompt] = useState(false);
 
-  // ---------- Wi-Fi credential modal ----------------------------------------
-  const [wifiModalVisible, setWifiModalVisible] = useState(false);
-  const [ssid, setSsid]             = useState('');
-  const [password, setPassword]     = useState('');
-
-  const managerRef = useRef<BleManager|null>(null);
-  const getManager = () => {
-    if (!managerRef.current) managerRef.current = new BleManager();
-    return managerRef.current;
-  };
-
-  // ---------------- Animation helpers ---------------------------------------
+  /*────────── Animations ──────────*/
   const toggleMaintenance = () => {
-    Animated.timing(rotationAnim,{ toValue:isMaintenanceCollapsed?1:0, duration:200, useNativeDriver:true }).start();
+    Animated.timing(rotationAnim, {
+      toValue: isMaintenanceCollapsed ? 1 : 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
     setIsMaintenanceCollapsed(!isMaintenanceCollapsed);
   };
   const rotate = rotationAnim.interpolate({ inputRange:[0,1], outputRange:['0deg','180deg'] });
 
-  // ---------------- MQTT maintenance helpers --------------------------------
+  /*────────── MQTT maintenance helpers ──────────*/
   const maintenanceTopic = `liquorbot/liquorbot${liquorbotId}/maintenance`;
   const publishMaintenance = async (msg:any) => {
     try { await pubsub.publish({ topics:[maintenanceTopic], message:msg }); }
     catch(e){ console.error('Maintenance publish error',e); }
   };
-
   const bumpIfDisconnected = (fn:()=>void) => {
     if (!isConnected) { Alert.alert('Connect to a device first'); return; }
     fn();
   };
-
-  // ─────────────────────────── BLE PERMISSIONS & SCAN ───────────────────────
-  const requestBluetoothPermissions = async () => {
-    if (Platform.OS !== 'android') return true;
-    const granted = await PermissionsAndroid.requestMultiple([
-      PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-      PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-    ]);
-    return Object.values(granted).every(v => v === PermissionsAndroid.RESULTS.GRANTED);
-  };
-
-  const scanForDevices = async () => {
-    const manager = getManager();
-    // permissions / state
-    if (Platform.OS==='android' && !(await requestBluetoothPermissions())) {
-      Alert.alert('Bluetooth permissions needed'); return;
-    }
-    if ((await manager.state())!=='PoweredOn') {
-      Alert.alert('Enable Bluetooth first'); return;
-    }
-
-    setDiscoveredDevices([]); setIsScanning(true);
-    manager.startDeviceScan([SERVICE_UUID],{ allowDuplicates:false },(err,device)=>{
-      if (err) { console.error(err); manager.stopDeviceScan(); setIsScanning(false); return; }
-      if (device?.name?.startsWith('LiquorBot')) {
-        setDiscoveredDevices(prev=> prev.some(d=>d.id===device.id) ? prev
-                                : [...prev,{ id:device.id,name:device.name! }]
-                                   .sort((a,b)=>a.name.localeCompare(b.name)));
-      }
-    });
-
-    setTimeout(()=>{ manager.stopDeviceScan(); setIsScanning(false); },15000);
-  };
-
-  // ─────────────────────────── CONNECT + Wi-Fi WRITE ────────────────────────
-  const handleConnectDevice = async (devId:string) => {
-    try {
-      setIsConnecting(true);
-      const manager = getManager();
-      const dev     = await manager.connectToDevice(devId,{ requestMTU:256 });
-      await dev.discoverAllServicesAndCharacteristics();
-      setConnectedDevice(dev);
-      Alert.alert('Connected',`Now configure Wi-Fi for ${dev.name}`);
-      setWifiModalVisible(true);
-      setDiscoveryModalVisible(false);
-    } catch(e:any) {
-      console.error('BLE connect',e);
-      Alert.alert('Connection failed', e?.message ?? 'Unknown error');
-    } finally { setIsConnecting(false); }
-  };
-
-  const sendWifiCredentials = async () => {
-    if (!connectedDevice) return;
-    try {
-      const ssidB64 = Buffer.from(ssid    ,'utf8').toString('base64');
-      const passB64 = Buffer.from(password,'utf8').toString('base64');
-      await connectedDevice.writeCharacteristicWithResponseForService(SERVICE_UUID, SSID_CHAR_UUID, ssidB64);
-      await connectedDevice.writeCharacteristicWithResponseForService(SERVICE_UUID, PASS_CHAR_UUID, passB64);
-      Alert.alert('Sent','Credentials transmitted – the device will reboot and join Wi-Fi.');
-      setWifiModalVisible(false);
-    } catch(e:any) {
-      console.error('Write creds',e);
-      Alert.alert('Error',e?.message ?? 'Failed to send credentials');
-    }
-  };
-
-  /* Maintenance -------------------------------------------------------------*/
-  const handleReadySystem = () => {
-    publishMaintenance({ action: 'READY_SYSTEM' });
-  };
-  const handleEmptySystem = () => {
-    publishMaintenance({ action: 'EMPTY_SYSTEM' });
-  };
+  const handleReadySystem = () => publishMaintenance({ action:'READY_SYSTEM' });
+  const handleEmptySystem = () => publishMaintenance({ action:'EMPTY_SYSTEM' });
   const handleDeepClean   = () => {
     Alert.alert(
-      'Deep Clean',
+      'Deep Clean',
       'All ingredient containers must be empty.\n\n' +
-        'Place warm water in a spare container and attach it to Slot 1. ' +
+        'Place warm water in a spare container and attach it to Slot 1. ' +
         'Proceed with deep clean?',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Start',
-          style: 'destructive',
-          onPress: () => publishMaintenance({ action: 'DEEP_CLEAN' }),
-        },
+        { text: 'Start',  style: 'destructive', onPress:()=>publishMaintenance({action:'DEEP_CLEAN'}) },
       ],
     );
   };
 
-  /* UX helpers --------------------------------------------------------------*/
-  const [showConnectPrompt, setShowConnectPrompt] = useState(false);
-
-  /*──────────────────── INGREDIENT‑ASSIGN HELPER ───────────────────*/
-  const assignIngredientToSlot = (ingredientId: number) => {
-    if (selectedSlot == null) return;
-
-    // Local UI update
-    setSlots((prev) => {
-      const next = [...prev];
-      next[selectedSlot] = ingredientId;
-      return next;
-    });
-
-    // Tell the ESP
-    handleSetSlot(selectedSlot, ingredientId);
-
-    // Close picker
-    setModalVisible(false);
-    setSearchQuery('');
-  };
-
-  /* Fetch ingredients list --------------------------------------------------*/
+  /*────────── Fetch ingredients list ──────────*/
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const ingUrl  = await getUrl({ key: 'drinkMenu/ingredients.json' });
-        const resp    = await fetch(ingUrl.url);
-        const data    = await resp.json();
-        data.sort((a: Ingredient, b: Ingredient) => a.name.localeCompare(b.name));
+        const ingUrl = await getUrl({ key:'drinkMenu/ingredients.json' });
+        const resp   = await fetch(ingUrl.url);
+        const data   = await resp.json();
+        data.sort((a:Ingredient,b:Ingredient)=>a.name.localeCompare(b.name));
         setIngredients(data);
       } catch (err) {
-        console.error('S3 ingredients fetch error:', err);
+        console.error('S3 ingredients fetch error:',err);
       } finally {
         setLoading(false);
       }
     })();
   }, []);
 
-  /* Slot‑config MQTT subscribe/publish --------------------------------------*/
+  /*────────── Slot-config MQTT subscribe/publish ──────────*/
   const slotTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
-  const retryIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
-
-  const publishSlot = async (payload: any) => {
-    try {
-      await pubsub.publish({ topics: [slotTopic], message: payload });
-    } catch (err) {
-      console.error('Slot publish error:', err);
-    }
+  const retryIntervalRef = useRef<NodeJS.Timeout|null>(null);
+  const publishSlot = async (payload:any) => {
+    try { await pubsub.publish({ topics:[slotTopic], message:payload }); }
+    catch(err){ console.error('Slot publish error:',err); }
   };
-
   useEffect(() => {
-    if (discoveryModalVisible) {
-      scanForDevices();
-    } else {
-      // Cleanup when modal closes
-      const manager = getManager();
-      manager.stopDeviceScan();
-      setDiscoveredDevices([]);
-    }
-  }, [discoveryModalVisible]);
-
-  useEffect(() => {
-    const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
-      next: (d) => {
+    const sub = pubsub.subscribe({ topics:[slotTopic] }).subscribe({
+      next:(d)=>{
         const msg = (d as any).value ?? d;
-        if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
-          setSlots(msg.slots.map((id: any) => Number(id) || 0));
+        if (msg.action==='CURRENT_CONFIG' && Array.isArray(msg.slots)) {
+          setSlots(msg.slots.map((id:any)=>Number(id)||0));
           setConfigLoading(false);
-          // Clear the retry interval once config is received
-          if (retryIntervalRef.current) {
-            clearInterval(retryIntervalRef.current);
-            retryIntervalRef.current = null;
-          }
+          if (retryIntervalRef.current) { clearInterval(retryIntervalRef.current); retryIntervalRef.current=null; }
         }
-        if (msg.action === 'SET_SLOT' && typeof msg.slot === 'number') {
-          setSlots((prev) => {
-            const next = [...prev];
-            next[msg.slot - 1] = Number(msg.ingredientId) || 0;
-            return next;
-          });
+        if (msg.action==='SET_SLOT' && typeof msg.slot==='number') {
+          setSlots(prev=>{ const next=[...prev]; next[msg.slot-1]=Number(msg.ingredientId)||0; return next; });
         }
       },
-      error: (err) => console.error('slot‑config sub error:', err),
+      error:(err)=>console.error('slot-config sub error:',err),
     });
-
     if (isConnected) {
       fetchCurrentConfig();
-      // Start retry interval to resend GET_CONFIG every 1.5 seconds
-      retryIntervalRef.current = setInterval(() => {
-        publishSlot({ action: 'GET_CONFIG' });
-      }, 1500);
+      retryIntervalRef.current = setInterval(()=>publishSlot({action:'GET_CONFIG'}),1500);
     }
-
-    return () => {
+    return ()=>{
       sub.unsubscribe();
-      // Cleanup interval on unmount or dependency change
-      if (retryIntervalRef.current) {
-        clearInterval(retryIntervalRef.current);
-        retryIntervalRef.current = null;
-      }
+      if (retryIntervalRef.current) { clearInterval(retryIntervalRef.current); retryIntervalRef.current=null; }
     };
-  }, [isConnected, liquorbotId]); // eslint-disable-line react-hooks/exhaustive-deps
+  },[isConnected, liquorbotId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fetchCurrentConfig = () => { if (!isConnected) return; setConfigLoading(true); publishSlot({action:'GET_CONFIG'}); };
+  const handleClearAll = () => bumpIfDisconnected(()=>{ publishSlot({action:'CLEAR_CONFIG'}); setSlots(Array(15).fill(0)); });
+  const handleSetSlot = (idx:number,id:number) => publishSlot({action:'SET_SLOT',slot:idx+1,ingredientId:id});
 
-  const fetchCurrentConfig = () => {
-    if (!isConnected) return;
-    setConfigLoading(true);
-    publishSlot({ action: 'GET_CONFIG' });
-  };
-  const handleClearAll = () =>
-    bumpIfDisconnected(() => {
-      publishSlot({ action: 'CLEAR_CONFIG' });
-      setSlots(Array(15).fill(0));
-    });
-  const handleSetSlot = (idx: number, id: number) =>
-    publishSlot({ action: 'SET_SLOT', slot: idx + 1, ingredientId: id });
-
-  /* Ingredient helpers ------------------------------------------------------*/
-  const categories = ['All', 'Alcohol', 'Mixer', 'Sour', 'Sweet', 'Misc'];
+  /*────────── Ingredient helpers ──────────*/
+  const categories = ['All','Alcohol','Mixer','Sour','Sweet','Misc'];
   const filteredIngredients = ingredients
-    .filter((i) => i.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    .filter((i) => selectedCategory === 'All' || i.type === selectedCategory);
-  const ingName = (id: number | string) =>
-    ingredients.find((i) => i.id === Number(id))?.name ?? '';
+    .filter(i=>i.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .filter(i=>selectedCategory==='All'||i.type===selectedCategory);
+  const ingName = (id:number|string)=>ingredients.find(i=>i.id===Number(id))?.name ?? '';
 
-  /* Render ------------------------------------------------------------------*/
-  return (
+  /*────────── Components ──────────*/
+  const AnimatedIngredientItem = ({ item,index,onPress }:{
+    item:Ingredient; index:number; onPress:()=>void;
+  })=>{
+    const anim = useRef(new Animated.Value(0)).current;
+    useEffect(()=>{ Animated.spring(anim,{toValue:1,delay:index*50,useNativeDriver:true}).start(); },[]);
+    return(
+      <Animated.View style={{opacity:anim,transform:[{translateY:anim.interpolate({inputRange:[0,1],outputRange:[50,0]})}]}}>
+        <TouchableOpacity style={styles.ingredientItem} onPress={onPress}>
+          <Text style={styles.ingredientText}>{item.name}</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
+  const ActionRow = ({
+    label,icon,onPress,info,onInfoPress,
+  }:{
+    label:string; icon:any; onPress:()=>void; info:string; onInfoPress:()=>void;
+  })=>{
+    const anim=useRef(new Animated.Value(1)).current;
+    const pressIn = ()=>Animated.timing(anim,{toValue:0.97,duration:90,useNativeDriver:true}).start();
+    const pressOut= ()=>Animated.timing(anim,{toValue:1,duration:90,useNativeDriver:true}).start();
+    return(
+      <Animated.View style={{transform:[{scale:anim}]}}>
+        <TouchableOpacity style={styles.actionRow} activeOpacity={0.8}
+          onPressIn={pressIn} onPressOut={pressOut} onPress={onPress}>
+          <Ionicons name={icon} size={20} color="#CE975E" style={{marginRight:15}}/>
+          <Text style={styles.actionLabel}>{label}</Text>
+          <View style={{flex:1}}/>
+          <TouchableOpacity onPress={onInfoPress}>
+            <Ionicons name="information-circle-outline" size={20} color="#4F4F4F"/>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
+
+  /*────────── Render ──────────*/
+  return(
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
 
         {/* close */}
-        <TouchableOpacity style={styles.closeButton} onPress={() => router.push('/')}>
-          <Ionicons name="close" size={30} color="#DFDCD9" />
+        <TouchableOpacity style={styles.closeButton} onPress={()=>router.push('/')}>
+          <Ionicons name="close" size={30} color="#DFDCD9"/>
         </TouchableOpacity>
 
-        <Text style={styles.headerText}>Device Settings</Text>
+        <Text style={styles.headerText}>Device Settings</Text>
 
         {/* connection box */}
         <View style={styles.connectionBox}>
           <TouchableOpacity
             style={styles.bluetoothIconContainer}
-            onPress={() => setDiscoveryModalVisible(true)}
+            onPress={()=>router.push('/connectivity-settings' as any)}
             activeOpacity={0.6}
           >
-            <Ionicons name="bluetooth-outline" size={24} color="#DFDCD9" />
+            <Ionicons name="bluetooth-outline" size={24} color="#DFDCD9"/>
           </TouchableOpacity>
-          <Text style={styles.liquorBotText}>LiquorBot #{liquorbotId}</Text>
+          <Text style={styles.liquorBotText}>LiquorBot #{liquorbotId}</Text>
           <View style={styles.connectionStatusRow}>
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: isConnected ? '#63d44a' : '#d44a4a' },
-              ]}
-            />
-            <Text style={styles.connectionStatusText}>
-              {isConnected ? 'Connected' : 'Disconnected'}
-            </Text>
+            <View style={[styles.statusDot,{backgroundColor:isConnected?'#63d44a':'#d44a4a'}]}/>
+            <Text style={styles.connectionStatusText}>{isConnected?'Connected':'Disconnected'}</Text>
           </View>
         </View>
 
-        {/* ─────────────────── MAINTENANCE SECTION ─────────────────── */}
+        {/* ─────────────────── MAINTENANCE ─────────────────── */}
         <View style={styles.maintenanceContainer}>
-          <TouchableOpacity 
-            style={styles.maintenanceHeader} 
-            onPress={toggleMaintenance}
-            activeOpacity={0.8}
-          >
-            <View style={{ flexDirection: 'column', flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <TouchableOpacity style={styles.maintenanceHeader} onPress={toggleMaintenance} activeOpacity={0.8}>
+            <View style={{flexDirection:'column',flex:1}}>
+              <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}>
                 <Text style={styles.sectionHeader}>Maintenance</Text>
-                <Animated.View style={{ transform: [{ rotate }] }}>
-                  <Ionicons name="chevron-down" size={20} color="#DFDCD9" />
+                <Animated.View style={{transform:[{rotate}]}}>
+                  <Ionicons name="chevron-down" size={20} color="#DFDCD9"/>
                 </Animated.View>
               </View>
-              {isMaintenanceCollapsed && (
-                <Text style={{ fontSize: 12, color: '#4F4F4F', marginTop: -10 }}>
-                  Click to expand
-                </Text>
+              {isMaintenanceCollapsed&&(
+                <Text style={{fontSize:12,color:'#4F4F4F',marginTop:-10}}>Click to expand</Text>
               )}
             </View>
           </TouchableOpacity>
-          
-          {!isMaintenanceCollapsed && (
+
+          {!isMaintenanceCollapsed&&(
             <Animated.View>
               <ActionRow
-                label="Load Ingredients"
-                icon="server"
-                onPress={() => bumpIfDisconnected(handleReadySystem)}
+                label="Load Ingredients" icon="server"
+                onPress={()=>bumpIfDisconnected(handleReadySystem)}
                 info="Primes every tube so the first pour is instant."
-                onInfoPress={() => {
-                  setSelectedInfo({ title: "Load Ingredients", message: "Primes every tube so the first pour is instant." });
-                  setInfoModalVisible(true);
-                }}
+                onInfoPress={()=>{setSelectedInfo({title:"Load Ingredients",message:"Primes every tube so the first pour is instant."});setInfoModalVisible(true);}}
               />
               <ActionRow
-              label="Empty System"
-              icon="server-outline"
-              onPress={() => bumpIfDisconnected(handleEmptySystem)}
-              info="Pumps liquid back to its bottles for safe storage."
-              onInfoPress={() => {
-                setSelectedInfo({ 
-                  title: "Empty System", 
-                  message: "Pumps liquid back to its bottles for safe storage." 
-                });
-                setInfoModalVisible(true);
-              }}
-            />
-
-            <ActionRow
-              label="Deep Clean"
-              icon="water-outline"
-              onPress={() => bumpIfDisconnected(handleDeepClean)}
-              info="Runs warm water through all tubes. Bottles must be empty."
-              onInfoPress={() => {
-                setSelectedInfo({ 
-                  title: "Deep Clean", 
-                  message: "Runs warm water through all tubes. Bottles must be empty." 
-                });
-                setInfoModalVisible(true);
-              }}
-            />
+                label="Empty System" icon="server-outline"
+                onPress={()=>bumpIfDisconnected(handleEmptySystem)}
+                info="Pumps liquid back to its bottles for safe storage."
+                onInfoPress={()=>{setSelectedInfo({title:"Empty System",message:"Pumps liquid back to its bottles for safe storage."});setInfoModalVisible(true);}}
+              />
+              <ActionRow
+                label="Deep Clean" icon="water-outline"
+                onPress={()=>bumpIfDisconnected(handleDeepClean)}
+                info="Runs warm water through all tubes. Bottles must be empty."
+                onInfoPress={()=>{setSelectedInfo({title:"Deep Clean",message:"Runs warm water through all tubes. Bottles must be empty."});setInfoModalVisible(true);}}
+              />
             </Animated.View>
           )}
         </View>
@@ -499,56 +258,39 @@ export default function DeviceSettings() {
         {/* ─────────────────── CONFIGURE SLOTS ─────────────────── */}
         <View style={styles.slotsContainer}>
           <View style={styles.slotsHeaderContainer}>
-            <Text style={styles.sectionHeader}>Configure Slots</Text>
+            <Text style={styles.sectionHeader}>Configure Slots</Text>
             <TouchableOpacity onPress={handleClearAll} disabled={!isConnected}>
-              <Text style={[styles.clearAllButtonText, !isConnected && { opacity: 0.5 }]}>
-                Clear All
-              </Text>
+              <Text style={[styles.clearAllButtonText,!isConnected&&{opacity:0.5}]}>Clear All</Text>
             </TouchableOpacity>
           </View>
 
-          {!isConnected && (
-            <Text style={styles.connectDeviceMessage}>
-              Please connect a device to start configuring.
-            </Text>
+          {!isConnected&&(
+            <Text style={styles.connectDeviceMessage}>Please connect a device to start configuring.</Text>
           )}
 
-          {slots.map((ingredientId, idx) => (
+          {slots.map((ingredientId,idx)=>(
             <View key={idx} style={styles.slotRow}>
-              <Text style={styles.slotLabel}>Slot {idx + 1}</Text>
+              <Text style={styles.slotLabel}>Slot {idx+1}</Text>
               <View style={styles.pickerButtonContainer}>
                 <TouchableOpacity
-                  style={[
-                    styles.pickerButton,
-                    !isConnected && styles.pickerButtonDisconnected,
-                  ]}
-                  onPress={() => {
-                    if (!isConnected) {
+                  style={[styles.pickerButton,!isConnected&&styles.pickerButtonDisconnected]}
+                  onPress={()=>{
+                    if(!isConnected){
                       setShowConnectPrompt(true);
-                      setTimeout(() => setShowConnectPrompt(false), 2000);
+                      setTimeout(()=>setShowConnectPrompt(false),2000);
                       return;
                     }
-                    setSelectedSlot(idx);
-                    setModalVisible(true);
+                    setSelectedSlot(idx); setModalVisible(true);
                   }}
                 >
-                  <Text
-                    style={[
-                      styles.pickerButtonText,
-                      ingName(ingredientId) && styles.selectedPickerButtonText,
-                    ]}
-                  >
-                    {ingName(ingredientId) || 'Select Ingredient'}
+                  <Text style={[styles.pickerButtonText,ingName(ingredientId)&&styles.selectedPickerButtonText]}>
+                    {ingName(ingredientId)||'Select Ingredient'}
                   </Text>
                 </TouchableOpacity>
-                {ingName(ingredientId) && (
+                {ingName(ingredientId)&&(
                   <TouchableOpacity
-                    style={[
-                      styles.clearSlotOverlay,
-                      !isConnected && styles.clearSlotOverlayDisabled,
-                    ]}
-                    onPress={() => isConnected && handleSetSlot(idx, 0)}
-                    disabled={!isConnected}
+                    style={[styles.clearSlotOverlay,!isConnected&&styles.clearSlotOverlayDisabled]}
+                    onPress={()=>isConnected&&handleSetSlot(idx,0)} disabled={!isConnected}
                   >
                     <Text style={styles.clearSlotOverlayText}>X</Text>
                   </TouchableOpacity>
@@ -558,253 +300,146 @@ export default function DeviceSettings() {
           ))}
         </View>
 
-        {/* connect prompt bubble */}
-        {showConnectPrompt && (
+        {showConnectPrompt&&(
           <View style={styles.connectPrompt}>
             <Text style={styles.connectPromptText}>Please connect a device first</Text>
           </View>
         )}
       </ScrollView>
 
-      {/* ──────────────── Device Discovery Modal ──────────────── */}
-      <Modal visible={discoveryModalVisible} animationType="slide">
-        <View style={styles.discoveryModalContainer}>
-          <TouchableOpacity style={styles.modalCloseButton} onPress={()=>setDiscoveryModalVisible(false)}>
-            <Ionicons name="close" size={30} color="#DFDCD9" />
-          </TouchableOpacity>
-          <Text style={styles.discoveryModalTitle}>Available Devices</Text>
-
-          {isScanning
-            ? (<View style={styles.scanningContainer}>
-                 <ActivityIndicator size="small" color="#CE975E" />
-                 <Text style={styles.scanningText}>Scanning…</Text>
-               </View>)
-            : (<Text style={styles.scanningText}>Tap a device to connect</Text>)}
-
-          <FlatList data={discoveredDevices} keyExtractor={i=>i.id}
-            renderItem={({item})=>(
-              <TouchableOpacity style={styles.deviceItem} disabled={isConnecting}
-                                onPress={()=>handleConnectDevice(item.id)}>
-                <Text style={styles.deviceName}>{item.name}
-                  {'  '}<Text style={{color:'#4F4F4F',fontSize:12}}>({item.id.slice(-5)})</Text>
-                </Text>
-                <Ionicons name="bluetooth" size={20} color="#DFDCD9" />
-              </TouchableOpacity>)}
-            contentContainerStyle={styles.deviceList} />
-
-          {!isScanning && discoveredDevices.length===0 && (
-            <TouchableOpacity style={styles.retryButton} onPress={scanForDevices}>
-              <Text style={styles.retryButtonText}>Retry Scan</Text>
-            </TouchableOpacity>)}
-        </View>
-      </Modal>
-
-      {/* Info Modal */}
-      <Modal
-        visible={infoModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setInfoModalVisible(false)}
-      >
+      {/*────────── Info Modal (maintenance row details) ──────────*/}
+      <Modal visible={infoModalVisible} transparent animationType="fade" onRequestClose={()=>setInfoModalVisible(false)}>
         <View style={styles.infoModalContainer}>
           <View style={styles.infoModalContent}>
             <Text style={styles.infoModalTitle}>{selectedInfo?.title}</Text>
             <Text style={styles.infoModalText}>{selectedInfo?.message}</Text>
-            <TouchableOpacity
-              style={styles.infoModalButton}
-              onPress={() => setInfoModalVisible(false)}
-            >
+            <TouchableOpacity style={styles.infoModalButton} onPress={()=>setInfoModalVisible(false)}>
               <Text style={styles.infoModalButtonText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* Ingredient Selection Modal */}
+      {/*────────── Ingredient Selection Modal ──────────*/}
       <Modal
-        visible={modalVisible}
-        animationType="slide"
-        transparent={false}
-        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
-        onRequestClose={() => setModalVisible(false)}
+        visible={modalVisible} animationType="slide" transparent={false}
+        presentationStyle={Platform.OS==='ios'?'pageSheet':'fullScreen'}
+        onRequestClose={()=>setModalVisible(false)}
       >
         <View style={styles.modalContainer}>
-          {/* Close Button */}
-          <TouchableOpacity
-            style={styles.modalCloseButton}
-            onPress={() => setModalVisible(false)}
-          >
-            <Ionicons name="chevron-down" size={30} color="#DFDCD9" />
+          <TouchableOpacity style={styles.modalCloseButton} onPress={()=>setModalVisible(false)}>
+            <Ionicons name="chevron-down" size={30} color="#DFDCD9"/>
           </TouchableOpacity>
-
-          {/* Header */}
           <Text style={styles.modalHeaderText}>Select Ingredient</Text>
 
-          {/* Category selector */}
+          {/* category selector */}
           <View style={styles.horizontalPickerContainer}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalPicker}
-            >
-              {categories.map((category) => (
-                <TouchableOpacity
-                  key={category}
-                  onPress={() => setSelectedCategory(category)}
-                  style={styles.categoryButton}
-                >
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalPicker}>
+              {categories.map(category=>(
+                <TouchableOpacity key={category} onPress={()=>setSelectedCategory(category)} style={styles.categoryButton}>
                   <View style={styles.categoryButtonContent}>
-                    <Text
-                      style={[
-                        styles.categoryButtonText,
-                        selectedCategory === category && styles.selectedCategoryText,
-                      ]}
-                    >
-                      {category}
-                    </Text>
-                    {selectedCategory === category && <View style={styles.underline} />}
+                    <Text style={[styles.categoryButtonText,selectedCategory===category&&styles.selectedCategoryText]}>{category}</Text>
+                    {selectedCategory===category&&<View style={styles.underline}/>}
                   </View>
                 </TouchableOpacity>
               ))}
             </ScrollView>
           </View>
 
-          {/* Search bar */}
+          {/* search */}
           <View style={styles.searchBarContainer}>
-            <Ionicons name="search" size={20} color="#4F4F4F" style={styles.searchIcon} />
+            <Ionicons name="search" size={20} color="#4F4F4F" style={styles.searchIcon}/>
             <TextInput
-              style={styles.searchBar}
-              placeholder="Search Ingredients"
-              placeholderTextColor="#4F4F4F"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
+              style={styles.searchBar} placeholder="Search Ingredients" placeholderTextColor="#4F4F4F"
+              value={searchQuery} onChangeText={setSearchQuery}
             />
           </View>
 
-          {/* Ingredient list */}
-          {loading ? (
-            <Text style={{ color: '#DFDCD9', textAlign: 'center', margin: 10 }}>
-              Loading ingredients...
-            </Text>
-          ) : (
+          {/* ingredient list */}
+          {loading?(
+            <Text style={{color:'#DFDCD9',textAlign:'center',margin:10}}>Loading ingredients...</Text>
+          ):(
             <FlatList
-              data={filteredIngredients}
-              keyExtractor={(item) => String(item.id)}
-              renderItem={({ item, index }) => (
-                <AnimatedIngredientItem 
-                  item={item} 
-                  index={index} 
-                  onPress={() => assignIngredientToSlot(item.id)}
-                />
+              data={filteredIngredients} keyExtractor={i=>String(i.id)}
+              renderItem={({item,index})=>(
+                <AnimatedIngredientItem item={item} index={index} onPress={()=>{handleSetSlot(selectedSlot!,item.id); setModalVisible(false); setSearchQuery('');}}/>
               )}
             />
           )}
         </View>
       </Modal>
 
-      {/* ──────────────── Wi-Fi Credential Modal ──────────────── */}
-      <Modal visible={wifiModalVisible} transparent animationType="fade" onRequestClose={()=>setWifiModalVisible(false)}>
-        <View style={styles.infoModalContainer}>
-          <View style={styles.infoModalContent}>
-            <Text style={styles.infoModalTitle}>Configure Wi-Fi</Text>
-
-            <TextInput placeholder="SSID" placeholderTextColor="#4F4F4F"
-              value={ssid} onChangeText={setSsid}
-              style={[styles.searchBar,{ marginBottom:10 }]} />
-
-            <TextInput placeholder="Password" placeholderTextColor="#4F4F4F"
-              secureTextEntry value={password} onChangeText={setPassword}
-              style={styles.searchBar} />
-
-            <TouchableOpacity style={[styles.infoModalButton,{marginTop:20}]}
-              onPress={sendWifiCredentials}>
-              <Text style={styles.infoModalButtonText}>Send Credentials</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {configLoading && (
+      {configLoading&&(
         <View style={styles.loadingOverlay} pointerEvents="none">
-          <ActivityIndicator size="large" color="#CE975E" />
+          <ActivityIndicator size="large" color="#CE975E"/>
         </View>
       )}
     </View>
   );
 }
-// ------------------- STYLES -------------------
+
+/*────────────────── Styles ──────────────────*/
 const styles = StyleSheet.create({
-  container:                  { flex: 1, backgroundColor: '#141414' },
-  closeButton:                { position: 'absolute', top: 70, left: 25, zIndex: 1001 },
-  headerText:                 { position: 'absolute', top: 70, alignSelf: 'center', fontSize: 24, color: '#FFFFFF', fontWeight: 'bold' },
-  scrollContainer:            { paddingTop: 130, paddingHorizontal: 20, paddingBottom: 20 },
-  connectionBox:              { backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20, marginBottom: 20, alignItems: 'center', minHeight: 100 },
-  liquorBotText:              { fontSize: 24, color: '#DFDCD9', fontWeight: 'bold', textAlign: 'left', width: '100%' },
-  connectionStatusRow:        { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
-  statusDot:                  { width: 6, height: 6, borderRadius: 3, marginRight: 5, marginTop: 5 },
-  connectionStatusText:       { fontSize: 14, color: '#4F4F4F', textAlign: 'left', width: '100%', marginTop: 5 },
-  bluetoothIconContainer:     { position: 'absolute', top: 20, right: 20, zIndex: 999, padding: 10, backgroundColor: 'transparent' },
-  slotsContainer:             { backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20 },
-  slotsHeaderContainer:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  slotsHeader:                { color: '#DFDCD9', fontSize: 20, fontWeight: 'bold' },
-  connectDeviceMessage:       { color: '#d44a4a', fontSize: 12, textAlign: 'center', marginBottom: 25 },
-  slotRow:                    { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-  slotLabel:                  { color: '#DFDCD9', fontSize: 16, marginRight: 10, width: 80 },
-  pickerButtonContainer:      { flex: 1, position: 'relative' },
-  pickerButton:               { flex: 1, backgroundColor: '#141414', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 15, borderWidth: 1, borderColor: 'transparent' },
-  pickerButtonDisconnected:   { borderColor: '#d44a4a' },
-  pickerButtonText:           { color: '#4f4f4f', fontSize: 16 },
-  selectedPickerButtonText:   { color: '#dfdcd9' },
-  clearSlotOverlay:           { position: 'absolute', top: 6, right: 10, backgroundColor: 'transparent', padding: 5 },
-  clearSlotOverlayDisabled:   { opacity: 0.5 },
-  clearSlotOverlayText:       { color: '#808080', fontSize: 14, fontWeight: 'bold' },
-  connectPrompt:              { position: 'absolute', bottom: 20, alignSelf: 'center', backgroundColor: '#1F1F1F', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10, borderWidth: 1, borderColor: '#CE975E' },
-  connectPromptText:          { color: '#DFDCD9', fontSize: 14, textAlign: 'center' },
-  clearAllButtonText:         { color: '#4F4F4F', fontSize: 14, fontWeight: 'bold' },
-  modalContainer:             { flex: 1, backgroundColor: '#141414', padding: 20 },
-  modalCloseButton:           { position: 'absolute', top: 70, left: 20, zIndex: 10 },
-  modalHeaderText:            { fontSize: 20, fontWeight: 'bold', color: '#DFDCD9', textAlign: 'center', marginTop: 10, marginBottom: -20 },
-  horizontalPickerContainer:  { alignItems: 'center', borderBottomLeftRadius: 10, borderBottomRightRadius: 10, paddingVertical: 5 },
-  horizontalPicker:           { flexDirection: 'row', alignItems: 'center' },
-  categoryButton:             { marginTop: 40, paddingVertical: 10, paddingHorizontal: 5, marginHorizontal: 15 },
-  categoryButtonContent:      { alignItems: 'center' },
-  categoryButtonText:         { color: '#4F4F4F', fontSize: 14 },
-  selectedCategoryText:       { color: '#CE975E' },
-  underline:                  { height: 2, backgroundColor: '#CE975E', marginTop: 2, width: '100%' },
-  searchBarContainer:         { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, paddingHorizontal: 15, marginBottom: 15, marginTop: 10 },
-  searchIcon:                 { marginRight: 10 },
-  searchBar:                  { flex: 1, color: '#DFDCD9', fontSize: 16, paddingVertical: 10, backgroundColor:'#1F1F1F', borderRadius:10, paddingHorizontal:15 },
-  ingredientItem:             { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#333333' },
-  ingredientText:             { color: '#DFDCD9', fontSize: 16 },
-  bluetoothModalContainer:    { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' },
-  bluetoothModalContent:      { backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20, width: '80%', alignItems: 'center' },
-  bluetoothModalTitle:        { color: '#DFDCD9', fontSize: 20, fontWeight: 'bold', marginBottom: 10 },
-  bluetoothModalSubtitle:     { color: '#4F4F4F', fontSize: 12, marginBottom: 20, textAlign: 'center' },
-  bluetoothModalButton:       { backgroundColor: '#CE975E', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 20, width: '100%', alignItems: 'center', marginBottom: 10 },
-  bluetoothModalButtonText:   { color: '#141414', fontSize: 16, fontWeight: 'bold' },
-  bluetoothModalCancelButton: { backgroundColor: '#141414', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 20, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: '#4F4F4F' },
-  bluetoothModalCancelButtonText: { color: '#DFDCD9', fontSize: 16 },
-  discoveryModalContainer:    { flex: 1, backgroundColor: '#141414', padding: 20 },
-  discoveryModalTitle:        { fontSize: 24, color: '#DFDCD9', fontWeight: 'bold', textAlign: 'center', marginTop: 50, marginBottom: 20 },
-  scanningContainer:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
-  scanningText:               { color: '#4F4F4F', textAlign: 'center', marginLeft: 10 },
-  deviceName:                 { color: '#DFDCD9', fontSize: 16 },
-  deviceList:                 { paddingBottom: 20 },
-  loadingOverlay:             { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-  maintenanceContainer:       { backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20, marginBottom: 20 },
-  sectionHeader:              { color: '#DFDCD9', fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
-  actionRow:                  { flexDirection: 'row', alignItems: 'center', backgroundColor: '#141414', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 15, marginBottom: 10 },
-  actionLabel:                { color: '#DFDCD9', fontSize: 16 },
-  maintenanceHeader:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  infoModalContainer:         { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' },
-  infoModalContent:           { backgroundColor: '#1F1F1F', borderRadius: 15, padding: 20, width: '80%' },
-  infoModalTitle:             { color: '#CE975E', fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
-  infoModalText:              { color: '#DFDCD9', fontSize: 14, lineHeight: 20, marginBottom: 20 },
-  infoModalButton:            { backgroundColor: '#CE975E', borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
-  infoModalButtonText:        { color: '#141414', fontWeight: 'bold' },
-  connectingOverlay:          { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(31, 31, 31, 0.9)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-  connectingText:             { color: '#DFDCD9', marginTop: 10 },
-  deviceItem:                 { opacity: 1 },
-  retryButton:                { backgroundColor: '#CE975E', borderRadius: 8, padding: 12, marginTop: 20, alignSelf: 'center' },
-  retryButtonText:            { color: '#141414', fontWeight: 'bold' },
+  container:{flex:1,backgroundColor:'#141414'},
+  closeButton:{position:'absolute',top:70,left:25,zIndex:1001},
+  headerText:{position:'absolute',top:70,alignSelf:'center',fontSize:24,color:'#FFFFFF',fontWeight:'bold'},
+  scrollContainer:{paddingTop:130,paddingHorizontal:20,paddingBottom:20},
+
+  connectionBox:{backgroundColor:'#1F1F1F',borderRadius:10,padding:20,marginBottom:20,alignItems:'center',minHeight:100},
+  liquorBotText:{fontSize:24,color:'#DFDCD9',fontWeight:'bold',textAlign:'left',width:'100%'},
+  connectionStatusRow:{flexDirection:'row',alignItems:'center',marginTop:5},
+  statusDot:{width:6,height:6,borderRadius:3,marginRight:5,marginTop:5},
+  connectionStatusText:{fontSize:14,color:'#4F4F4F',textAlign:'left',width:'100%',marginTop:5},
+  bluetoothIconContainer:{position:'absolute',top:20,right:20,zIndex:999,padding:10},
+
+  maintenanceContainer:{backgroundColor:'#1F1F1F',borderRadius:10,padding:20,marginBottom:20},
+  sectionHeader:{color:'#DFDCD9',fontSize:20,fontWeight:'bold',marginBottom:15},
+  maintenanceHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},
+  actionRow:{flexDirection:'row',alignItems:'center',backgroundColor:'#141414',borderRadius:10,paddingVertical:12,paddingHorizontal:15,marginBottom:10},
+  actionLabel:{color:'#DFDCD9',fontSize:16},
+
+  slotsContainer:{backgroundColor:'#1F1F1F',borderRadius:10,padding:20},
+  slotsHeaderContainer:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:20},
+  connectDeviceMessage:{color:'#d44a4a',fontSize:12,textAlign:'center',marginBottom:25},
+  slotRow:{flexDirection:'row',alignItems:'center',marginBottom:15},
+  slotLabel:{color:'#DFDCD9',fontSize:16,marginRight:10,width:80},
+  pickerButtonContainer:{flex:1,position:'relative'},
+  pickerButton:{flex:1,backgroundColor:'#141414',borderRadius:10,paddingVertical:10,paddingHorizontal:15,borderWidth:1,borderColor:'transparent'},
+  pickerButtonDisconnected:{borderColor:'#d44a4a'},
+  pickerButtonText:{color:'#4f4f4f',fontSize:16},
+  selectedPickerButtonText:{color:'#dfdcd9'},
+  clearSlotOverlay:{position:'absolute',top:6,right:10,padding:5},
+  clearSlotOverlayDisabled:{opacity:0.5},
+  clearSlotOverlayText:{color:'#808080',fontSize:14,fontWeight:'bold'},
+
+  connectPrompt:{position:'absolute',bottom:20,alignSelf:'center',backgroundColor:'#1F1F1F',paddingVertical:10,paddingHorizontal:20,borderRadius:10,borderWidth:1,borderColor:'#CE975E'},
+  connectPromptText:{color:'#DFDCD9',fontSize:14,textAlign:'center'},
+  clearAllButtonText:{color:'#4F4F4F',fontSize:14,fontWeight:'bold'},
+
+  /* ingredient modal */
+  modalContainer:{flex:1,backgroundColor:'#141414',padding:20},
+  modalCloseButton:{position:'absolute',top:70,left:20,zIndex:10},
+  modalHeaderText:{fontSize:20,fontWeight:'bold',color:'#DFDCD9',textAlign:'center',marginTop:10,marginBottom:-20},
+  horizontalPickerContainer:{alignItems:'center',paddingVertical:5},
+  horizontalPicker:{flexDirection:'row',alignItems:'center'},
+  categoryButton:{marginTop:40,paddingVertical:10,paddingHorizontal:5,marginHorizontal:15},
+  categoryButtonContent:{alignItems:'center'},
+  categoryButtonText:{color:'#4F4F4F',fontSize:14},
+  selectedCategoryText:{color:'#CE975E'},
+  underline:{height:2,backgroundColor:'#CE975E',marginTop:2,width:'100%'},
+  searchBarContainer:{flexDirection:'row',alignItems:'center',backgroundColor:'#1F1F1F',borderRadius:10,paddingHorizontal:15,marginBottom:15,marginTop:10},
+  searchIcon:{marginRight:10},
+  searchBar:{flex:1,color:'#DFDCD9',fontSize:16,paddingVertical:10,backgroundColor:'#1F1F1F',borderRadius:10,paddingHorizontal:15},
+  ingredientItem:{paddingVertical:15,borderBottomWidth:1,borderBottomColor:'#333333'},
+  ingredientText:{color:'#DFDCD9',fontSize:16},
+
+  /* info modal */
+  infoModalContainer:{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'rgba(0,0,0,0.5)'},
+  infoModalContent:{backgroundColor:'#1F1F1F',borderRadius:15,padding:20,width:'80%'},
+  infoModalTitle:{color:'#CE975E',fontSize:18,fontWeight:'bold',marginBottom:10},
+  infoModalText:{color:'#DFDCD9',fontSize:14,lineHeight:20,marginBottom:20},
+  infoModalButton:{backgroundColor:'#CE975E',borderRadius:8,paddingVertical:12,alignItems:'center'},
+  infoModalButtonText:{color:'#141414',fontWeight:'bold'},
+
+  loadingOverlay:{position:'absolute',top:0,left:0,right:0,bottom:0,backgroundColor:'rgba(0,0,0,0.5)',justifyContent:'center',alignItems:'center',zIndex:1000},
 });
