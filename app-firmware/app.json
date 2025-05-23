@@ -32,12 +32,18 @@
     },
     "plugins": [
       "expo-router",
+
+      // BLE-PLX plugin, with its options
       [
         "react-native-ble-plx",
         {
           "bluetoothAlwaysPermission":
             "LiquorBot needs Bluetooth to discover and connect to your LiquorBot dispenser."
-        },
+        }
+      ],
+
+      // Splash-screen plugin, with its options
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
@@ -46,6 +52,7 @@
           "backgroundColor": "#ffffff"
         }
       ],
+
       "expo-asset"
     ],
     "experiments": {
