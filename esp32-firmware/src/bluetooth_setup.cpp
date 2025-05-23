@@ -61,15 +61,25 @@ void setupBluetoothWiFiAWS() {
 
     svc->start();
 
-    // --- Advertising ---------------------------------------------------------
-    NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
-    adv->addServiceUUID(SERVICE_UUID);
-    adv->enableScanResponse(true);                    // ← renamed
+    // ------------- Advertising --------------------------------------------------
+    NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+
+    /* Build the primary (connectable) advertising packet.
+        – Just Flags (added automatically) + Complete 128-bit Service UUID       */
+    NimBLEAdvertisementData advData;
+    advData.addServiceUUID(SERVICE_UUID);            // 17 bytes incl. type
+    adv->setAdvertisementData(advData);
+
+    /* Put the friendly name and manufacturer data into the scan-response.   */
+    NimBLEAdvertisementData scanResp;
+    scanResp.setName(devName);                       // 15 bytes incl. type
     std::string mdata = "LQBT";
     mdata.push_back(static_cast<char>(mac[4]));
     mdata.push_back(static_cast<char>(mac[5]));
-    adv->setManufacturerData(mdata);                  // ← renamed
-    adv->setPreferredParams(0x06, 0x12);              // ← consolidated
+    scanResp.setManufacturerData(mdata);             // ≤ 27 bytes left
+    adv->setScanResponseData(scanResp);
+
+    /* Make it discoverable & connectable. */
     adv->start();
-    Serial.printf("BLE advertising as %s – service %s\n",devName, SERVICE_UUID.toString().c_str());
+    Serial.printf("BLE advertising as %s  (UUID %s)\n", devName, SERVICE_UUID.toString().c_str());
 }
