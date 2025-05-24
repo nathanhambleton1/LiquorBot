@@ -1,20 +1,25 @@
 // -----------------------------------------------------------------------------
-// File: connectivity-settings.tsx      (REPLACEMENT – 23 May 2025)
-// Purpose:  • Scan & connect LiquorBot BLE peripherals
-//           • Scan nearby Wi-Fi (Android) → auto-fill SSID
-//           • Prompt for password and send creds over BLE
-//           • Close button on Wi-Fi modal
+// File: connectivity-settings.tsx      (REPLACEMENT – 24 May 2025)
+// Purpose:  • Show Wi-Fi-connected LiquorBots + nearby BLE peripherals
+//           • Filter duplicates → Wi-Fi row hides matching BLE signal
+//           • Scan / connect BLE, send Wi-Fi creds
+//           • Promote unit code to provider ID after first Wi-Fi join
+//           • Spinner in “Connect Device” button while waiting
+//           • Pull-to-refresh BLE scan still works
 // -----------------------------------------------------------------------------
-import React, { useState, useEffect, useRef } from 'react';
+import React, {
+  useState, useEffect, useRef, useMemo, useCallback,
+} from 'react';
 import {
   View, StyleSheet, TouchableOpacity, Text, FlatList, Modal,
-  PermissionsAndroid, Platform, ActivityIndicator, TextInput, Alert, Animated, RefreshControl
+  PermissionsAndroid, Platform, ActivityIndicator, TextInput,
+  Alert, Animated, RefreshControl,
 } from 'react-native';
-import Ionicons         from '@expo/vector-icons/Ionicons';
-import { BleManager }   from 'react-native-ble-plx';
-import WifiManager      from 'react-native-wifi-reborn';     // ← NEW
-import { Buffer }       from 'buffer';
-import { useRouter }    from 'expo-router';
+import Ionicons        from '@expo/vector-icons/Ionicons';
+import { BleManager }  from 'react-native-ble-plx';
+import WifiManager     from 'react-native-wifi-reborn';
+import { Buffer }      from 'buffer';
+import { useRouter }   from 'expo-router';
 import { useLiquorBot } from './components/liquorbot-provider';
 
 // BLE Service & Char UUIDs ----------------------------------------------------
@@ -23,36 +28,45 @@ const SSID_CHAR_UUID = 'e0be0302-718e-4700-8f55-a24d6160db08';
 const PASS_CHAR_UUID = 'e0be0303-718e-4700-8f55-a24d6160db08';
 (global as any).Buffer = (global as any).Buffer || Buffer;
 
-// -----------------------------------------------------------------------------
-interface BluetoothDevice { id: string; name: string }
+/* ────────── Types ──────────*/
+interface BleDevice   { id: string; name: string }
+interface DeviceItem  { id: string; name: string; code: string; type: 'ble' | 'wifi' }
 
-// -----------------------------------------------------------------------------
+/* ──────────────────────────*/
 export default function ConnectivitySettings() {
   const router = useRouter();
-  const { isConnected } = useLiquorBot();
+
+  // --- LiquorBot global state -----------------------------------------------
+  const {
+    isConnected,
+    liquorbotId,
+    setLiquorbotId,
+    reconnect,
+  } = useLiquorBot();
 
   /*────────── BLE state ──────────*/
-  const [discoveredDevices, setDiscoveredDevices] = useState<BluetoothDevice[]>([]);
-  const [isScanning,       setIsScanning]         = useState(false);
-  const [isConnecting,     setIsConnecting]       = useState(false);
-  const [connectedDevice,  setConnectedDevice]    = useState<any | null>(null);
+  const [bleDevices,      setBleDevices]      = useState<BleDevice[]>([]);
+  const [isScanning,      setIsScanning]      = useState(false);
+  const [isConnecting,    setIsConnecting]    = useState(false);
+  const [connectedDevice, setConnectedDevice] = useState<any | null>(null);
 
   /*────────── Wi-Fi modal ──────────*/
   const [wifiModalVisible, setWifiModalVisible] = useState(false);
   const [ssid,     setSsid]     = useState('');
   const [password, setPassword] = useState('');
-  const [wifiList, setWifiList] = useState<string[]>([]);          // ← NEW
+  const [wifiList, setWifiList] = useState<string[]>([]);
 
+  /* spinner while sending creds */
+  const [wifiSubmitting, setWifiSubmitting] = useState(false);
+
+  /*────────── Managers / refs ──────*/
   const managerRef = useRef<BleManager | null>(null);
-  const getManager = () => {
-    if (!managerRef.current) managerRef.current = new BleManager();
-    return managerRef.current;
-  };
+  const getManager = () => { if (!managerRef.current) managerRef.current = new BleManager(); return managerRef.current; };
 
   const [wifiLoading, setWifiLoading] = useState(false);
   const [wifiError,   setWifiError]   = useState<string | null>(null);
   const disconnectSubscriptionRef = useRef<any | null>(null);
-  const disconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const disconnectTimeoutRef      = useRef<NodeJS.Timeout | null>(null);
 
   /*────────── Permissions helpers ──────────*/
   const requestBluetoothPermissions = async () => {
@@ -60,225 +74,170 @@ export default function ConnectivitySettings() {
     const granted = await PermissionsAndroid.requestMultiple([
       PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
       PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION, // required for BLE-scan
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
     ]);
     return Object.values(granted).every(v => v === PermissionsAndroid.RESULTS.GRANTED);
   };
-
-  const requestWifiPermissions = async () => {                       // ← NEW
+  const requestWifiPermissions = async () => {
     if (Platform.OS !== 'android') return true;
     const granted = await PermissionsAndroid.request(
-      // Android 13+ needs NEARBY_WIFI_DEVICES; older versions use LOCATION
       PermissionsAndroid.PERMISSIONS.NEARBY_WIFI_DEVICES ??
       PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      {
-        title: 'Location permission',
-        message: 'Needed to scan nearby Wi-Fi networks',
-        buttonPositive: 'OK',
-      },
+      { title: 'Location permission', message: 'Needed to scan nearby Wi-Fi networks', buttonPositive: 'OK' },
     );
     return granted === PermissionsAndroid.RESULTS.GRANTED;
   };
 
   /*────────── BLE scan ──────────*/
+  const scanForDevices = useCallback(async () => {
+    const manager = getManager();
+    if (Platform.OS === 'android' && !(await requestBluetoothPermissions())) {
+      Alert.alert('Bluetooth permissions required'); return;
+    }
+
+    setIsScanning(true);
+
+    // include already-connected peripherals first
+    const preConnected = await manager.connectedDevices([SERVICE_UUID]);
+    const initial = preConnected.map(d => ({ id: d.id, name: d.name || 'LiquorBot' }));
+    setBleDevices(initial);
+
+    // live scan
+    manager.startDeviceScan([SERVICE_UUID], { allowDuplicates: false }, (err, device) => {
+      if (err || !device?.name?.startsWith('LiquorBot')) return;
+      setBleDevices(prev => (prev.find(d => d.id === device.id) ? prev
+        : [...prev, { id: device.id, name: device.name! }]));
+    });
+
+    setTimeout(() => { manager.stopDeviceScan(); setIsScanning(false); }, 15000);
+  }, []);
 
   useEffect(() => {
     const manager = getManager();
-    let isMounted = true;
+    const stateSub = manager.onStateChange((state) => {
+      if (state === 'PoweredOn') scanForDevices();
+      else { manager.stopDeviceScan(); setIsScanning(false); setBleDevices([]); }
+    }, true);
+    return () => { stateSub.remove(); manager.stopDeviceScan(); };
+  }, [scanForDevices]);
 
-    // Set up Bluetooth state listener
-    const stateSubscription = manager.onStateChange(async (state) => {
-      if (!isMounted) return;
-      
-      if (state === 'PoweredOn') {
-        await scanForDevices();
-      } else {
-        manager.stopDeviceScan();
-        setIsScanning(false);
-        setDiscoveredDevices([]);
-        if (state === 'PoweredOff') {
-          Alert.alert('Bluetooth Off', 'Please enable Bluetooth to connect to devices');
-        }
-      }
-    }, true); // Immediately emit current state
-
-    return () => {
-      isMounted = false;
-      stateSubscription.remove();
-      manager.stopDeviceScan();
-    };
-  }, []);
-
-   useEffect(() => {
-    return () => {
-      disconnectSubscriptionRef.current?.remove();
-      if (disconnectTimeoutRef.current) clearTimeout(disconnectTimeoutRef.current);
-    };
-  }, []);
-
-  const scanForDevices = async () => {
-    const manager = getManager();
-    if (Platform.OS === 'android' && !(await requestBluetoothPermissions())) {
-        Alert.alert('Bluetooth permissions required');
-        return;
-    }
-    
-    setIsScanning(true);
-    
-    // Get already connected devices first
-    const connected = await manager.connectedDevices([SERVICE_UUID]);
-    const connectedDevices = connected.map(d => ({ id: d.id, name: d.name || 'LiquorBot' }));
-    
-    setDiscoveredDevices(prev => [
-        ...connectedDevices,
-        ...prev.filter(p => !connectedDevices.some(c => c.id === p.id))
-    ]);
-
-    // Then scan for new devices
-    manager.startDeviceScan([SERVICE_UUID], { allowDuplicates: false }, (err, device) => {
-        if (err || !device?.name?.startsWith('LiquorBot')) return;
-        
-        setDiscoveredDevices(prev => 
-        prev.some(d => d.id === device.id) 
-            ? prev 
-            : [...prev, { id: device.id, name: device.name ?? 'LiquorBot' }]
-        );
-    });
-
-    setTimeout(() => {
-        manager.stopDeviceScan();
-        setIsScanning(false);
-    }, 15000);
-    };
-
-  /*────────── Connect & send Wi-Fi ──────────*/
+  /*────────── Connect (BLE) & Wi-Fi creds ──────────*/
   const handleConnectDevice = async (devId: string) => {
     try {
-        setIsConnecting(true);
-        const manager = getManager();
-        
-        // Check if already connected
-        const connected = await manager.connectedDevices([SERVICE_UUID]);
-        const existing = connected.find(d => d.id === devId);
-        
-        const device = existing 
-        ? existing 
-        : await manager.connectToDevice(devId, { requestMTU: 256 });
-
-        if (!existing) await device.discoverAllServicesAndCharacteristics();
-        
-        setConnectedDevice(device);
-        setWifiModalVisible(true);
-    } catch (e) {
-        Alert.alert('Error', `Connection failed: ${e instanceof Error ? e.message : e}`);
-    } finally {
-        setIsConnecting(false);
-    }
-    };
-
-    /*────────── Check connected devices ──────────*/
-    useEffect(() => {
-        const checkConnected = async () => {
-            const connected = await getManager().connectedDevices([SERVICE_UUID]);
-            setDiscoveredDevices(prev => [
-            ...connected.map(d => ({ id: d.id, name: d.name || 'LiquorBot' })),
-            ...prev.filter(p => !connected.some(c => c.id === p.id))
-            ]);
-        };
-        
-        const interval = setInterval(checkConnected, 3000);
-        return () => clearInterval(interval);
-        }, []);
+      setIsConnecting(true);
+      const manager = getManager();
+      const existing = (await manager.connectedDevices([SERVICE_UUID])).find(d => d.id === devId);
+      const device   = existing ?? await manager.connectToDevice(devId, { requestMTU: 256 });
+      if (!existing) await device.discoverAllServicesAndCharacteristics();
+      setConnectedDevice(device);
+      setWifiModalVisible(true);
+    } catch (e: any) {
+      Alert.alert('Error', `Connection failed: ${e.message ?? e}`);
+    } finally { setIsConnecting(false); }
+  };
 
   const checkIfDeviceConnected = async (deviceId: string) => {
-    const manager = getManager();
-    const connectedDevices = await manager.connectedDevices([SERVICE_UUID]);
-    return connectedDevices.some(d => d.id === deviceId);
+    const connected = await getManager().connectedDevices([SERVICE_UUID]);
+    return connected.some(d => d.id === deviceId);
   };
 
   const sendWifiCredentials = async () => {
     if (!connectedDevice) return;
+    setWifiSubmitting(true);                              // ← NEW (start spinner)
     try {
-      // Cleanup previous listeners and timeouts
+      // Clear any previous listeners/timeout
       disconnectSubscriptionRef.current?.remove();
       if (disconnectTimeoutRef.current) clearTimeout(disconnectTimeoutRef.current);
 
-      const ssidB64 = Buffer.from(ssid, 'utf8').toString('base64');
-      const passB64 = Buffer.from(password, 'utf8').toString('base64');
-      await connectedDevice.writeCharacteristicWithResponseForService(SERVICE_UUID, SSID_CHAR_UUID, ssidB64);
-      await connectedDevice.writeCharacteristicWithResponseForService(SERVICE_UUID, PASS_CHAR_UUID, passB64);
+      // --- send creds --------------------------------------------------------
+      await connectedDevice.writeCharacteristicWithResponseForService(
+        SERVICE_UUID, SSID_CHAR_UUID, Buffer.from(ssid, 'utf8').toString('base64'),
+      );
+      await connectedDevice.writeCharacteristicWithResponseForService(
+        SERVICE_UUID, PASS_CHAR_UUID, Buffer.from(password, 'utf8').toString('base64'),
+      );
 
       setWifiModalVisible(false);
       setPassword('');
 
-      const device = connectedDevice;
-      
-      // Handle successful disconnection (Wi-Fi connected)
-      const onDisconnected = (error: any) => {
-        if (error) return;
+      // --- wait for BLE disconnect (device rebooted onto Wi-Fi) --------------
+      const onDisconnected = async (error: any) => {
         disconnectSubscriptionRef.current?.remove();
-        if (disconnectTimeoutRef.current) clearTimeout(disconnectTimeoutRef.current);
-        Alert.alert('Success!', 'Device connected to Wi-Fi successfully!');
-      };
+        setWifiSubmitting(false);                         // ← NEW (stop spinner)
 
-      // Listen for disconnection event
-      disconnectSubscriptionRef.current = device.onDisconnected(onDisconnected);
-
-      // Set timeout to check connection status
-      disconnectTimeoutRef.current = setTimeout(async () => {
-        const isConnected = await checkIfDeviceConnected(device.id);
-        if (isConnected) {
-          Alert.alert('Error', 'Invalid credentials - device remains on Bluetooth');
+        if (error) {
+          Alert.alert('Error', 'Device disconnected unexpectedly.');
+          return;
         }
-        disconnectSubscriptionRef.current?.remove();
-      }, 15000); // 15-second timeout
 
+        // Promote unit code to global provider ID
+        const newCode = connectedDevice.id.slice(-5);
+        setLiquorbotId(newCode);
+        reconnect();
+        Alert.alert('Success!', `Device ${newCode} is now online!`);
+      };
+      disconnectSubscriptionRef.current = connectedDevice.onDisconnected(onDisconnected);
+
+      // --- timeout handler ---------------------------------------------------
+      disconnectTimeoutRef.current = setTimeout(async () => {
+        if (await checkIfDeviceConnected(connectedDevice.id))
+          Alert.alert('Error', 'Invalid credentials – device stayed on BLE.');
+        disconnectSubscriptionRef.current?.remove();
+        setWifiSubmitting(false);                         // ← NEW (stop spinner)
+      }, 15000);
     } catch (e: any) {
-      console.error('Write creds', e);
-      Alert.alert('Error', e?.message ?? 'Failed to send credentials');
+      setWifiSubmitting(false);                           // ← NEW (stop spinner)
+      Alert.alert('Error', e.message ?? 'Failed to send credentials');
     }
   };
 
-  /*────────── Wi-Fi scan (Android only) ──────────*/
+  /*────────── Wi-Fi scan (Android) ──────────*/
   const loadWifiList = async () => {
-    if (Platform.OS !== 'android') return;   // iOS – nothing to do
-    setWifiLoading(true);
-    setWifiError(null);
-    setWifiList([]);
-
+    if (Platform.OS !== 'android') return;
+    setWifiLoading(true); setWifiError(null); setWifiList([]);
     try {
-        if (!(await requestWifiPermissions()))
-        throw new Error('Location/Wi-Fi permission denied');
-
-        // Some devices need Wi-Fi enabled first
-        await WifiManager.setEnabled(true);
-
-        // API 33+ has to re-scan every time; older can use cached list
-        const list = Platform.Version >= 33
+      if (!(await requestWifiPermissions())) throw new Error('Permission denied');
+      await WifiManager.setEnabled(true);
+      const list = Platform.Version >= 33
         ? await WifiManager.reScanAndLoadWifiList()
         : await WifiManager.loadWifiList();
-
-        const ssids = list
-        .map((n: any) => n.SSID)
+      const ssids = list.map((n: any) => n.SSID)
         .filter((s: string) => !!s && s !== '<unknown ssid>')
         .sort((a: string, b: string) => a.localeCompare(b));
-
-        if (!ssids.length) setWifiError('No networks found');
-        setWifiList(ssids);
+      if (!ssids.length) setWifiError('No networks found');
+      setWifiList(ssids);
     } catch (e: any) {
-        console.warn('Wi-Fi scan failed', e);
-        setWifiError(e?.message ?? 'Scan failed');
+      console.warn('Wi-Fi scan failed', e);
+      setWifiError(e.message ?? 'Scan failed');
     } finally { setWifiLoading(false); }
-    };
+  };
+
+  /*────────── Derived device list (Wi-Fi + BLE) ──────────*/
+  const devices: DeviceItem[] = useMemo(() => {
+    // 1️⃣  Build Wi-Fi row(s) – right now that’s only the active provider
+    const wifiRows: DeviceItem[] = isConnected ? [{
+      id: `wifi-${liquorbotId}`,
+      name: 'LiquorBot',
+      code: liquorbotId,            // 5-digit provider ID
+      type: 'wifi',
+    }] : [];
+
+    // 2️⃣  Collect all Wi-Fi codes so we can suppress matching BLE signals
+    const wifiCodes = new Set(wifiRows.map(r => r.code));
+
+    // 3️⃣  Build BLE rows, skipping any whose 5-digit code is already in wifiCodes
+    const bleRows: DeviceItem[] = bleDevices
+      .map(d => ({ id: d.id, name: d.name, code: d.id.slice(-5), type: 'ble' as const }))
+      .filter(d => !wifiCodes.has(d.code));   // ← duplicate-filter
+
+    // 4️⃣  Wi-Fi first, BLE after
+    return [...wifiRows, ...bleRows];
+  }, [isConnected, liquorbotId, bleDevices]);
 
   /*────────── Effects ──────────*/
-  useEffect(() => {
-    scanForDevices();
-    return () => { getManager().stopDeviceScan(); };
-  }, []);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => { Animated.timing(fadeAnim, { toValue: 1, duration: 350, useNativeDriver: true }).start(); }, []);
-  useEffect(() => { if (wifiModalVisible) loadWifiList(); }, [wifiModalVisible]);   // ← NEW
+  useEffect(() => { if (wifiModalVisible) loadWifiList(); }, [wifiModalVisible]);
 
   /*────────── Render ──────────*/
   return (
@@ -300,126 +259,126 @@ export default function ConnectivitySettings() {
 
       {/* device list */}
       <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-        {isScanning ? (
+        {isScanning && (
           <View style={styles.scanningRow}>
             <ActivityIndicator size="small" color="#CE975E" />
             <Text style={styles.scanningText}>Scanning…</Text>
           </View>
-        ) : (
-          <Text style={styles.scanningText}>
-            {discoveredDevices.length ? 'Tap a device to connect' : 'No devices found – pull to rescan'}
-          </Text>
         )}
+        {!isScanning && !bleDevices.length && !isConnected && (
+          <Text style={styles.scanningText}>No devices found – pull to rescan</Text>
+        )}
+
         <FlatList
-            data={discoveredDevices}
-            keyExtractor={i => i.id}
-            renderItem={({ item }) => (
-                <TouchableOpacity
-                style={styles.deviceRow}
-                disabled={isConnecting}
-                onPress={() => handleConnectDevice(item.id)}
-                >
-                <Text style={styles.deviceName}>
-                    {item.name}{' '}
-                    <Text style={{ color: '#4F4F4F', fontSize: 12 }}>
-                    ({item.id.slice(-5)})
-                    </Text>
-                </Text>
-                <Ionicons name="bluetooth" size={18} color="#DFDCD9" />
-                </TouchableOpacity>
-            )}
-            contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
-            refreshControl={
-                <RefreshControl
-                refreshing={false} // ← FORCE TO FALSE TO HIDE LOADER
-                onRefresh={scanForDevices}
-                tintColor="transparent" // ← HIDE THE DEFAULT INDICATOR
-                colors={['transparent']} // ← HIDE ON ANDROID
-                />
-            }
+          data={devices}
+          keyExtractor={i => i.id}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.deviceRow}
+              disabled={item.type === 'wifi' || isConnecting}
+              onPress={() => item.type === 'ble' && handleConnectDevice(item.id)}
+            >
+              <Text style={styles.deviceName}>
+                {item.name}{' '}
+                <Text style={{ color: '#4F4F4F', fontSize: 12 }}>({item.code})</Text>
+              </Text>
+              <Ionicons
+                name={item.type === 'wifi' ? 'wifi' : 'bluetooth'}
+                size={18}
+                color="#DFDCD9"
+              />
+            </TouchableOpacity>
+          )}
+          contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
+          refreshControl={(
+            <RefreshControl
+              refreshing={false}
+              onRefresh={scanForDevices}
+              tintColor="transparent"
+              colors={['transparent']}
             />
+          )}
+        />
       </Animated.View>
 
-      {/* ─── Wi-Fi modal ───────────────────────────────────────────── */}
-        <Modal
+      {/* ─── Wi-Fi modal ─────────────────────────────────────────── */}
+      <Modal
         visible={wifiModalVisible}
         transparent
         animationType="fade"
         onRequestClose={() => setWifiModalVisible(false)}
-        >
+      >
         <View style={styles.modalBackdrop}>
-            <View style={styles.modalBox}>
-
-            {/* close (X) */}
+          <View style={styles.modalBox}>
             <TouchableOpacity style={styles.modalClose} onPress={() => setWifiModalVisible(false)}>
-                <Ionicons name="close" size={22} color="#DFDCD9" />
+              <Ionicons name="close" size={22} color="#DFDCD9" />
             </TouchableOpacity>
 
             <Text style={styles.modalTitle}>Configure Wi-Fi</Text>
 
-            {/* SSID textbox (always visible so user can type, or gets filled from list) */}
             <TextInput
-                placeholder="SSID"
-                placeholderTextColor="#4F4F4F"
-                value={ssid}
-                onChangeText={setSsid}
-                style={styles.input}
-                autoCapitalize="none"
+              placeholder="SSID"
+              placeholderTextColor="#4F4F4F"
+              value={ssid}
+              onChangeText={setSsid}
+              style={styles.input}
+              autoCapitalize="none"
             />
 
-            {/* Android-only scan indicators / list */}
             {Platform.OS === 'android' && (
-                <>
+              <>
                 {wifiLoading && (
-                    <View style={styles.wifiLoadingRow}>
+                  <View style={styles.wifiLoadingRow}>
                     <ActivityIndicator size="small" color="#CE975E" />
                     <Text style={styles.wifiLoadingText}>Scanning Wi-Fi…</Text>
-                    </View>
+                  </View>
                 )}
 
                 {wifiError && !wifiLoading && (
-                    <TouchableOpacity style={styles.wifiRefresh} onPress={loadWifiList}>
+                  <TouchableOpacity style={styles.wifiRefresh} onPress={loadWifiList}>
                     <Ionicons name="refresh" size={16} color="#DFDCD9" />
                     <Text style={styles.wifiRefreshText}>{wifiError} – tap to rescan</Text>
-                    </TouchableOpacity>
+                  </TouchableOpacity>
                 )}
 
                 {!wifiLoading && wifiList.length > 0 && (
-                    <FlatList
+                  <FlatList
                     data={wifiList}
                     keyExtractor={(item, idx) => item + idx}
                     style={styles.wifiList}
                     nestedScrollEnabled
                     renderItem={({ item }) => (
-                        <TouchableOpacity
-                        style={styles.wifiRow}
-                        onPress={() => setSsid(item)}
-                        >
+                      <TouchableOpacity style={styles.wifiRow} onPress={() => setSsid(item)}>
                         <Text style={styles.wifiName}>{item}</Text>
-                        </TouchableOpacity>
+                      </TouchableOpacity>
                     )}
-                    />
+                  />
                 )}
-                </>
+              </>
             )}
 
-            {/* password */}
             <TextInput
-                placeholder="Password"
-                placeholderTextColor="#4F4F4F"
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-                style={styles.input}
+              placeholder="Password"
+              placeholderTextColor="#4F4F4F"
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+              style={styles.input}
             />
 
-            {/* send creds */}
-            <TouchableOpacity style={styles.modalBtn} onPress={sendWifiCredentials}>
-                <Text style={styles.modalBtnText}>Connect Device</Text>
+            {/* Connect button with spinner */}
+            <TouchableOpacity
+              style={[styles.modalBtn, wifiSubmitting && { opacity: 0.6 }]}
+              disabled={wifiSubmitting}
+              onPress={sendWifiCredentials}
+            >
+              {wifiSubmitting
+                ? <ActivityIndicator size="small" color="#141414" />   /* spinner colour contrasts btn */
+                : <Text style={styles.modalBtnText}>Connect Device</Text>}
             </TouchableOpacity>
-            </View>
+          </View>
         </View>
-        </Modal>
+      </Modal>
     </View>
   );
 }
@@ -437,7 +396,7 @@ const styles = StyleSheet.create({
   statusText: { color: '#4F4F4F', fontSize: 14 },
 
   scanningRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
-  scanningText: { color: '#4F4F4F', textAlign: 'center', marginLeft: 10, marginBottom: 10 },
+  scanningText: { color: '#4F4F4F', textAlign: 'center', marginBottom: 10, marginLeft: 10 },
   deviceRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
                   paddingVertical: 14, paddingHorizontal: 10, backgroundColor: '#1F1F1F',
                   borderRadius: 10, marginBottom: 12 },
@@ -459,7 +418,7 @@ const styles = StyleSheet.create({
   modalBtn:     { backgroundColor: '#CE975E', borderRadius: 8, paddingVertical: 12, alignItems: 'center', marginTop: 4 },
   modalBtnText: { color: '#141414', fontWeight: 'bold' },
   wifiLoadingRow:{ flexDirection:'row',alignItems:'center',marginBottom:8 },
-wifiLoadingText:{ color:'#4F4F4F',marginLeft:8 },
-wifiRefresh:{ flexDirection:'row',alignItems:'center',marginBottom:8 },
-wifiRefreshText:{ color:'#4F4F4F',marginLeft:6 },
+  wifiLoadingText:{ color:'#4F4F4F',marginLeft:8 },
+  wifiRefresh:{ flexDirection:'row',alignItems:'center',marginBottom:8 },
+  wifiRefreshText:{ color:'#4F4F4F',marginLeft:6 },
 });
