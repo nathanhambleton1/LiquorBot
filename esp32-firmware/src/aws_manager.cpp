@@ -9,6 +9,7 @@
 #include "certs.h"
 #include "drink_controller.h"
 #include "state_manager.h"
+#include "wifi_setup.h"
 
 /* ---------- NVS for slot‑config persistence ---------- */
 #include <Preferences.h>
@@ -111,9 +112,24 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
         handleSlotConfigMessage(message);
         return;
     }
+    
+    /* 4 · Maintenance actions (including DISCONNECT_WIFI) */
+    if (topicStr == MAINTENANCE_TOPIC) {
+        StaticJsonDocument<96> doc;
+        if (deserializeJson(doc, message)) return;
+        const char *action = doc["action"];
 
-    /* 4 · Unknown topic */
-    Serial.println("Unrecognized topic – ignored.");
+        if      (strcmp(action, "DISCONNECT_WIFI") == 0) {
+            sendData(MAINTENANCE_TOPIC,
+                     "{\"status\":\"ok\",\"note\":\"disconnecting\"}");
+            disconnectFromWiFi();    // never returns (ESP.restart)
+        }
+        /* READY_SYSTEM / EMPTY_SYSTEM / DEEP_CLEAN handled elsewhere */
+        return;
+    }
+
+    /* 5 · Unknown topic */
+    Serial.println("Unrecognized topic – ignored.");
 }
 
 /* -------------------------------------------------------------------------- */

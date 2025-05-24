@@ -1,7 +1,8 @@
 // -----------------------------------------------------------------------------
-// File: device-settings.tsx          (REPLACEMENT – 23 May 2025)
-// Purpose:  • Maintenance & slot-configuration only
+// File: device-settings.tsx          (REPLACEMENT – 24 May 2025)
+// Purpose:  • Maintenance & slot-configuration
 //           • “Connectivity” button navigates to /connectivity-settings
+//           • Advanced-settings drop-down with Danger-Zone Wi-Fi disconnect
 // -----------------------------------------------------------------------------
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -41,7 +42,10 @@ export default function DeviceSettings() {
   const [selectedInfo, setSelectedInfo]         = useState<{title:string;message:string}|null>(null);
 
   const [isMaintenanceCollapsed, setIsMaintenanceCollapsed] = useState(true);
-  const rotationAnim = useState(new Animated.Value(0))[0];
+  const maintenanceRot = useState(new Animated.Value(0))[0];
+
+  const [isAdvancedCollapsed, setIsAdvancedCollapsed] = useState(true);
+  const advancedRot = useState(new Animated.Value(0))[0];
 
   const [slots, setSlots]                 = useState<number[]>(Array(15).fill(0));
   const [modalVisible, setModalVisible]   = useState(false);
@@ -56,14 +60,24 @@ export default function DeviceSettings() {
 
   /*────────── Animations ──────────*/
   const toggleMaintenance = () => {
-    Animated.timing(rotationAnim, {
+    Animated.timing(maintenanceRot, {
       toValue: isMaintenanceCollapsed ? 1 : 0,
       duration: 200,
       useNativeDriver: true,
     }).start();
     setIsMaintenanceCollapsed(!isMaintenanceCollapsed);
   };
-  const rotate = rotationAnim.interpolate({ inputRange:[0,1], outputRange:['0deg','180deg'] });
+  const maintenanceRotate = maintenanceRot.interpolate({ inputRange:[0,1], outputRange:['0deg','180deg'] });
+
+  const toggleAdvanced = () => {
+    Animated.timing(advancedRot, {
+      toValue: isAdvancedCollapsed ? 1 : 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+    setIsAdvancedCollapsed(!isAdvancedCollapsed);
+  };
+  const advancedRotate = advancedRot.interpolate({ inputRange:[0,1], outputRange:['0deg','180deg'] });
 
   /*────────── MQTT maintenance helpers ──────────*/
   const maintenanceTopic = `liquorbot/liquorbot${liquorbotId}/maintenance`;
@@ -81,13 +95,36 @@ export default function DeviceSettings() {
     Alert.alert(
       'Deep Clean',
       'All ingredient containers must be empty.\n\n' +
-        'Place warm water in a spare container and attach it to Slot 1. ' +
-        'Proceed with deep clean?',
+        'Place warm water in a spare container and attach it to Slot 1. Proceed with deep clean?',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Start',  style: 'destructive', onPress:()=>publishMaintenance({action:'DEEP_CLEAN'}) },
       ],
     );
+  };
+
+  /*────────── Wi-Fi DISCONNECT helper ──────────*/
+  const confirmDisconnect = (stage = 1) => {
+    if (stage === 1) {
+      Alert.alert(
+        'Disconnect LiquorBot?',
+        'Kicking LiquorBot off Wi-Fi will reboot it into Bluetooth pairing mode.',
+        [
+          { text: 'Nope', style: 'cancel' },
+          { text: 'Continue', style: 'destructive', onPress:()=>confirmDisconnect(2) },
+        ],
+      );
+    } else if (stage === 2) {
+      Alert.alert(
+        'Last chance!',
+        'You’ll have to re-enter Wi-Fi creds afterwards. Proceed anyway?',
+        [
+          { text: 'Stop', style: 'cancel' },
+          { text: 'Do it', style: 'destructive',
+            onPress:()=>{ publishMaintenance({action:'DISCONNECT_WIFI'}); Alert.alert('Disconnecting…','LiquorBot is rebooting into Bluetooth mode.'); } },
+        ],
+      );
+    }
   };
 
   /*────────── Fetch ingredients list ──────────*/
@@ -221,7 +258,7 @@ export default function DeviceSettings() {
             <View style={{flexDirection:'column',flex:1}}>
               <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}>
                 <Text style={styles.sectionHeader}>Maintenance</Text>
-                <Animated.View style={{transform:[{rotate}]}}>
+                <Animated.View style={{transform:[{rotate:maintenanceRotate}]}}>
                   <Ionicons name="chevron-down" size={20} color="#DFDCD9"/>
                 </Animated.View>
               </View>
@@ -299,6 +336,34 @@ export default function DeviceSettings() {
             </View>
           ))}
         </View>
+
+        {/* ─────────────────── ADVANCED SETTINGS / DANGER ZONE ─────────────────── */}
+        {isConnected&&(
+          <View style={styles.advancedContainer}>
+            <TouchableOpacity style={styles.advancedHeader} onPress={toggleAdvanced} activeOpacity={0.8}>
+              <View style={{flexDirection:'column',flex:1}}>
+                <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}>
+                  <Text style={styles.sectionHeader}>Advanced Settings</Text>
+                  <Animated.View style={{transform:[{rotate:advancedRotate}]}}>
+                    <Ionicons name="chevron-down" size={20} color="#DFDCD9"/>
+                  </Animated.View>
+                </View>
+                {isAdvancedCollapsed&&(
+                  <Text style={{fontSize:12,color:'#4F4F4F',marginTop:-10}}>Click to expand</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+
+            {!isAdvancedCollapsed&&(
+              <View style={styles.dangerZoneContainer}>
+                <Text style={styles.dangerZoneHeader}>Danger Zone</Text>
+                <TouchableOpacity style={styles.disconnectButton} onPress={()=>confirmDisconnect()}>
+                  <Text style={styles.disconnectButtonText}>Disconnect from Wi-Fi</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
 
         {showConnectPrompt&&(
           <View style={styles.connectPrompt}>
@@ -411,6 +476,14 @@ const styles = StyleSheet.create({
   clearSlotOverlay:{position:'absolute',top:6,right:10,padding:5},
   clearSlotOverlayDisabled:{opacity:0.5},
   clearSlotOverlayText:{color:'#808080',fontSize:14,fontWeight:'bold'},
+
+  /* advanced settings / danger zone */
+  advancedContainer:{backgroundColor:'#1F1F1F',borderRadius:10,padding:20,marginTop:20,marginBottom:20},
+  advancedHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},
+  dangerZoneContainer:{marginTop:15,padding:15,borderWidth:1,borderColor:'#d44a4a',borderRadius:10},
+  dangerZoneHeader:{color:'#d44a4a',fontSize:16,fontWeight:'bold',marginBottom:10,textAlign:'center'},
+  disconnectButton:{backgroundColor:'#d44a4a',borderRadius:10,paddingVertical:12,alignItems:'center'},
+  disconnectButtonText:{color:'#DFDCD9',fontSize:16,fontWeight:'bold'},
 
   connectPrompt:{position:'absolute',bottom:20,alignSelf:'center',backgroundColor:'#1F1F1F',paddingVertical:10,paddingHorizontal:20,borderRadius:10,borderWidth:1,borderColor:'#CE975E'},
   connectPromptText:{color:'#DFDCD9',fontSize:14,textAlign:'center'},

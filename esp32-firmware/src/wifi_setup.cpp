@@ -13,6 +13,7 @@
 #include <WiFi.h>
 #include <NimBLEDevice.h>
 #include "aws_manager.h"
+#include "esp_wifi.h"
 
 // Global variables to hold Wi-Fi credentials
 std::string ssid = "";
@@ -55,4 +56,19 @@ bool connectToWiFi() {
         Serial.println("\nWi-Fi connection failed.");
         return false;
     }
+}
+
+/* -------------------------------------------------------------------------- */
+/*            NEW – Disconnect and reboot into Bluetooth pairing              */
+/* -------------------------------------------------------------------------- */
+void disconnectFromWiFi() {
+    Serial.println("Disconnecting from Wi-Fi and rebooting to BLE mode…");
+
+    /* Tear down network & forget credentials stored in flash (STA-mode) */
+    WiFi.disconnect(true, true);     // erase NVS & drop connection
+    WiFi.mode(WIFI_OFF);
+    esp_wifi_stop();
+
+    delay(500);
+    ESP.restart();                   // Startup will call setupBluetoothWiFiAWS()
 }

@@ -12,6 +12,7 @@
 #define AWS_PUBLISH_TOPIC  "liquorbot/liquorbot" LIQUORBOT_ID "/publish"
 #define SLOT_CONFIG_TOPIC  "liquorbot/liquorbot" LIQUORBOT_ID "/slot-config"
 #define HEARTBEAT_TOPIC    "liquorbot/liquorbot" LIQUORBOT_ID "/heartbeat"
+#define MAINTENANCE_TOPIC  "liquorbot/" LIQUORBOT_ID "/maintenance"
 #define MQTT_CLIENT_ID     "LiquorBot-" LIQUORBOT_ID
 
 #include <Arduino.h>
@@ -22,8 +23,6 @@ void processAWSMessages();
 void sendData(const String &topic, const String &message);
 void receiveData(char *topic, byte *payload, unsigned int length);
 void sendHeartbeat();
-
-/* Called from pour task */
 void notifyPourResult(bool success, const char *error = nullptr);
 
 #endif // AWS_MANAGER_H

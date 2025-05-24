@@ -22,5 +22,6 @@ extern std::string password;
 // Function declarations
 void setWiFiCredentials(const std::string &newSSID, const std::string &newPassword);
 bool connectToWiFi();
+void disconnectFromWiFi();
 
 #endif // WIFI_SETUP_H
