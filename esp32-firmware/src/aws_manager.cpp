@@ -63,6 +63,8 @@ void setupAWS() {
             mqttClient.subscribe(AWS_PUBLISH_TOPIC);
             mqttClient.subscribe(HEARTBEAT_TOPIC);
             mqttClient.subscribe(SLOT_CONFIG_TOPIC);
+            mqttClient.subscribe(MAINTENANCE_TOPIC);
+            Serial.println("✔ Subscribed to topics.");
         } else {
             Serial.printf("✖ MQTT connect failed (rc=%d). Retrying…\n", mqttClient.state());
             delay(2000);
