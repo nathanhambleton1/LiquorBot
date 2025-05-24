@@ -120,6 +120,7 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
         const char *action = doc["action"];
 
         if      (strcmp(action, "DISCONNECT_WIFI") == 0) {
+            Serial.println("Disconnecting from Wi-Fi…");
             sendData(MAINTENANCE_TOPIC,
                      "{\"status\":\"ok\",\"note\":\"disconnecting\"}");
             disconnectFromWiFi();    // never returns (ESP.restart)
