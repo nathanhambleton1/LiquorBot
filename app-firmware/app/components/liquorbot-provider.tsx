@@ -1,4 +1,8 @@
-// File: liquorbot-provider.tsx
+// -----------------------------------------------------------------------------
+// File: liquorbot-provider.tsx        (REPLACEMENT – 24 May 2025)
+// Purpose:  • Provide LiquorBot connection / slot state
+//           • Memoised context => no needless re-renders on every heartbeat
+// -----------------------------------------------------------------------------
 import React, {
   createContext,
   useState,
@@ -7,162 +11,129 @@ import React, {
   ReactNode,
   useRef,
   useCallback,
+  useMemo,
 } from 'react';
-import { PubSub } from '@aws-amplify/pubsub';
-import { Amplify } from 'aws-amplify';
-import config from '../../src/amplifyconfiguration.json';
+import { Amplify }  from 'aws-amplify';
+import { PubSub }   from '@aws-amplify/pubsub';
+import config       from '../../src/amplifyconfiguration.json';
 
 Amplify.configure(config);
 
 const pubsub = new PubSub({
-  region: 'us-east-1',
-  endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
+  region   : 'us-east-1',
+  endpoint : 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
 
+/*────────────────── Types / Defaults ──────────────────*/
 interface LiquorBotContextValue {
-  isConnected: boolean;
-  slots: number[];
-  liquorbotId: string;
+  isConnected    : boolean;
+  slots          : number[];
+  liquorbotId    : string;
   forceDisconnect: () => void;
-  updateSlots: (newSlots: number[]) => void;
-  setLiquorbotId: (id: string) => void;
-  reconnect: () => void;
+  updateSlots    : (newSlots:number[]) => void;
+  setLiquorbotId : (id:string) => void;
+  reconnect      : () => void;
 }
-
 const LiquorBotContext = createContext<LiquorBotContextValue>({
-  isConnected: false,
-  slots: Array(15).fill(0),
-  liquorbotId: '000',
+  isConnected    : false,
+  slots          : Array(15).fill(0),
+  liquorbotId    : '000',
   forceDisconnect: () => {},
-  updateSlots: () => {},
-  setLiquorbotId: () => {},
-  reconnect: () => {},
+  updateSlots    : () => {},
+  setLiquorbotId : () => {},
+  reconnect      : () => {},
 });
 
-export function LiquorBotProvider({ children }: { children: ReactNode }) {
+/*────────────────── Provider ──────────────────*/
+export function LiquorBotProvider({ children }:{ children:ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
-  const [lastHeartbeat, setLastHeartbeat] = useState<number>(0);
-  const [slots, setSlots] = useState<number[]>(Array(15).fill(0));
-  const [liquorbotId, setLiquorbotId] = useState('000');
-  const lastHeartbeatRef = useRef(lastHeartbeat);
-  const [reconnectTrigger, setReconnectTrigger] = useState(0);
+  const [slots,        setSlots       ] = useState<number[]>(Array(15).fill(0));
+  const [liquorbotId,  setLiquorbotId ] = useState('000');
 
-  const reconnect = useCallback(() => {
-    setReconnectTrigger(prev => prev + 1);
-  }, []);
+  const lastHeartbeatRef  = useRef<number>(0);
+  const [reconnTick, bumpReconnect] = useState(0);   // forces resubscribe
 
-  // Sync ref with state
-  useEffect(() => {
-    lastHeartbeatRef.current = lastHeartbeat;
-  }, [lastHeartbeat]);
+  /*────────── Helpers (stable with useCallback) ──────────*/
+  const reconnect = useCallback(() => bumpReconnect(t => t + 1), []);
+  const forceDisconnect = useCallback(() => setIsConnected(false), []);
+  const updateSlots = useCallback((newSlots:number[]) => {
+    setSlots(newSlots);
+    const topic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
+    pubsub.publish({ topics:[topic], message:{ action:'CURRENT_CONFIG', slots:newSlots } })
+          .catch(console.error);
+  }, [liquorbotId]);
 
-  const handleSlotConfig = (message: any) => {
-    if (message.action === 'CURRENT_CONFIG' && Array.isArray(message.slots)) {
-      setSlots(message.slots.map((id: any) => Number(id) || 0));
+  /*────────── Slot-config subscription ──────────*/
+  const handleSlotConfig = (msg:any) => {
+    if (msg.action==='CURRENT_CONFIG' && Array.isArray(msg.slots)) {
+      setSlots(msg.slots.map((id:any)=>Number(id)||0));
     }
-    if (message.action === 'SET_SLOT' && typeof message.slot === 'number') {
+    if (msg.action==='SET_SLOT' && typeof msg.slot==='number') {
       setSlots(prev => {
-        const next = [...prev];
-        next[message.slot - 1] = Number(message.ingredientId) || 0;
+        const next=[...prev];
+        next[msg.slot-1] = Number(msg.ingredientId)||0;
         return next;
       });
     }
   };
-
-  // Subscribe to config updates with retry logic
   useEffect(() => {
-    const slotConfigTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
-    let subscription: any;
-    let retryTimeout: NodeJS.Timeout;
+    const topic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
+    let sub:any, retry:NodeJS.Timeout;
 
-    const subscribe = () => {
-      subscription = pubsub.subscribe({ topics: [slotConfigTopic] }).subscribe({
-        next: (data) => handleSlotConfig((data as any)?.value ?? data),
-        error: (error) => {
-          console.error('Config subscription error:', error);
-          retryTimeout = setTimeout(subscribe, 5000);
-        },
+    const start = () => {
+      sub = pubsub.subscribe({ topics:[topic] }).subscribe({
+        next : d => handleSlotConfig((d as any).value ?? d),
+        error: e => { console.error('config sub error',e); retry=setTimeout(start,5000); },
       });
     };
+    start();
+    return () => { sub?.unsubscribe(); if (retry) clearTimeout(retry); };
+  }, [liquorbotId, reconnTick]);
 
-    subscribe();
-
-    return () => {
-      if (subscription) subscription.unsubscribe();
-      if (retryTimeout) clearTimeout(retryTimeout);
-    };
-  }, [liquorbotId, reconnectTrigger]);
-
-  // Fetch config when connected
+  /*────────── Fetch current config when connected ──────────*/
   useEffect(() => {
-    if (isConnected) {
-      const slotConfigTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
-      pubsub.publish({
-        topics: [slotConfigTopic],
-        message: { action: 'GET_CONFIG' }
-      }).catch(error => console.error('Config fetch error:', error));
-    }
+    if (!isConnected) return;
+    pubsub.publish({
+      topics : [`liquorbot/liquorbot${liquorbotId}/slot-config`],
+      message: { action:'GET_CONFIG' },
+    }).catch(console.error);
   }, [isConnected, liquorbotId]);
 
-  // Heartbeat subscription with retry logic
+  /*────────── Heartbeat subscription ──────────*/
   useEffect(() => {
-    const heartbeatTopic = `liquorbot/liquorbot${liquorbotId}/heartbeat`;
-    let subscription: any;
-    let retryTimeout: NodeJS.Timeout;
+    const topic = `liquorbot/liquorbot${liquorbotId}/heartbeat`;
+    let sub:any, retry:NodeJS.Timeout;
 
-    const subscribe = () => {
-      subscription = pubsub.subscribe({ topics: [heartbeatTopic] }).subscribe({
-        next: (data) => {
-          const now = Date.now();
-          setLastHeartbeat(now);
-          lastHeartbeatRef.current = now;
-        },
-        error: (error) => {
-          console.error('Heartbeat subscription error:', error);
-          retryTimeout = setTimeout(subscribe, 5000);
-        },
+    const start = () => {
+      sub = pubsub.subscribe({ topics:[topic] }).subscribe({
+        next : () => { lastHeartbeatRef.current = Date.now(); },
+        error: e => { console.error('heartbeat sub error',e); retry=setTimeout(start,5000); },
       });
     };
+    start();
+    return () => { sub?.unsubscribe(); if (retry) clearTimeout(retry); };
+  }, [liquorbotId, reconnTick]);
 
-    subscribe();
-
-    return () => {
-      if (subscription) subscription.unsubscribe();
-      if (retryTimeout) clearTimeout(retryTimeout);
-    };
-  }, [liquorbotId, reconnectTrigger]);
-
-  // Connection status check interval
+  /*────────── Connection watchdog ──────────*/
   useEffect(() => {
-    const intervalId = setInterval(() => {
-      const timeSince = Date.now() - lastHeartbeatRef.current;
-      setIsConnected(timeSince < 7000);
+    const id = setInterval(() => {
+      const alive = Date.now() - lastHeartbeatRef.current < 7000;
+      // setState only when value *changes* to avoid needless re-renders
+      setIsConnected(prev => (prev === alive ? prev : alive));
     }, 1000);
-
-    return () => clearInterval(intervalId);
+    return () => clearInterval(id);
   }, []);
 
-  const contextValue: LiquorBotContextValue = {
+  /*────────── Stable context value (memoised) ──────────*/
+  const contextValue = useMemo<LiquorBotContextValue>(() => ({
     isConnected,
     slots,
     liquorbotId,
-    setLiquorbotId: (id: string) => {
-      setLiquorbotId(id);
-    },
-    forceDisconnect: () => setIsConnected(false),
-    updateSlots: (newSlots) => {
-      setSlots(newSlots);
-      const slotConfigTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
-      pubsub.publish({
-        topics: [slotConfigTopic],
-        message: { 
-          action: 'CURRENT_CONFIG',
-          slots: newSlots
-        }
-      }).catch(console.error);
-    },
+    forceDisconnect,
+    updateSlots,
+    setLiquorbotId,
     reconnect,
-  };
+  }), [isConnected, slots, liquorbotId, forceDisconnect, updateSlots, reconnect]);
 
   return (
     <LiquorBotContext.Provider value={contextValue}>
@@ -171,6 +142,7 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/*────────────────── Hook ──────────────────*/
 export function useLiquorBot() {
   return useContext(LiquorBotContext);
 }

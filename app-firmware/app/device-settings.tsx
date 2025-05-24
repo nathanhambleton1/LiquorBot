@@ -237,20 +237,20 @@ export default function DeviceSettings() {
         <Text style={styles.headerText}>Device Settings</Text>
 
         {/* connection box */}
-        <View style={styles.connectionBox}>
-          <TouchableOpacity
-            style={styles.bluetoothIconContainer}
-            onPress={()=>router.push('/connectivity-settings' as any)}
-            activeOpacity={0.6}
-          >
+        <TouchableOpacity
+          style={styles.connectionBox}
+          onPress={()=>router.push('/connectivity-settings' as any)}
+          activeOpacity={0.6}
+        >
+          <View style={styles.bluetoothIconContainer}>
             <Ionicons name="bluetooth-outline" size={24} color="#DFDCD9"/>
-          </TouchableOpacity>
+          </View>
           <Text style={styles.liquorBotText}>LiquorBot #{liquorbotId}</Text>
           <View style={styles.connectionStatusRow}>
             <View style={[styles.statusDot,{backgroundColor:isConnected?'#63d44a':'#d44a4a'}]}/>
             <Text style={styles.connectionStatusText}>{isConnected?'Connected':'Disconnected'}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
 
         {/* ─────────────────── MAINTENANCE ─────────────────── */}
         <View style={styles.maintenanceContainer}>
