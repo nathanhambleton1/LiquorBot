@@ -228,33 +228,89 @@ export default function EventManager() {
     }
   };
 
+  const checkForOverlappingEvents = (newEvent: Event, existingEvents: Event[]): Event[] => {
+    // Parse times as UTC
+    const newStart = new Date(newEvent.startTime);
+    const newEnd = new Date(newEvent.endTime);
+    const newUTCDate = Date.UTC(
+      newStart.getUTCFullYear(), 
+      newStart.getUTCMonth(), 
+      newStart.getUTCDate()
+    );
+
+    return existingEvents.filter(existing => {
+      const existingStart = new Date(existing.startTime);
+      const existingEnd = new Date(existing.endTime);
+      
+      // Compare UTC dates (same calendar day)
+      const existingUTCDate = Date.UTC(
+        existingStart.getUTCFullYear(),
+        existingStart.getUTCMonth(),
+        existingStart.getUTCDate()
+      );
+      
+      if (newUTCDate !== existingUTCDate) return false;
+      
+      // Compare precise timestamps (UTC milliseconds)
+      return (
+        newStart.getTime() < existingEnd.getTime() &&
+        newEnd.getTime() > existingStart.getTime()
+      );
+    });
+  };
+
   /* ---------- join by invite code ---------- */
   const handleJoin = async () => {
     const code = inviteCodeInput.trim().toUpperCase();
     if (!code) { setJoinError('Please enter a code'); return; }
 
-    setJoinLoading(true); setJoinError(null);
+    setJoinLoading(true); 
+    setJoinError(null);
+
     try {
+      // First fetch event details
+      const { data: eventData } = await client.graphql({
+        query: eventsByCode,
+        variables: { inviteCode: code },
+        authMode: 'userPool',
+      }) as { data: { eventsByCode: { items: Event[] } } };
+
+      if (!eventData.eventsByCode.items.length) {
+        throw new Error('Event not found. Please check the invite code.');
+      }
+
+      const newEvent = eventData.eventsByCode.items[0];
+
+      // Check for overlaps
+      const conflicts = checkForOverlappingEvents(newEvent, events);
+      if (conflicts.length > 0) {
+        const conflictList = conflicts.map(c => 
+          `• ${c.name} (${formatRange(c.startTime, c.endTime)})`
+        ).join('\n');
+        
+        setJoinError(
+          `Cannot join "${newEvent.name}" (${formatRange(newEvent.startTime, newEvent.endTime)})\n\nConflicts with:\n${conflictList}\n\nResolve conflicts first.`
+        );
+        return;
+      }
+
+      // Proceed with joining
       const { data } = await client.graphql({
         query: joinEvent,
         variables: { inviteCode: code },
         authMode: 'userPool',
       }) as { data: { joinEvent: Event } };
 
-      // Check if event already exists in local state
+      // Update local state
       setEvents(prev => {
         const exists = prev.some(e => e.inviteCode === code);
-        if (!exists) {
-          return [...prev, data.joinEvent];
-        }
-        Alert.alert('Error Joining Event', 'You have already joined this event. Please check your events list.');
-        return prev;
+        return exists ? prev : [...prev, data.joinEvent];
       });
       
-      setJoinModalVisible(false); 
+      setJoinModalVisible(false);
       setInviteCodeInput('');
     } catch (err: any) {
-      setJoinError(err.errors?.[0]?.message ?? 'Join failed');
+      setJoinError(err.errors?.[0]?.message ?? 'Join failed. Check code or try later.');
     } finally {
       setJoinLoading(false);
     }
@@ -469,7 +525,11 @@ export default function EventManager() {
 
       {/* bottom buttons */}
       <View style={styles.bottom}>
-        <TouchableOpacity style={styles.joinBtn} onPress={() => setJoinModalVisible(true)}>
+        <TouchableOpacity 
+          style={styles.joinBtn} 
+          onPress={() => setJoinModalVisible(true)}
+          testID="join-event-button"
+        >
           <Ionicons name="log-in-outline" size={24} color="#141414"/>
           <Text style={styles.joinTxt}>Join Event</Text>
         </TouchableOpacity>
@@ -536,101 +596,59 @@ export default function EventManager() {
 
 /* ---------- styles ---------- */
 const styles = StyleSheet.create({
-  container:{flex:1,backgroundColor:'#141414',paddingTop:70},
-  loading:{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'#141414'},
-  title:{color:'#DFDCD9',fontSize:24,fontWeight:'bold',textAlign:'center',marginBottom:30},
-  close:{position:'absolute',top:62,left:24,padding:10,zIndex:10},
+  container: { flex: 1, backgroundColor: '#141414', paddingTop: 70 },
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#141414' },
+  title: { color: '#DFDCD9', fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 30 },
+  close: { position: 'absolute', top: 62, left: 24, padding: 10, zIndex: 10 },
 
-  catWrap:{alignItems:'center',marginBottom:20},
-  catRow:{flexDirection:'row',alignItems:'center',paddingHorizontal:10},
-  catBtn:{paddingHorizontal:15,marginHorizontal:5},
-  catTxt:{color:'#4F4F4F'},
-  catSel:{color:'#CE975E'},
-  under:{height:2,backgroundColor:'#CE975E',marginTop:2,width:'100%'},
+  catWrap: { alignItems: 'center', marginBottom: 20 },
+  catRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10 },
+  catBtn: { paddingHorizontal: 15, marginHorizontal: 5 },
+  catTxt: { color: '#4F4F4F' },
+  catSel: { color: '#CE975E' },
+  under: { height: 2, backgroundColor: '#CE975E', marginTop: 2, width: '100%' },
 
-  searchRow:{flexDirection:'row',alignItems:'center',backgroundColor:'#1F1F1F',
-             borderRadius:10,paddingHorizontal:15,marginHorizontal:20,marginBottom:20},
-  search:{flex:1,color:'#DFDCD9',fontSize:16,paddingVertical:10},
+  searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, paddingHorizontal: 15, marginHorizontal: 20, marginBottom: 20 },
+  search: { flex: 1, color: '#DFDCD9', fontSize: 16, paddingVertical: 10 },
 
-  list:{paddingHorizontal:20,paddingBottom:140},
-  card:{backgroundColor:'#1F1F1F',borderRadius:12,padding:16,marginBottom:12},
-  head:{flexDirection:'row',justifyContent:'space-between',marginBottom:6},
-  name:{color:'#DFDCD9',fontSize:18,fontWeight:'600',flexShrink:1},
-  actions:{flexDirection:'row',gap:12,marginLeft:10},
-  detail:{color:'#8F8F8F',fontSize:14,marginBottom:2},
-  foot:{flexDirection:'row',justifyContent:'space-between',marginTop:10},
-  code:{color:'#CE975E',fontSize:12},
-  drinks:{color:'#8F8F8F',fontSize:12},
+  list: { paddingHorizontal: 20, paddingBottom: 140 },
+  card: { backgroundColor: '#1F1F1F', borderRadius: 12, padding: 16, marginBottom: 12 },
+  head: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  name: { color: '#DFDCD9', fontSize: 18, fontWeight: '600', flexShrink: 1 },
+  actions: { flexDirection: 'row', gap: 12, marginLeft: 10 },
+  detail: { color: '#8F8F8F', fontSize: 14, marginBottom: 2 },
+  foot: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
+  code: { color: '#CE975E', fontSize: 12 },
+  drinks: { color: '#8F8F8F', fontSize: 12 },
 
-  empty:{alignItems:'center',marginTop:150,paddingHorizontal:40},
-  emptyTxt:{color:'#4F4F4F',textAlign:'center',marginTop:20,fontSize:14},
+  empty: { alignItems: 'center', marginTop: 150, paddingHorizontal: 40 },
+  emptyTxt: { color: '#4F4F4F', textAlign: 'center', marginTop: 20, fontSize: 14 },
 
-  bottom:{position:'absolute',bottom:50,left:0,right:0,flexDirection:'row',
-            justifyContent:'flex-end',paddingHorizontal:20},
-  joinBtn:{flexDirection:'row',alignItems:'center',backgroundColor:'#CE975E',
-            borderRadius:25,paddingVertical:12,paddingHorizontal:20, marginRight:12},
-  joinTxt:{color:'#141414',fontSize:16,fontWeight:'600'},
-  newBtn:{flexDirection:'row',alignItems:'center',backgroundColor:'#CE975E',
-          borderRadius:25,paddingVertical:12,paddingHorizontal:12,gap:8,
-          ...Platform.select({ios:{shadowColor:'#000',shadowOffset:{width:0,height:2},
-          shadowOpacity:0.2,shadowRadius:4},android:{elevation:4}})},
-  newTxt:{color:'#141414',fontSize:16,fontWeight:'600'},
+  bottom: { position: 'absolute', bottom: 50, left: 0, right: 0, flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20 },
+  joinBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#CE975E', borderRadius: 25, paddingVertical: 12, paddingHorizontal: 20, marginRight: 12 },
+  joinTxt: { color: '#141414', fontSize: 16, fontWeight: '600', marginLeft: 8 },
+  newBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#CE975E', borderRadius: 25, paddingVertical: 12, paddingHorizontal: 12, gap: 8, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 }, android: { elevation: 4 } }) },
+  newTxt: { color: '#141414', fontSize: 16, fontWeight: '600' },
 
-  overlay:{flex:1,backgroundColor:'rgba(0,0,0,0.6)',justifyContent:'center',alignItems:'center'},
-  filtCard:{width:SCREEN_WIDTH*0.8,backgroundColor:'#1F1F1F',borderRadius:10,padding:20},
-  filtClose:{position:'absolute',top:15,right:15,padding:4},
-  filtTitle:{color:'#DFDCD9',fontSize:20,fontWeight:'bold',alignSelf:'center',marginBottom:20},
-  switchRow:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},
-  switchLbl:{color:'#DFDCD9',fontSize:16},
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  filtCard: { width: SCREEN_WIDTH * 0.8, backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20 },
+  filtClose: { position: 'absolute', top: 15, right: 15, padding: 4 },
+  filtTitle: { color: '#DFDCD9', fontSize: 20, fontWeight: 'bold', alignSelf: 'center', marginBottom: 20 },
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  switchLbl: { color: '#DFDCD9', fontSize: 16 },
 
-  joinCard:{width:SCREEN_WIDTH*0.8,backgroundColor:'#1F1F1F',borderRadius:10,padding:20,alignItems:'center'},
-  codeInput:{width:'100%',borderWidth:1,borderColor:'#4F4F4F',borderRadius:8,
-             paddingVertical:10,paddingHorizontal:15,color:'#DFDCD9',fontSize:16,
-             textAlign:'center',marginBottom:10},
-  err:{color:'#D9534F',marginBottom:8},
-  joinGo:{backgroundColor:'#CE975E',borderRadius:8,paddingVertical:12,
-          paddingHorizontal:30,alignSelf:'stretch',alignItems:'center'},
-  joinGoTxt:{color:'#141414',fontSize:16,fontWeight:'600'},
-  copiedText: {
-    color: '#8F8F8F', // Gray color
-    fontSize: 8,
-    marginLeft: 8,
-  },
-  expandedContent: {
-    marginTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#2F2F2F',
-    paddingTop: 12,
-  },
-  section: {
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    color: '#CE975E',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  drinkName: {
-    color: '#8F8F8F',
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  inviteRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#2F2F2F',
-    borderRadius: 8,
-    padding: 12,
-  },
-  inviteLink: {
-    color: '#8F8F8F',
-    fontSize: 12,
-    flex: 1,
-    marginRight: 8,
-  },
-  copyButton: {
-    padding: 4,
-  },
+  joinCard: { width: SCREEN_WIDTH * 0.8, backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20, alignItems: 'center' },
+  codeInput: { width: '100%', borderWidth: 1, borderColor: '#4F4F4F', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 15, color: '#DFDCD9', fontSize: 16, textAlign: 'center', marginBottom: 10 },
+  err: { color: '#D9534F', marginBottom: 8 },
+  joinGo: { backgroundColor: '#CE975E', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 30, alignSelf: 'stretch', alignItems: 'center' },
+  joinGoTxt: { color: '#141414', fontSize: 16, fontWeight: '600' },
+  copiedText: { color: '#8F8F8F', fontSize: 8, marginLeft: 8 },
+
+  expandedContent: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#2F2F2F', paddingTop: 12 },
+  section: { marginBottom: 16 },
+  sectionTitle: { color: '#CE975E', fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  drinkName: { color: '#8F8F8F', fontSize: 14, marginBottom: 4 },
+  inviteRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#2F2F2F', borderRadius: 8, padding: 12 },
+  inviteLink: { color: '#8F8F8F', fontSize: 12, flex: 1, marginRight: 8 },
+  copyButton: { padding: 4 },
 });
