@@ -104,27 +104,20 @@ export default function DeviceSettings() {
   };
 
   /*────────── Wi-Fi DISCONNECT helper ──────────*/
-  const confirmDisconnect = (stage = 1) => {
-    if (stage === 1) {
-      Alert.alert(
-        'Disconnect LiquorBot?',
-        'Kicking LiquorBot off Wi-Fi will reboot it into Bluetooth pairing mode.',
-        [
-          { text: 'Nope', style: 'cancel' },
-          { text: 'Continue', style: 'destructive', onPress:()=>confirmDisconnect(2) },
-        ],
-      );
-    } else if (stage === 2) {
-      Alert.alert(
-        'Last chance!',
-        'You’ll have to re-enter Wi-Fi creds afterwards. Proceed anyway?',
-        [
-          { text: 'Stop', style: 'cancel' },
-          { text: 'Do it', style: 'destructive',
-            onPress:()=>{ publishMaintenance({action:'DISCONNECT_WIFI'}); Alert.alert('Disconnecting…','LiquorBot is rebooting into Bluetooth mode.'); } },
-        ],
-      );
-    }
+  const confirmDisconnect = () => {
+    Alert.alert(
+      'Disconnect LiquorBot?',
+      'Kicking LiquorBot off Wi-Fi will reboot it into Bluetooth pairing mode. You’ll have to re-enter Wi-Fi credentials afterwards. Proceed?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Disconnect', style: 'destructive',
+          onPress:()=>{ 
+            publishMaintenance({action:'DISCONNECT_WIFI'}); 
+            Alert.alert('Disconnecting…','LiquorBot is rebooting into Bluetooth mode.'); 
+          } 
+        },
+      ],
+    );
   };
 
   /*────────── Fetch ingredients list ──────────*/

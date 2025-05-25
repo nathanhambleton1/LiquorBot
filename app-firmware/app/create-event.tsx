@@ -646,7 +646,7 @@ export default function EventsScreen(){
         Clipboard.setStringAsync(link);
         Alert.alert('Saved', 'Invite link copied!');
       }
-      router.push('/events');
+      router.push('./events');
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Operation failed');

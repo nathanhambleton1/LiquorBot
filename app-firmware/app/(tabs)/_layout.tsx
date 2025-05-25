@@ -77,6 +77,22 @@ export default function TabLayout() {
           }}
         />
 
+        {/* Events Tab */}
+        <Tabs.Screen
+          name="events"
+          options={{
+            title: '',
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons
+                name={focused ? 'calendar-sharp' : 'calendar-outline'}
+                color={color}
+                size={24}
+                style={{ marginBottom: -20 }}
+              />
+            ),
+          }}
+        />
+
         {/* Drink Menu Tab */}
         <Tabs.Screen
           name="menu"

@@ -16,17 +16,17 @@ import * as Clipboard               from 'expo-clipboard'; // Import Clipboard A
 import {
   listEvents,
   eventsByCode,
-}                                    from '../src/graphql/queries';
+}                                    from '../../src/graphql/queries';
 import {
   deleteEvent,
   createGuestEvent,
   updateEvent,
   joinEvent,
   leaveEvent,
-}                                    from '../src/graphql/mutations';
-import { useLiquorBot }             from './components/liquorbot-provider';
+}                                    from '../../src/graphql/mutations';
+import { useLiquorBot }             from '../components/liquorbot-provider';
 import { getUrl } from 'aws-amplify/storage';
-import { getCustomRecipe, listCustomRecipes } from '../src/graphql/queries';
+import { getCustomRecipe, listCustomRecipes } from '../../src/graphql/queries';
 
 const client = generateClient();
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -643,7 +643,7 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', marginTop: 150, paddingHorizontal: 40 },
   emptyTxt: { color: '#4F4F4F', textAlign: 'center', marginTop: 20, fontSize: 14 },
 
-  bottom: { position: 'absolute', bottom: 50, left: 0, right: 0, flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20 },
+  bottom: { position: 'absolute', bottom: 80, left: 0, right: 0, flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20 },
   joinBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#CE975E', borderRadius: 25, paddingVertical: 12, paddingHorizontal: 20, marginRight: 12 },
   joinTxt: { color: '#141414', fontSize: 16, fontWeight: '600', marginLeft: 8 },
   newBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#CE975E', borderRadius: 25, paddingVertical: 12, paddingHorizontal: 12, gap: 8, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 }, android: { elevation: 4 } }) },
