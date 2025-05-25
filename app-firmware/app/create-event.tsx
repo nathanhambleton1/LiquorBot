@@ -29,7 +29,7 @@ import { fetchAuthSession } from '@aws-amplify/auth';
 import type { RecipeIngredient, CustomRecipe } from '../src/API';
 import { on } from '../src/event-bus';
 import { useFocusEffect } from 'expo-router';
-import { listCustomRecipes } from '../src/graphql/queries';
+import { listEvents } from '../src/graphql/queries';
 
 Amplify.configure(config);
 const client = generateClient();
@@ -46,6 +46,36 @@ const parseIng = (d: Drink): number[] => {
     ? d.ingredients.split(',').map(c => +c.split(':')[0])
     : [];
 };
+
+const eventFilter = (user: string, liquorbotId: number) => ({
+  and: [
+    { liquorbotId: { eq: liquorbotId } },
+    {
+      or: [
+        { owner:       { eq: user } },
+        { guestOwners: { contains: user } },
+      ],
+    },
+  ],
+});
+
+const checkForOverlappingEvents = (
+  newStartISO: string,
+  newEndISO: string,
+  existing: { name: string; startTime: string; endTime: string; id: string }[],
+  selfId?: string,
+) => {
+  const newStart = new Date(newStartISO);
+  const newEnd   = new Date(newEndISO);
+
+  return existing.filter(ev => {
+    if (ev.id === selfId) return false;             // ignore the event we’re editing
+    const s = new Date(ev.startTime);
+    const e = new Date(ev.endTime);
+    return newStart < e && newEnd > s;              // true = overlaps
+  });
+};
+
 const fetchMyRecipes = async (user: string, setAD: React.Dispatch<React.SetStateAction<Drink[]>>) => {
   try {
     const result = await client.graphql({
@@ -504,6 +534,43 @@ export default function EventsScreen(){
     
     const start = parseDT(startDate, startTime);
     const end = parseDT(multiDay ? endDate : startDate, endTime);
+
+    try {
+    const { data } = await client.graphql({
+      query: listEvents,
+      variables: { filter: eventFilter(currentUser!, Number(liquorbotId)) },
+      authMode: 'userPool',
+    }) as { data: any };
+
+    const existing = (data.listEvents.items ?? []).map((i: any) => ({
+      id:        i.id,
+      name:      i.name,
+      startTime: i.startTime,
+      endTime:   i.endTime,
+    }));
+
+    const conflicts = checkForOverlappingEvents(
+      start.toISOString(),
+      end.toISOString(),
+      existing,
+      existingEvent?._id,          // so an edit can keep its own slot
+    );
+
+    if (conflicts.length) {
+      const msg = conflicts
+        .map(c => `• ${c.name} (${new Date(c.startTime).toLocaleString()} – ${new Date(c.endTime).toLocaleString()})`)
+        .join('\n');
+      Alert.alert(
+        'Schedule Conflict',
+        `This event overlaps with:\n\n${msg}\n\nChange the time or adjust the conflicting event first.`,
+      );
+      return;                       // ⬅️ stop here – don’t save
+    }
+  } catch (err) {
+    console.error('Conflict-check failed', err);
+    Alert.alert('Error', 'Could not verify schedule conflicts – try again.');
+    return;
+  }
 
     const defaultIDs = menu.filter(d => !d.isCustom).map(d => Number(d.id));
     const customRecipeIDs = menu.filter(d => d.isCustom).map(d => d.id);
