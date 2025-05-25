@@ -83,6 +83,7 @@ export default function EventManager() {
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [standardDrinks, setStandardDrinks] = useState<Array<{ id: number; name: string }>>([]);
   const [customRecipes, setCustomRecipes] = useState<Array<{ id: string; name: string }>>([]);
+  const [processingEvents, setProcessingEvents] = useState<string[]>([]);
 
   /* who am I? */
   const [currentUser, setCurrentUser] = useState<string|null>(null);
@@ -217,14 +218,17 @@ export default function EventManager() {
 
   const doDelete = async (id: string) => {
     try {
+      setProcessingEvents(prev => [...prev, id]);
       await client.graphql({
         query: deleteEvent,
         variables: { input: { id } },
-        authMode: 'userPool', // ✅ Critical for @auth(allow: owner) to work
+        authMode: 'userPool',
       });
       setEvents((p) => p.filter((e) => e.id !== id));
     } catch {
       Alert.alert('Error', 'Delete failed'); 
+    } finally {
+      setProcessingEvents(prev => prev.filter(eId => eId !== id));
     }
   };
 
@@ -348,16 +352,17 @@ export default function EventManager() {
 
   const doLeaveEvent = async (eventId: string) => {
     try {
+      setProcessingEvents(prev => [...prev, eventId]);
       await client.graphql({
         query: leaveEvent,
         variables: { eventId },
         authMode: 'userPool'
       });
-      
-      // Optimistically remove from local state
       setEvents(prev => prev.filter(e => e.id !== eventId));
     } catch (error) {
       Alert.alert('Error', 'Failed to leave event');
+    } finally {
+      setProcessingEvents(prev => prev.filter(eId => eId !== eventId));
     }
   };
 
@@ -385,13 +390,27 @@ export default function EventManager() {
                 <TouchableOpacity onPress={() => router.push(`/create-event?edit=${item.id}`)}>
                   <Ionicons name="create-outline" size={22} color="#CE975E" />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => confirmDelete(item)}>
-                  <Ionicons name="trash-outline" size={22} color="#D9534F" />
+                <TouchableOpacity 
+                  onPress={() => confirmDelete(item)}
+                  disabled={processingEvents.includes(item.id)}
+                >
+                  {processingEvents.includes(item.id) ? (
+                    <ActivityIndicator size="small" color="#D9534F" />
+                  ) : (
+                    <Ionicons name="trash-outline" size={22} color="#D9534F" />
+                  )}
                 </TouchableOpacity>
               </>
             ) : isGuest && (
-              <TouchableOpacity onPress={() => handleLeaveEvent(item)}>
-                <Ionicons name="exit-outline" size={22} color="#D9534F" />
+              <TouchableOpacity 
+                onPress={() => handleLeaveEvent(item)} 
+                disabled={processingEvents.includes(item.id)}
+              >
+                {processingEvents.includes(item.id) ? (
+                  <ActivityIndicator size="small" color="#D9534F" />
+                ) : (
+                  <Ionicons name="exit-outline" size={22} color="#D9534F" />
+                )}
               </TouchableOpacity>
             )}
           </View>
