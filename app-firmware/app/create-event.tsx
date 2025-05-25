@@ -271,6 +271,7 @@ export default function EventsScreen(){
   };
   /* menu */
   const[menu,setMenu]=useState<Drink[]>([]);
+  const [menuSynced, setSynced] = useState(false);
   const ingredientSet=useMemo(()=>{
     const s=new Set<number>();
     menu.forEach(d=>parseIng(d).forEach(i=>s.add(i)));
@@ -279,6 +280,10 @@ export default function EventsScreen(){
   const slotsOK=ingredientSet.size<=15;
   const[showSlots,setShowSlots]=useState(false);
   const [showTimeInfo, setShowTimeInfo] = useState(false);
+
+  useEffect(() => {
+    setSynced(false)
+  }, [edit])
 
   /* enable animation on Android */
   useEffect(()=>{if(Platform.OS==='android'&&UIManager
@@ -432,19 +437,31 @@ export default function EventsScreen(){
 
   // ── whenever either side changes, rebuild menu ─────────────
   useEffect(() => {
-  if (!existingEvent) return;
+    if (!existingEvent) return;                     // nothing to load yet
+    if (menuSynced)  return;                        // already populated once
 
-  // This will re-run when allDrinks updates, including custom drinks
-  const standardDrinks = existingEvent.drinkIDs?.map(id => 
-    allDrinks.find(d => Number(d.id) === id)
-  ).filter(Boolean) as Drink[];
-  
-  const customDrinks = existingEvent.customRecipeIDs?.map(id => 
-    allDrinks.find(d => d.id === id)
-  ).filter(Boolean) as Drink[];
+    /* make sure we **have** every drink the event references
+      (stock *and* custom) before the first population */
+    const needIds = [
+      ...(existingEvent.drinkIDs        ?? []).map(String),
+      ...(existingEvent.customRecipeIDs ?? []),
+    ];
+    const allHaveArrived = needIds.every(id =>
+      allDrinks.some(d => String(d.id) === id),
+    );
+    if (!allHaveArrived) return;                   // wait until they do
 
-  setMenu([...standardDrinks, ...customDrinks]);
-}, [existingEvent, allDrinks]);
+    const standard = (existingEvent.drinkIDs ?? [])
+        .map(id => allDrinks.find(d => Number(d.id) === id))
+        .filter(Boolean) as Drink[];
+
+    const custom   = (existingEvent.customRecipeIDs ?? [])
+        .map(id => allDrinks.find(d => d.id === id))
+        .filter(Boolean) as Drink[];
+
+    setMenu([...standard, ...custom]);              // first reliable load
+    setSynced(true);                                // freeze further auto-writes
+  }, [existingEvent, allDrinks, menuSynced]);
 
 
   /* auto‑select today */
@@ -603,11 +620,28 @@ export default function EventsScreen(){
         });
         Alert.alert('Updated', 'Event updated successfully!');
       } else {
-        await client.graphql({
+        /* 1️⃣ create the event (without extra juggling) */
+        const { data } = await client.graphql({
           query: createEvent,
           variables: { input },
-          authMode: 'userPool'
-        });
+          authMode: 'userPool',
+        }) as { data: { createEvent: { id: string } } };
+
+        /* 2️⃣ if we actually have custom recipes, immediately patch them in.
+              (harmless no-op when the field already stuck.) */
+        if (customRecipeIDs.length) {
+          await client.graphql({
+            query: updateEvent,
+            variables: {
+              input: {
+                id: data.createEvent.id,
+                customRecipeIDs,
+                drinkIDs: defaultIDs,
+              },
+            },
+            authMode: 'userPool',
+          });
+        }
         const link = Linking.createURL('/join', { queryParams: { invite: input.inviteCode } });
         Clipboard.setStringAsync(link);
         Alert.alert('Saved', 'Invite link copied!');
