@@ -15,8 +15,8 @@
 /* ------- Credential storage -------------------------------------------------
  * Simple RAM copy is fine for now (NVS persistence can be added later).
  */
-static std::string ssid     = "";
-static std::string password = "";
+std::string ssid     = "";
+std::string password = "";
 
 /* ---------------------------------------------------------------------------*/
 void setWiFiCredentials(const std::string &newSSID,
