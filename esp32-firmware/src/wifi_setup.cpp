@@ -1,74 +1,70 @@
 /*
- * -----------------------------------------------------------------------------
- *  Project: Liquor Bot
- *  File: wifi_setup.cpp
- *  Description: Manages Wi-Fi connectivity by handling credential storage, 
- *               establishing a connection, and integrating with AWS IoT.
- * 
- *  Author: Nathan Hambleton
- * -----------------------------------------------------------------------------
+ * ---------------------------------------------------------------------------
+ *  Project : Liquor Bot
+ *  File    : wifi_setup.cpp          (REPLACEMENT – 24 May 2025)
+ *  Purpose : • Handle credential storage + Wi-Fi connect / disconnect
+ *            • Notify BLE layer when the device is online
+ * ---------------------------------------------------------------------------
  */
-
 #include "wifi_setup.h"
 #include <WiFi.h>
-#include <NimBLEDevice.h>
+#include "bluetooth_setup.h"
 #include "aws_manager.h"
 #include "esp_wifi.h"
 
-// Global variables to hold Wi-Fi credentials
-std::string ssid = "";
-std::string password = "";
+/* ------- Credential storage -------------------------------------------------
+ * Simple RAM copy is fine for now (NVS persistence can be added later).
+ */
+static std::string ssid     = "";
+static std::string password = "";
 
-// Function to set Wi-Fi credentials (called by BLE setup when credentials are received)
-void setWiFiCredentials(const std::string &newSSID, const std::string &newPassword) {
-    ssid = newSSID;
+/* ---------------------------------------------------------------------------*/
+void setWiFiCredentials(const std::string &newSSID,
+                        const std::string &newPassword)
+{
+    ssid     = newSSID;
     password = newPassword;
 }
 
-// Function to connect to Wi-Fi using the received credentials
+/* ---------------------------------------------------------------------------*/
 bool connectToWiFi() {
-    // Ensure credentials are not empty
     if (ssid.empty() || password.empty()) {
-        Serial.println("Wi-Fi credentials are empty. Cannot connect.");
+        Serial.println("❗ Wi-Fi credentials empty – waiting…");
         return false;
     }
 
-    // Start Wi-Fi connection
+    WiFi.mode(WIFI_STA);
     WiFi.begin(ssid.c_str(), password.c_str());
-
     Serial.print("Connecting to Wi-Fi");
-    for (int i = 0; i < 10 && WiFi.status() != WL_CONNECTED; i++) {
-        delay(1000);
+
+    for (int i = 0; i < 20 && WiFi.status() != WL_CONNECTED; ++i) {
+        delay(500);
         Serial.print(".");
     }
 
-    // Check if connected
     if (WiFi.status() == WL_CONNECTED) {
-        // Stop BLE advertising once connected
-        NimBLEDevice::getAdvertising()->stop();
-        NimBLEDevice::deinit(); // Deinitialize BLE
-        Serial.println("\nConnected to Wi-Fi!");
-        Serial.print("Device IP: ");
-        Serial.println(WiFi.localIP());
+        Serial.printf("\n✔ Wi-Fi connected – IP %s\n", WiFi.localIP().toString().c_str());
+
+        /* Start MQTT immediately (non-blocking loop in main) */
         setupAWS();
+
+        /* Tell BLE side that we’re online → char = "1", disconnect central   */
+        notifyWiFiReady();
         return true;
-    } else {
-        Serial.println("\nWi-Fi connection failed.");
-        return false;
     }
+
+    Serial.println("\n✖ Wi-Fi connection failed.");
+    return false;
 }
 
-/* -------------------------------------------------------------------------- */
-/*            NEW – Disconnect and reboot into Bluetooth pairing              */
-/* -------------------------------------------------------------------------- */
+/* ---------------- Danger-zone helper -------------------------------------- */
 void disconnectFromWiFi() {
-    Serial.println("Disconnecting from Wi-Fi and rebooting to BLE mode…");
+    Serial.println("⚠  Disconnecting from Wi-Fi → reboot to BLE-only mode");
 
-    /* Tear down network & forget credentials stored in flash (STA-mode) */
-    WiFi.disconnect(true, true);     // erase NVS & drop connection
+    WiFi.disconnect(true, true);   // drop + erase
     WiFi.mode(WIFI_OFF);
     esp_wifi_stop();
 
-    delay(500);
-    ESP.restart();                   // Startup will call setupBluetoothWiFiAWS()
+    delay(300);
+    ESP.restart();
 }

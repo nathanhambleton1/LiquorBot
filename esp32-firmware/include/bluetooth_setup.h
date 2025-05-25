@@ -14,10 +14,8 @@
 
 #include <string>
 
-// Function to initialize BLE for Wi-Fi provisioning
-void setupBluetoothWiFiAWS();
-
-// Function to check if Wi-Fi credentials have been received
+void setupBluetooth(); 
 bool areCredentialsReceived();
+void  notifyWiFiReady();
 
 #endif // BLUETOOTH_SETUP_H
