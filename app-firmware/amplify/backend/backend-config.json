@@ -85,6 +85,11 @@
     }
   },
   "function": {
+    "assignUserGroup": {
+      "build": true,
+      "providerPlugin": "awscloudformation",
+      "service": "Lambda"
+    },
     "joinEventFunction": {
       "build": true,
       "dependsOn": [
@@ -115,6 +120,22 @@
     }
   },
   "parameters": {
+    "AMPLIFY_function_assignUserGroup_deploymentBucketName": {
+      "usedBy": [
+        {
+          "category": "function",
+          "resourceName": "assignUserGroup"
+        }
+      ]
+    },
+    "AMPLIFY_function_assignUserGroup_s3Key": {
+      "usedBy": [
+        {
+          "category": "function",
+          "resourceName": "assignUserGroup"
+        }
+      ]
+    },
     "AMPLIFY_function_joinEventFunction_deploymentBucketName": {
       "usedBy": [
         {

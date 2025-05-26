@@ -41,7 +41,7 @@ export default function Index() {
   const glowAnimation = useRef(new Animated.Value(1)).current;
 
   /* LiquorBot connectivity (UI only) */
-  const { isConnected, liquorbotId, reconnect } = useLiquorBot();
+  const { isConnected, liquorbotId, reconnect, isAdmin } = useLiquorBot();
 
   /* Ensure we attempt the attach only once per app‑launch */
   const attemptedAttach = useRef(false);
@@ -182,12 +182,14 @@ export default function Index() {
       style={[styles.background, { backgroundColor: '#1F1F1F' }]}
       resizeMode="cover"
     >
-      {/* chip‑icon shortcut to Device Settings */}
-      <View style={styles.wifiIconContainer}>
-        <TouchableOpacity onPress={() => router.push('/device-settings')}>
-          <Ionicons name="hardware-chip" size={36} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
+      {/* Device-Settings button — ADMIN only */}
+      {isAdmin && (
+        <View style={styles.wifiIconContainer}>
+          <TouchableOpacity onPress={() => router.push('/device-settings')}>
+            <Ionicons name="hardware-chip" size={36} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      )}
 
       <View style={styles.overlay}>
         <Text style={styles.title}>LiquorBot</Text>
@@ -221,7 +223,7 @@ export default function Index() {
         {/* Main Event Tile */}
         <TouchableOpacity 
           style={styles.mainTile}
-          onPress={() => router.push('/events')}
+          onPress={() => router.push('./events')}
         >
           <View style={styles.mainTileContent}>
             <View style={styles.mainIconTextContainer}>

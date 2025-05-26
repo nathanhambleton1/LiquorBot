@@ -1,5 +1,5 @@
 {
-  "projectPath": "/Users/alexandraperkinson/Documents/GitHub/LiquorBot/app-firmware",
-  "defaultEditor": "Visual Studio Code",
-  "envName": "dev"
+  "projectPath": "C:\\App Projects\\LiquorBot\\app-firmware",
+  "envName": "dev",
+  "defaultEditor": "vscode"
 }
