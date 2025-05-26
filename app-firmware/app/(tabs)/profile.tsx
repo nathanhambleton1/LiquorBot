@@ -12,6 +12,7 @@ import {
   Dimensions,
   Image,
   PanResponder,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -34,6 +35,7 @@ import { generateClient } from 'aws-amplify/api';
 import { listLikedDrinks, getUserProfile } from '../../src/graphql/queries';
 import { createUserProfile, updateUserProfile } from '../../src/graphql/mutations';
 import { useAuthenticator } from '@aws-amplify/ui-react-native';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 Amplify.configure(config);
 const client = generateClient();
@@ -94,6 +96,7 @@ export default function ProfileScreen() {
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
   const { signOut } = useAuthenticator((ctx: any) => [ctx.user]);
   const router = useRouter();
+  const [imageLoading, setImageLoading] = useState(true);
 
   // Reset popup state when navigating to the profile tab
   useFocusEffect(
@@ -218,8 +221,15 @@ export default function ProfileScreen() {
         quality: 1,
       });
       if (picker.canceled) return;
-      const localUri = picker.assets[0].uri;
-      const blob = await (await fetch(localUri)).blob();
+      
+      // Compress image
+      const compressed = await ImageManipulator.manipulateAsync(
+        picker.assets[0].uri,
+        [{ resize: { width: 200, height: 200 } }], // Industry standard size
+        { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+      );
+
+      const blob = await (await fetch(compressed.uri)).blob();
       const s3Path = `public/profilePictures/${userProfileId}.jpg`;
 
       await uploadData({ path: s3Path, data: blob });
@@ -283,10 +293,23 @@ export default function ProfileScreen() {
       {/* header banner */}
       <View style={styles.userInfoContainer}>
         <View style={styles.profilePictureContainer}>
+          {imageLoading && (
+            <ActivityIndicator 
+              style={StyleSheet.absoluteFill} 
+              color="#CE975E" 
+              size="large"
+            />
+          )}
           <Image
-            source={user.profilePicture ? { uri: user.profilePicture } : require('../../assets/images/default-profile.png')}
+            source={user.profilePicture ? { 
+              uri: `${user.profilePicture}?${Date.now()}` // Cache busting
+            } : require('../../assets/images/default-profile.png')}
             style={styles.profilePicture}
-            onError={() => setUser((p) => ({ ...p, profilePicture: null }))}
+            onLoad={() => setImageLoading(false)}
+            onError={() => {
+              setUser(p => ({ ...p, profilePicture: null }));
+              setImageLoading(false);
+            }}
           />
         </View>
         <Text style={styles.usernameText}>{user.username}</Text>
@@ -341,21 +364,19 @@ export default function ProfileScreen() {
 
 // ─────────────────────── STYLE SHEET ───────────────────────────────────────
 const styles = StyleSheet.create({
-  container:             { flex: 1, backgroundColor: '#141414' },
-  userInfoContainer:     { alignItems: 'center', paddingTop: 70, paddingBottom: 20 },
-  profilePictureContainer:{},
-  profilePicture:        { width: 125, height: 125, borderRadius: 75, marginVertical: 20 },
-  usernameText:          { color: '#DFDCD9', fontSize: 24 },
-  emailText:             { color: '#4F4F4F', fontSize: 16, marginTop: 5 },
-  scrollContainer:       { paddingHorizontal: 20 },
-  buttonContainer:       { marginVertical: 20 },
-  button:                { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F',
-                            borderRadius: 10, paddingVertical: 15, paddingHorizontal: 15, marginBottom: 10 },
-  buttonRow:             { flexDirection: 'row', alignItems: 'center' },
-  buttonIcon:            { marginRight: 15 },
-  buttonText:            { color: '#DFDCD9', fontSize: 18 },
-  popup:                 { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-                            backgroundColor: '#141414', elevation: 10, zIndex: 10 },
-  popupHeader:           { flexDirection: 'row', alignItems: 'center', padding: 15, paddingTop: 70 },
-  popupTitle:            { flex: 1, textAlign: 'center', color: '#DFDCD9', fontSize: 18 },
+  container:               { flex: 1, backgroundColor: '#141414' },
+  userInfoContainer:       { alignItems: 'center', paddingTop: 70, paddingBottom: 20 },
+  profilePicture:          { width: 125, height: 125, borderRadius: 75, marginVertical: 20 },
+  usernameText:            { color: '#DFDCD9', fontSize: 24 },
+  emailText:               { color: '#4F4F4F', fontSize: 16, marginTop: 5 },
+  scrollContainer:         { paddingHorizontal: 20 },
+  buttonContainer:         { marginVertical: 20 },
+  button:                  { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, paddingVertical: 15, paddingHorizontal: 15, marginBottom: 10 },
+  buttonRow:               { flexDirection: 'row', alignItems: 'center' },
+  buttonIcon:              { marginRight: 15 },
+  buttonText:              { color: '#DFDCD9', fontSize: 18 },
+  popup:                   { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: '#141414', elevation: 10, zIndex: 10 },
+  popupHeader:             { flexDirection: 'row', alignItems: 'center', padding: 15, paddingTop: 70 },
+  popupTitle:              { flex: 1, textAlign: 'center', color: '#DFDCD9', fontSize: 18 },
+  profilePictureContainer: { position: 'relative', justifyContent: 'center',alignItems: 'center'},
 });
