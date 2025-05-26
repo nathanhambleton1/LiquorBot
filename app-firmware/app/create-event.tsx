@@ -778,6 +778,9 @@ export default function EventsScreen(){
           >
             <Text style={styles.saveTxt}>Save Event</Text>
           </TouchableOpacity>
+          <Text style={styles.deviceIdText}>
+            This event will be stored on LiquorBot: {liquorbotId}
+          </Text>
         </ScrollView>
       )}
 
@@ -1007,168 +1010,60 @@ function fmt(d:Date){return`${String(d.getMonth()+1).padStart(2,'0')}/${
   String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`;}
 
 const{width:W}=Dimensions.get('window');
-const styles=StyleSheet.create({
-  /* generic layout (unchanged) */
-  modalHeader: {
-    paddingTop: 20,
-    paddingHorizontal: 20,
-    backgroundColor: '#141414',
-    zIndex: 1,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between', // Distribute space between elements
-    width: '100%',
-    marginBottom: 30,
-  },
-  chevronButton: {
-    // Keeps the chevron on the left
-  },
-  modalHeaderText: {
-    color: '#DFDCD9',
-    fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    flex: 1, // Takes remaining space between chevron and edit button
-  },
-  editButton: {
-    padding: 8,
-  },
-  catRow: {
-    paddingBottom: 0,
-    marginBottom: 1,  // Added bottom margin
-  },
-  listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-    paddingTop: 0,  // Removed extra top padding
-  },
-  itemSeparator: {
-    height: 1,
-    backgroundColor: '#333',
-    marginHorizontal: 16,
-  },
-  drinkItem: {
-    paddingVertical: 12,  // Reduced from 14
-  },
-  modal: {
-    flex: 1,
-    backgroundColor: '#141414',
-  },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1F1F1F',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    marginBottom: 5,
-  },
-  drinkItemText: {
-    color: '#DFDCD9', // Off-white text
-    fontSize: 16,
-  },
-  container:{flex:1,backgroundColor:'#141414'},
-  closeBtn:{position:'absolute', top:62,left:20,zIndex:10,padding:10, },
-  scroll:{paddingTop:70,paddingHorizontal:20,
-    paddingBottom:40},header:{fontSize:24,color:'#DFDCD9',fontWeight:'bold',
-    marginBottom:20, textAlign: 'center'},label:{color:'#DFDCD9',marginBottom:5,fontSize:16},
-  input:{backgroundColor:'#1F1F1F',color:'#DFDCD9',borderRadius:10,padding:12,
-    fontSize:16},
-
-  /* multi‑day toggle */
-  mdToggle:{flexDirection:'row',alignItems:'center',backgroundColor:'#1F1F1F',
-    borderRadius:10,padding:12,marginBottom:6},
-  mdToggleOn:{borderColor:'#CE975E',borderWidth:1},
-  mdToggleTxt:{color:'#DFDCD9',marginLeft:8,fontSize:15},
-
-  dateRow:{flexDirection:'row',alignItems:'center',marginBottom:8},
-  dateBox:{flex:1,backgroundColor:'#1F1F1F',color:'#DFDCD9',borderRadius:10,
-           padding:12,fontSize:16,marginRight:4},
-
-  timeRow:{flexDirection:'row',justifyContent:'space-between',marginBottom:15},
-  timeBox:{flex:1,backgroundColor:'#1F1F1F',borderRadius:10,paddingVertical:12,
-           alignItems:'center',marginHorizontal:4},
-  timeTag:{position:'absolute',top:4,left:8,fontSize:11,color:'#CE975E',
-           letterSpacing:1},
-  timeTxt:{color:'#DFDCD9',fontSize:16,marginTop:6},
-  menuHead:{flexDirection:'row',justifyContent:'space-between',
-            alignItems:'center',marginTop:10,marginBottom:5},
-  section:{color:'#DFDCD9',fontSize:18,fontWeight:'bold'},
-  drinkRow:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',
-            backgroundColor:'#1F1F1F',paddingVertical:10,paddingHorizontal:15,
-            borderRadius:10,marginBottom:8},
-  drinkTxt:{color:'#DFDCD9',fontSize:16},
-
-  slots:{color:'#DFDCD9',fontSize:12,marginBottom:10},
-  slotBox:{backgroundColor:'#1F1F1F',borderRadius:10,padding:10,marginBottom:4},
-  slotLine:{color:'#DFDCD9',fontSize:14,marginVertical:2},
-
-  saveBtn:{backgroundColor:'#CE975E',borderRadius:10,paddingVertical:14,alignItems:'center',
-           marginTop:10},saveTxt:{color:'#141414',fontSize:18,fontWeight:'bold'},
-
-  /* picker modal */
-  modalClose:{position:'absolute',top:45,left:30,zIndex:10},
-  catBtn:{paddingVertical:10,paddingHorizontal:10,marginHorizontal:6},
-  catTxt:{color:'#4F4F4F',fontSize:14},catSel:{color:'#CE975E'},
-  under:{height:2,backgroundColor:'#CE975E',width:'100%',marginTop:2},
-  searchInput:{flex:1,color:'#DFDCD9',fontSize:16,paddingVertical:10},
-  /* time‑wheel */
-  twBackdrop:{...StyleSheet.absoluteFillObject,backgroundColor:'#0009'},
-  twCard:{position:'absolute',backgroundColor:'#1F1F1F',
-          borderRadius:16,overflow:'hidden'},
-  twItem:{color:'#DFDCD9',fontSize:18},
-  twHighlight:{position:'absolute',left:0,right:0,height:ITEM_H,top:'50%',
-               marginTop:-ITEM_H/2,borderTopWidth:1,borderBottomWidth:1,
-               borderColor:'#CE975E'},
-  timeInfoHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  infoButton: {
-    marginLeft: 8,
-    padding: 4,
-  },
-  infoBackdrop: {
-    flex: 1,
-    backgroundColor: '#00000066',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  infoPopup: {
-    backgroundColor: '#1F1F1F',
-    borderRadius: 16,
-    padding: 20,
-    width: '80%',
-    position: 'relative',
-  },
-  infoTitle: {
-    color: '#CE975E',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  infoText: {
-    color: '#DFDCD9',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  infoClose: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    padding: 4,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#141414' // Match your background color
-  },
+const styles = StyleSheet.create({
+  modalHeader:      { paddingTop: 20, paddingHorizontal: 20, backgroundColor: '#141414', zIndex: 1 },
+  headerRow:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 30 },
+  chevronButton:    { /* Keeps the chevron on the left */ },
+  modalHeaderText:  { color: '#DFDCD9', fontSize: 20, fontWeight: 'bold', textAlign: 'center', flex: 1 },
+  editButton:       { padding: 8 },
+  catRow:           { paddingBottom: 0, marginBottom: 1 },
+  listContent:      { paddingHorizontal: 20, paddingBottom: 40, paddingTop: 0 },
+  itemSeparator:    { height: 1, backgroundColor: '#333', marginHorizontal: 16 },
+  drinkItem:        { paddingVertical: 12 },
+  modal:            { flex: 1, backgroundColor: '#141414' },
+  searchRow:        { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, paddingHorizontal: 15, marginBottom: 5 },
+  drinkItemText:    { color: '#DFDCD9', fontSize: 16 },
+  container:        { flex: 1, backgroundColor: '#141414' },
+  closeBtn:         { position: 'absolute', top: 62, left: 20, zIndex: 10, padding: 10 },
+  scroll:           { paddingTop: 70, paddingHorizontal: 20, paddingBottom: 40 },
+  header:           { fontSize: 24, color: '#DFDCD9', fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  label:            { color: '#DFDCD9', marginBottom: 5, fontSize: 16 },
+  input:            { backgroundColor: '#1F1F1F', color: '#DFDCD9', borderRadius: 10, padding: 12, fontSize: 16 },
+  mdToggle:         { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, padding: 12, marginBottom: 6 },
+  mdToggleOn:       { borderColor: '#CE975E', borderWidth: 1 },
+  mdToggleTxt:      { color: '#DFDCD9', marginLeft: 8, fontSize: 15 },
+  dateRow:          { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  dateBox:          { flex: 1, backgroundColor: '#1F1F1F', color: '#DFDCD9', borderRadius: 10, padding: 12, fontSize: 16, marginRight: 4 },
+  timeRow:          { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
+  timeBox:          { flex: 1, backgroundColor: '#1F1F1F', borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginHorizontal: 4 },
+  timeTag:          { position: 'absolute', top: 4, left: 8, fontSize: 11, color: '#CE975E', letterSpacing: 1 },
+  timeTxt:          { color: '#DFDCD9', fontSize: 16, marginTop: 6 },
+  menuHead:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, marginBottom: 5 },
+  section:          { color: '#DFDCD9', fontSize: 18, fontWeight: 'bold' },
+  drinkRow:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1F1F1F', paddingVertical: 10, paddingHorizontal: 15, borderRadius: 10, marginBottom: 8 },
+  drinkTxt:         { color: '#DFDCD9', fontSize: 16 },
+  slots:            { color: '#DFDCD9', fontSize: 12, marginBottom: 10 },
+  slotBox:          { backgroundColor: '#1F1F1F', borderRadius: 10, padding: 10, marginBottom: 4 },
+  slotLine:         { color: '#DFDCD9', fontSize: 14, marginVertical: 2 },
+  saveBtn:          { backgroundColor: '#CE975E', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 10 },
+  saveTxt:          { color: '#141414', fontSize: 18, fontWeight: 'bold' },
+  modalClose:       { position: 'absolute', top: 45, left: 30, zIndex: 10 },
+  catBtn:           { paddingVertical: 10, paddingHorizontal: 10, marginHorizontal: 6 },
+  catTxt:           { color: '#4F4F4F', fontSize: 14 },
+  catSel:           { color: '#CE975E' },
+  under:            { height: 2, backgroundColor: '#CE975E', width: '100%', marginTop: 2 },
+  searchInput:      { flex: 1, color: '#DFDCD9', fontSize: 16, paddingVertical: 10 },
+  twBackdrop:       { ...StyleSheet.absoluteFillObject, backgroundColor: '#0009' },
+  twCard:           { position: 'absolute', backgroundColor: '#1F1F1F', borderRadius: 16, overflow: 'hidden' },
+  twItem:           { color: '#DFDCD9', fontSize: 18 },
+  twHighlight:      { position: 'absolute', left: 0, right: 0, height: 36, top: '50%', marginTop: -18, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#CE975E' },
+  timeInfoHeader:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  infoButton:       { marginLeft: 8, padding: 4 },
+  infoBackdrop:     { flex: 1, backgroundColor: '#00000066', justifyContent: 'center', alignItems: 'center' },
+  infoPopup:        { backgroundColor: '#1F1F1F', borderRadius: 16, padding: 20, width: '80%', position: 'relative' },
+  infoTitle:        { color: '#CE975E', fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
+  infoText:         { color: '#DFDCD9', fontSize: 14, lineHeight: 20 },
+  infoClose:        { position: 'absolute', top: 12, right: 12, padding: 4 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#141414' },
+  deviceIdText:     { color: '#4F4F4F', fontSize: 12, textAlign: 'center', marginTop: 8 },
 });
