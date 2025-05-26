@@ -18,6 +18,7 @@ import {
 import { useRouter } from 'expo-router';
 import { signIn, getCurrentUser } from 'aws-amplify/auth';
 import { MaterialIcons } from '@expo/vector-icons';
+import { fetchAuthSession } from '@aws-amplify/auth';
 
 export default function SignIn() {
   const router = useRouter();
@@ -46,6 +47,8 @@ export default function SignIn() {
       const { isSignedIn, nextStep } = await signIn({ username, password });
 
       if (isSignedIn) {
+        // 🔼 Force refresh session to get latest groups BEFORE redirect
+        await fetchAuthSession({ forceRefresh: true }); 
         router.replace('/(tabs)');
         return;
       }
