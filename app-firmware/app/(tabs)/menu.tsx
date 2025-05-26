@@ -958,10 +958,9 @@ export default function MenuScreen() {
               <Ionicons name="close" size={24} color="#DFDCD9" />
             </TouchableOpacity>
             <Text style={styles.filterModalTitle}>Filter Options</Text>
-
             <View style={styles.filterRow}>
               <Text style={styles.filterLabel}>
-                Only show drinks I can make
+                Show only makeable drinks
               </Text>
               <Switch
                 value={onlyMakeable}
@@ -971,7 +970,7 @@ export default function MenuScreen() {
               />
             </View>
             <View style={styles.filterRow}>
-              <Text style={styles.filterLabel}>Sort alphabetically</Text>
+              <Text style={styles.filterLabel}>Sort drinks alphabetically</Text>
               <Switch
                 value={alphabetical}
                 onValueChange={setAlphabetical}
@@ -980,7 +979,7 @@ export default function MenuScreen() {
               />
             </View>
             <View style={styles.filterRow}>
-              <Text style={styles.filterLabel}>Only show my custom drinks</Text>
+              <Text style={styles.filterLabel}>Show only my custom drinks</Text>
               <Switch
                 value={onlyCustom}
                 onValueChange={setOnlyCustom}
