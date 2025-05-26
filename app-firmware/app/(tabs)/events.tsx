@@ -13,20 +13,12 @@ import Ionicons                     from '@expo/vector-icons/Ionicons';
 import { generateClient }           from 'aws-amplify/api';
 import { fetchAuthSession }         from '@aws-amplify/auth';
 import * as Clipboard               from 'expo-clipboard'; // Import Clipboard API
-import {
-  listEvents,
-  eventsByCode,
-}                                    from '../../src/graphql/queries';
-import {
-  deleteEvent,
-  createGuestEvent,
-  updateEvent,
-  joinEvent,
-  leaveEvent,
-}                                    from '../../src/graphql/mutations';
+import { listEvents, eventsByCode, } from '../../src/graphql/queries';
+import { deleteEvent, joinEvent, leaveEvent,} from '../../src/graphql/mutations';
 import { useLiquorBot }             from '../components/liquorbot-provider';
 import { getUrl } from 'aws-amplify/storage';
-import { getCustomRecipe, listCustomRecipes } from '../../src/graphql/queries';
+import { getCustomRecipe } from '../../src/graphql/queries';
+import { useLocalSearchParams } from 'expo-router';
 
 const client = generateClient();
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -64,6 +56,7 @@ export default function EventManager() {
   /* navigation & device context */
   const router                 = useRouter();
   const { liquorbotId }        = useLiquorBot();
+  const params = useLocalSearchParams<{ join?: string }>();
 
   /* UI state */
   const [events, setEvents]                 = useState<Event[]>([]);
@@ -96,6 +89,15 @@ export default function EventManager() {
       } catch { setCurrentUser(null); }
     })();
   }, []);
+
+  /* check for query params */
+  useEffect(() => {
+    if (params.join === 'true') {
+      setJoinModalVisible(true);
+      // Clear the query param after opening modal
+      router.setParams({ join: undefined });
+    }
+  }, [params.join]);
 
   /* fetch events that belong to me */
   useEffect(() => {

@@ -35,6 +35,12 @@ interface Ingredient {
 // -----------------------------------------------------------------------------
 export default function DeviceSettings() {
   const router = useRouter();
+  const { isAdmin } = useLiquorBot();
+  if (!isAdmin) {
+    router.replace('/');
+    return null;
+  }
+
   const { isConnected, liquorbotId } = useLiquorBot();
 
   /*────────── State ──────────*/

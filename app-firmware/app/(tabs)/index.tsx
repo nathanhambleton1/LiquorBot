@@ -289,6 +289,9 @@ export default function Index() {
             <View style={styles.glowOverlay} />
           </TouchableOpacity>
 
+          {/* Conditional Button */}
+        {isAdmin ? (
+          // Admin - New Event Button
           <TouchableOpacity
             style={styles.smallTile}
             onPress={() => router.push('/create-event')}
@@ -304,6 +307,24 @@ export default function Index() {
             </View>
             <View style={styles.glowOverlay} />
           </TouchableOpacity>
+        ) : (
+          // Non-Admin - Join Event Button
+          <TouchableOpacity
+            style={styles.smallTile}
+            onPress={() => router.push('/events?join=true')}
+          >
+            <View style={styles.iconTextContainer}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="add-circle" size={28} color="#DFDCD9" />
+              </View>
+              <View style={styles.textContainer}>
+                <Text style={styles.tileTitle}>Join Event</Text>
+                <Text style={styles.tileSubtext}>Enter Invite Code</Text>
+              </View>
+            </View>
+            <View style={styles.glowOverlay} />
+          </TouchableOpacity>
+        )}
         </View>
       </View>
     </ImageBackground>

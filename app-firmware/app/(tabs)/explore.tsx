@@ -19,6 +19,7 @@ import { useLiquorBot } from '../components/liquorbot-provider';
 import { Amplify } from 'aws-amplify';
 import config from '../../src/amplifyconfiguration.json';
 import { PubSub } from '@aws-amplify/pubsub';
+import { router } from 'expo-router';
 
 /* ─────────── Amplify + PubSub bootstrap ─────────── */
 Amplify.configure(config);
@@ -324,6 +325,13 @@ const BookCard = ({ book, onPress }: BookCardProps) => (
 /*                          MAIN EXPLORE SCREEN                               */
 /* -------------------------------------------------------------------------- */
 export default function ExploreScreen() {
+
+  // Ensure user is an admin before rendering
+  const { isAdmin } = useLiquorBot();
+  if (!isAdmin) {
+    router.replace('/');
+    return null;
+  }
   const { isConnected, liquorbotId } = useLiquorBot();
 
   const [drinks,      setDrinks]  = useState<Drink[]>([]);

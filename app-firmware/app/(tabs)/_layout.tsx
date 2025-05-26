@@ -22,12 +22,12 @@ import { useAuthenticator } from '@aws-amplify/ui-react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { StatusBar } from 'react-native';
 import {
-  SafeAreaView as SAView,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+  SafeAreaView as SAView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLiquorBot } from '../components/liquorbot-provider';
 
 export default function TabLayout() {
   const { authStatus } = useAuthenticator((ctx) => [ctx.authStatus]);
+  const { isAdmin }    = useLiquorBot();
   const insets         = useSafeAreaInsets();
 
   // redirect to sign-in if not authenticated
@@ -82,6 +82,7 @@ export default function TabLayout() {
           name="events"
           options={{
             title: '',
+            href: isAdmin ? "/events" : null, // Proper Expo Router way to hide tab
             tabBarIcon: ({ color, focused }) => (
               <Ionicons
                 name={focused ? 'calendar-sharp' : 'calendar-outline'}
@@ -109,21 +110,22 @@ export default function TabLayout() {
           }}
         />
 
-        {/* Explore Tab */}
-        <Tabs.Screen
-          name="explore"
-          options={{
-            title: '',
-            tabBarIcon: ({ color, focused }) => (
-              <Ionicons
-                name={focused ? 'compass-sharp' : 'compass-outline'}
-                color={color}
-                size={24}
-                style={{ marginBottom: -20 }}
-              />
-            ),
-          }}
-        />
+      {/* Explore Tab - Conditionally hidden */}
+      <Tabs.Screen
+        name="explore"
+        options={{
+          title: '',
+          href: isAdmin ? "/explore" : null, // Proper Expo Router way to hide tab
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
+            <Ionicons
+              name={focused ? 'compass-sharp' : 'compass-outline'}
+              color={color}
+              size={24}
+              style={{ marginBottom: -20 }}
+            />
+          ),
+        }}
+      />
 
         {/* Profile Tab */}
         <Tabs.Screen
