@@ -51,6 +51,7 @@ export default function ConnectivitySettings() {
   const [isScanning,      setIsScanning]      = useState(false);
   const [isConnecting,    setIsConnecting]    = useState(false);
   const [connectedDevice, setConnectedDevice] = useState<any|null>(null);
+  const [currentConnectingId, setCurrentConnectingId] = useState<string|null>(null);
 
   /*────────── Wi-Fi modal ──────────*/
   const [wifiModalVisible, setWifiModalVisible] = useState(false);
@@ -140,7 +141,7 @@ export default function ConnectivitySettings() {
   /*────────── Connect BLE device ──────────*/
   const handleConnectDevice = async (devId:string)=>{
     try{
-      setIsConnecting(true);
+      setCurrentConnectingId(devId);;
       const manager   = getManager();
       const existing  = (await manager.connectedDevices([SERVICE_UUID])).find(d=>d.id===devId);
       const device    = existing ?? await manager.connectToDevice(devId,{requestMTU:256});
@@ -158,7 +159,7 @@ export default function ConnectivitySettings() {
         `Could not connect to device ${devId}: ${e.message || 'Unknown error'}`
       );
     } finally { 
-      setIsConnecting(false); 
+      setCurrentConnectingId(null);
     }
   };
 
@@ -298,6 +299,10 @@ export default function ConnectivitySettings() {
               disabled={item.type==='wifi' || isConnecting}
               onPress={()=>item.type==='ble' && handleConnectDevice(item.id)}
             >
+              {/* Add spinner indicator */}
+              {currentConnectingId === item.id && (
+                <ActivityIndicator size="small" color="#CE975E" style={{ marginRight: 8 }} />
+              )}
               <Text style={styles.deviceName}>
                 {item.name} <Text style={{color:'#4F4F4F',fontSize:12}}>({item.code})</Text>
               </Text>
