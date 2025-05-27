@@ -30,9 +30,9 @@ void setup() {
     setupBluetooth();       // always advertising
 
     /* Developers may override creds during bench-test --------------------- */
-    setWiFiCredentials("WhiteSky-TheWilde", "qg3v2zyr");
+    //setWiFiCredentials("WhiteSky-TheWilde", "qg3v2zyr");
     //setWiFiCredentials("USuites_legacy", "onmyhonor");
-    connectToWiFi();
+    //connectToWiFi();
     /* --------------------------------------------------------------------- */
 
     initDrinkController();
