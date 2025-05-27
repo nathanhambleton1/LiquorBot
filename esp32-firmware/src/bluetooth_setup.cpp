@@ -62,11 +62,14 @@ void notifyWiFiReady() {
         statusCharacteristic->setValue("1");
         statusCharacteristic->notify(false);
     }
-    
+
     if (bleServer && currentConnId != 0) {
-        // Attempt to disconnect if a connection exists
-        bleServer->disconnect(currentConnId);
-        currentConnId = 0; // Reset regardless to avoid stale handle
+        // SAFETY CHECK: Use getPeerIDInfo() to verify connection status
+        NimBLEConnInfo peerInfo = bleServer->getPeerInfo(currentConnId);
+        if (peerInfo.getConnHandle() != 0) { // Connection is valid
+            bleServer->disconnect(currentConnId); // Safe to disconnect
+        }
+        currentConnId = 0; // Reset regardless
     }
 }
 
