@@ -15,7 +15,7 @@
 #include "esp_wifi.h"
 
 /* ───────── Simple RAM storage ───────── */
-static std::string ssid, pw;
+std::string ssid, pw;
 
 void setWiFiCredentials(const std::string &s, const std::string &p) {
     ssid = s; pw = p;
