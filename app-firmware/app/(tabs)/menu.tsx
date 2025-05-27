@@ -1003,7 +1003,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#141414' },
   headerContainer: { paddingTop: 80, paddingHorizontal: 20, marginBottom: 10 },
   headerText: { color: '#DFDCD9', fontWeight: 'bold', fontSize: 36, textAlign: 'left' },
-  subHeaderText: { color: '#4F4F4F', fontSize: 20, textAlign: 'left', marginTop: 0 },
+  subHeaderText: { color: '#4F4F4F', fontSize: 18, textAlign: 'left', marginTop: 0 },
   connectionRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
   greenDot: { width: 8, height: 8, borderRadius: 5, marginRight: 8, shadowOffset: { width: 0, height: 0 }, shadowRadius: 5, shadowOpacity: 0.6, elevation: 5 },
   horizontalPickerContainer: { alignItems: 'center', borderBottomLeftRadius: 10, borderBottomRightRadius: 10, paddingVertical: 5, marginBottom: -10 },
