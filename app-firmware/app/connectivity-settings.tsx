@@ -17,7 +17,7 @@ import {
   Alert, Animated, RefreshControl,
 } from 'react-native';
 import Ionicons        from '@expo/vector-icons/Ionicons';
-import { BleManager }  from 'react-native-ble-plx';
+import { BleManager, BleError, Characteristic }  from 'react-native-ble-plx';
 import WifiManager     from 'react-native-wifi-reborn';
 import { Buffer }      from 'buffer';
 import { useRouter }   from 'expo-router';
@@ -69,6 +69,7 @@ export default function ConnectivitySettings() {
   const disconnectSubscriptionRef     = useRef<any|null>(null);
   const disconnectTimeoutRef          = useRef<NodeJS.Timeout|null>(null);
   const extractLiquorBotId = (name: string) => name.split('-')[1] || 'UNKNOWN';
+  const statusMonitorRef = useRef<any | null>(null);
 
   /*────────── Permission helpers ───────*/
   const requestBluetoothPermissions = async () => {
@@ -170,51 +171,79 @@ export default function ConnectivitySettings() {
   };
 
   /*────────── Send Wi-Fi credentials (first-time setup) ──────────*/
-  const sendWifiCredentials = async ()=>{
-    if(!connectedDevice) return;
+  const sendWifiCredentials = async () => {
+    if (!connectedDevice) return;
     setWifiSubmitting(true);
-    try{
+
+    try {
+      // Clean up any leftovers --------------------------------------------------
       disconnectSubscriptionRef.current?.remove();
-      if(disconnectTimeoutRef.current) clearTimeout(disconnectTimeoutRef.current);
+      statusMonitorRef.current?.remove?.();
+      if (disconnectTimeoutRef.current) clearTimeout(disconnectTimeoutRef.current);
 
+      // Write SSID + PW ---------------------------------------------------------
       await connectedDevice.writeCharacteristicWithResponseForService(
-        SERVICE_UUID, SSID_CHAR_UUID, Buffer.from(ssid,'utf8').toString('base64'),
+        SERVICE_UUID, SSID_CHAR_UUID, Buffer.from(ssid, 'utf8').toString('base64'),
       );
       await connectedDevice.writeCharacteristicWithResponseForService(
-        SERVICE_UUID, PASS_CHAR_UUID, Buffer.from(password,'utf8').toString('base64'),
+        SERVICE_UUID, PASS_CHAR_UUID, Buffer.from(password, 'utf8').toString('base64'),
       );
 
-      setWifiModalVisible(false); setPassword('');
+      setWifiModalVisible(false);
+      setPassword('');
 
-      const onDisconnected = async (error: any) => {
-        disconnectSubscriptionRef.current?.remove();
+      // Helper – called once on SUCCESS (status=1 **or** peer disconnect) -------
+      const finishSuccess = async () => {
+        statusMonitorRef.current?.remove?.();
+        disconnectSubscriptionRef.current?.remove?.();
         setWifiSubmitting(false);
 
-        // Accept the normal peer-terminate errors as success ------------
-        const okCodes = [19, 133, '19', '133']; // Android / iOS / string / number
-        const isExpected = !error || okCodes.includes(error?.errorCode);
-
-        const newCode = extractLiquorBotId(connectedDevice?.name || '');
+        const newCode = extractLiquorBotId(connectedDevice.name || '');
         setLiquorbotId(newCode);
-        reconnect();               // re-establish over MQTT
-
-        if (isExpected) {
-          Alert.alert('Success!', `Device ${newCode} is now online via Wi-Fi 🎉`);
-        } else {
-          Alert.alert('Warning', `Device came online but reported BLE error: ${error?.message}`);
-        }
+        await reconnect();  // re-establish over MQTT
+        Alert.alert('Success!', `Device ${newCode} is now online via Wi-Fi 🎉`);
       };
-      disconnectSubscriptionRef.current = connectedDevice.onDisconnected(onDisconnected);
 
-      disconnectTimeoutRef.current = setTimeout(async ()=>{
-        if(await checkIfDeviceConnected(connectedDevice.id))
-          Alert.alert('Error','Invalid credentials – device stayed on BLE.');
-        disconnectSubscriptionRef.current?.remove();
-        setWifiSubmitting(false);
-      },15000);
-    }catch(e:any){
+      // 1) Monitor the status characteristic for the “1” -----------------------
+      statusMonitorRef.current = connectedDevice.monitorCharacteristicForService(
+        SERVICE_UUID,
+        WIFI_STATUS_CHAR_UUID,
+        async (error: BleError | null, char: Characteristic | null) => {
+          if (error) { console.warn('status monitor error', error); return; }
+          if (!char?.value) return;
+          const v = Buffer.from(char.value, 'base64').toString('utf8');
+          if (v === '1') {
+            await connectedDevice.cancelConnection();
+            finishSuccess();
+          }
+        },
+      );
+
+      // 2) Also handle the normal peer-terminated disconnect -------------------
+      disconnectSubscriptionRef.current = connectedDevice.onDisconnected(
+        (err: BleError | null) => {
+          const ok = !err || [19, 133, '19', '133'].includes(err?.errorCode as any);
+          if (ok) finishSuccess();
+        },
+      );
+
+      // 3) Failsafe timeout (30 s) ---------------------------------------------
+      disconnectTimeoutRef.current = setTimeout(async () => {
+        const stillConnected = await checkIfDeviceConnected(connectedDevice.id);
+        if (stillConnected) {
+          statusMonitorRef.current?.remove?.();
+          disconnectSubscriptionRef.current?.remove?.();
+          setWifiSubmitting(false);
+          Alert.alert(
+            'Error',
+            'Device stayed on BLE – likely wrong credentials.\n' +
+              'Double-check SSID / password and try again.',
+          );
+        }
+      }, 30000);
+    } catch (e: any) {
       setWifiSubmitting(false);
-      Alert.alert('Error',e.message??'Failed to send credentials');
+      Alert.alert('Error', e.message ?? 'Failed to send credentials');
     }
   };
 

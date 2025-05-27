@@ -47,7 +47,7 @@ bool connectToWiFi() {
 
         /* Start MQTT immediately (non-blocking loop in main) */
         setupAWS();
-
+        notifyWiFiReady();
         /* Tell BLE side that we’re online → char = "1", disconnect central   */
         return true;
     }
