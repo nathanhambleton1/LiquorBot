@@ -43,6 +43,23 @@ export default function DeviceSettings() {
     liquorbotId,        // 3-digit ID string
   } = useLiquorBot();
 
+  /*────────── State ──────────*/
+  const [infoModalVisible, setInfoModalVisible] = useState(false);
+  const [selectedInfo, setSelectedInfo] = useState<{ title: string; message: string } | null>(null);
+  const [isMaintenanceCollapsed, setIsMaintenanceCollapsed] = useState(true);
+  const maintenanceRot = useState(new Animated.Value(0))[0];
+  const [isAdvancedCollapsed, setIsAdvancedCollapsed] = useState(true);
+  const advancedRot = useState(new Animated.Value(0))[0];
+  const [slots, setSlots] = useState<number[]>(Array(15).fill(0));
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [configLoading, setConfigLoading] = useState(false);
+  const [showConnectPrompt, setShowConnectPrompt] = useState(false);
+
   /*────────── Redirect non-admins after first render ──────────*/
   useEffect(() => {
     if (isAdmin === false) router.replace('/');
@@ -50,27 +67,6 @@ export default function DeviceSettings() {
 
   // Show blank screen while redirecting / until context resolves
   if (isAdmin === false) return null;
-
-  /*────────── State ──────────*/
-  const [infoModalVisible, setInfoModalVisible] = useState(false);
-  const [selectedInfo, setSelectedInfo]         = useState<{title:string;message:string}|null>(null);
-
-  const [isMaintenanceCollapsed, setIsMaintenanceCollapsed] = useState(true);
-  const maintenanceRot = useState(new Animated.Value(0))[0];
-
-  const [isAdvancedCollapsed, setIsAdvancedCollapsed] = useState(true);
-  const advancedRot = useState(new Animated.Value(0))[0];
-
-  const [slots, setSlots]                 = useState<number[]>(Array(15).fill(0));
-  const [modalVisible, setModalVisible]   = useState(false);
-  const [selectedSlot, setSelectedSlot]   = useState<number|null>(null);
-  const [searchQuery, setSearchQuery]     = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [ingredients, setIngredients]     = useState<Ingredient[]>([]);
-  const [loading, setLoading]             = useState(false);
-  const [configLoading, setConfigLoading] = useState(false);
-
-  const [showConnectPrompt, setShowConnectPrompt] = useState(false);
 
   /*────────── Animations ──────────*/
   const toggleMaintenance = () => {
