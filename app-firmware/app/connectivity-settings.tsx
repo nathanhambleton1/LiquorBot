@@ -67,6 +67,7 @@ export default function ConnectivitySettings() {
   const [wifiError,   setWifiError]   = useState<string|null>(null);
   const disconnectSubscriptionRef     = useRef<any|null>(null);
   const disconnectTimeoutRef          = useRef<NodeJS.Timeout|null>(null);
+  const extractLiquorBotId = (name: string) => name.split('-')[1] || 'UNKNOWN';
 
   /*────────── Permission helpers ───────*/
   const requestBluetoothPermissions = async () => {
@@ -98,10 +99,14 @@ export default function ConnectivitySettings() {
 
     // include already-connected peripherals first
     const pre = await manager.connectedDevices([SERVICE_UUID]);
-    setBleDevices(pre.map(d => ({ id:d.id, name:d.name || 'LiquorBot' })));
+    setBleDevices(pre.map(d => ({ 
+      id: d.id, 
+      name: d.name || 'LiquorBot', 
+      code: extractLiquorBotId(d.name || '') 
+    })));
 
-    manager.startDeviceScan([SERVICE_UUID], { allowDuplicates:false }, (err, device) => {
-      if (err || !device?.name?.startsWith('LiquorBot')) return;
+    manager.startDeviceScan([SERVICE_UUID], { allowDuplicates: false }, (err, device) => {
+      if (err || !device?.name?.match(/^LiquorBot-[A-F0-9]{6}$/i)) return;
       setBleDevices(prev => (prev.find(d => d.id===device.id) ? prev
         : [...prev,{ id:device.id, name:device.name! }]));
     });
@@ -125,7 +130,7 @@ export default function ConnectivitySettings() {
     if(!ready) return false;           // not configured yet → need SSID/PW modal
 
     await device.cancelConnection();   // kick current user
-    const newCode = device.id.slice(-5);
+    const newCode = extractLiquorBotId(device.name || '');
     setLiquorbotId(newCode);
     reconnect();
     Alert.alert('Connected','LiquorBot '+newCode+' is online via Wi-Fi 👍');
@@ -147,9 +152,14 @@ export default function ConnectivitySettings() {
 
       // needs creds → open modal
       setWifiModalVisible(true);
-    }catch(e:any){
-      Alert.alert('Error',`Connection failed: ${e.message??e}`);
-    }finally{ setIsConnecting(false); }
+    } catch (e: any) {
+      Alert.alert(
+        'Connection Failed',
+        `Could not connect to device ${devId}: ${e.message || 'Unknown error'}`
+      );
+    } finally { 
+      setIsConnecting(false); 
+    }
   };
 
   /*────────── BLE disconnect helper ──────────*/
@@ -180,7 +190,7 @@ export default function ConnectivitySettings() {
         setWifiSubmitting(false);
         if(error){ Alert.alert('Error','Device disconnected unexpectedly.'); return; }
 
-        const newCode = connectedDevice.id.slice(-5);
+        const newCode = extractLiquorBotId(connectedDevice.name || '');
         setLiquorbotId(newCode);
         reconnect();
         Alert.alert('Success!','Device '+newCode+' is now online!');
@@ -196,6 +206,19 @@ export default function ConnectivitySettings() {
     }catch(e:any){
       setWifiSubmitting(false);
       Alert.alert('Error',e.message??'Failed to send credentials');
+    }
+  };
+
+  /*────────── Verify connection after Wi-Fi setup ──────────*/
+  const verifyConnection = async () => {
+    try {
+      await reconnect(); // Assuming this pings the device
+      Alert.alert('Success!', `LiquorBot ${liquorbotId} is now online!`);
+    } catch (e) {
+      Alert.alert(
+        'Verification Failed', 
+        'Device did not come online. Check Wi-Fi credentials.'
+      );
     }
   };
 
