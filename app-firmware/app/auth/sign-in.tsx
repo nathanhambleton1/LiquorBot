@@ -1,42 +1,34 @@
 // -----------------------------------------------------------------------------
 // File: sign-in.tsx
-// Description: Handles the sign-in process. If the account isn't confirmed it
-//              routes to confirm-code screen and passes BOTH username & password.
+// Description: Handles the sign-in process and then routes to a one-time
+//              session-loading screen that caches Cognito groups.
 // Author: Nathan Hambleton
-// Updated: Apr 23 2025
+// Updated: 27 May 2025
 // -----------------------------------------------------------------------------
 import React, { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  ImageBackground,
+  View, Text, TextInput, StyleSheet, TouchableOpacity,
+  ActivityIndicator, ImageBackground,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { signIn, getCurrentUser } from 'aws-amplify/auth';
 import { MaterialIcons } from '@expo/vector-icons';
-import { fetchAuthSession } from '@aws-amplify/auth';
 
 export default function SignIn() {
   const router = useRouter();
 
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [username, setUsername]         = useState('');
+  const [password, setPassword]         = useState('');
+  const [error,    setError]            = useState('');
+  const [isLoading, setIsLoading]       = useState(true);
+  const [isPasswordVisible, setIsPwVis] = useState(false);
 
-  /* ───────────────────────── check session ───────────────────────── */
+  /* ── already signed-in? jump straight to tabs ── */
   useEffect(() => {
     (async () => {
-      try {
-        const current = await getCurrentUser();
-        if (current) router.replace('/(tabs)');
-      } catch {}
-      setIsLoading(false);
+      try { if (await getCurrentUser()) router.replace('/(tabs)'); }
+      catch {}
+      finally { setIsLoading(false); }
     })();
   }, []);
 
@@ -47,36 +39,26 @@ export default function SignIn() {
       const { isSignedIn, nextStep } = await signIn({ username, password });
 
       if (isSignedIn) {
-        // 🔼 Force refresh session to get latest groups BEFORE redirect
-        await fetchAuthSession({ forceRefresh: true }); 
-        router.replace('/(tabs)');
+        router.replace('/auth/session-loading');      // 👈 NEW
         return;
       }
 
       if (nextStep?.signInStep === 'CONFIRM_SIGN_UP') {
-        router.push({
-          pathname: './confirm-code',
-          params: { username, password },
-        });
+        router.push({ pathname: './confirm-code', params: { username, password } });
         return;
       }
 
       setError('Additional authentication required (not implemented yet).');
     } catch (e: any) {
-      if (
-        e?.name === 'UserNotConfirmedException' ||
-        e?.code === 'UserNotConfirmedException'
-      ) {
-        router.push({
-          pathname: './confirm-code',
-          params: { username, password },
-        });
+      if (e?.code === 'UserNotConfirmedException') {
+        router.push({ pathname: './confirm-code', params: { username, password } });
         return;
       }
       setError(e?.message || 'Something went wrong');
     }
   };
 
+  /* ───────────────────────── UI ───────────────────────── */
   if (isLoading) {
     return (
       <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
@@ -85,7 +67,6 @@ export default function SignIn() {
     );
   }
 
-  /* ───────────────────────── UI ───────────────────────── */
   return (
     <ImageBackground
       source={require('@/assets/images/dark-gradient.png')}
@@ -113,7 +94,7 @@ export default function SignIn() {
             secureTextEntry={!isPasswordVisible}
           />
           <TouchableOpacity
-            onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+            onPress={() => setIsPwVis(!isPasswordVisible)}
             style={styles.eyeIcon}
           >
             <MaterialIcons
@@ -139,7 +120,7 @@ export default function SignIn() {
 
         <View style={styles.signUpContainer}>
           <Text style={styles.signUpText}>
-            Don&apos;t have an account?{' '}
+            Don’t have an account?{' '}
             <Text style={styles.signUpLink} onPress={() => router.push('/auth/sign-up')}>
               Sign Up
             </Text>
@@ -151,18 +132,18 @@ export default function SignIn() {
 }
 
 const styles = StyleSheet.create({
-  background:          { flex: 1, resizeMode: 'cover' },
-  container:           { flex: 1, justifyContent: 'center', padding: 24 },
-  title:               { fontSize: 48, color: '#fff', marginBottom: 24, fontWeight: 'bold' },
-  label:               { fontSize: 16, color: '#fff', marginBottom: -5, marginTop: 10 },
-  input:               { backgroundColor: 'rgba(20, 20, 20, 0.5)', marginVertical: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, color: '#DFDCD9' },
-  inputContainer:      { position: 'relative' },
-  eyeIcon:             { position: 'absolute', right: 16, top: '50%', transform: [{ translateY: -12 }] },
-  button:              { backgroundColor: '#CE975E', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8, alignItems: 'center', marginTop: 20 },
-  buttonText:          { color: '#DFDCD9', fontSize: 18, fontWeight: 'bold' },
-  forgotPassword:      { alignSelf: 'flex-end', marginTop: 8, marginBottom: 16 },
-  forgotPasswordText:  { color: '#CE975E', fontSize: 14, fontWeight: 'bold' },
-  signUpContainer:     { marginTop: 100, alignItems: 'center' },
-  signUpText:          { fontSize: 14, color: '#fff' },
-  signUpLink:          { color: '#CE975E', fontWeight: 'bold' },
+  background:         { flex: 1 },
+  container:          { flex: 1, justifyContent: 'center', padding: 24 },
+  title:              { fontSize: 48, color: '#fff', marginBottom: 24, fontWeight: 'bold' },
+  label:              { fontSize: 16, color: '#fff', marginTop: 10 },
+  input:              { backgroundColor: 'rgba(20,20,20,0.5)', marginVertical: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, color: '#DFDCD9' },
+  inputContainer:     { position: 'relative' },
+  eyeIcon:            { position: 'absolute', right: 16, top: '50%', transform: [{ translateY: -12 }] },
+  button:             { backgroundColor: '#CE975E', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginTop: 20 },
+  buttonText:         { color: '#DFDCD9', fontSize: 18, fontWeight: 'bold' },
+  forgotPassword:     { alignSelf: 'flex-end', marginBottom: 16 },
+  forgotPasswordText: { color: '#CE975E', fontSize: 14, fontWeight: 'bold' },
+  signUpContainer:    { marginTop: 100, alignItems: 'center' },
+  signUpText:         { fontSize: 14, color: '#fff' },
+  signUpLink:         { color: '#CE975E', fontWeight: 'bold' },
 });

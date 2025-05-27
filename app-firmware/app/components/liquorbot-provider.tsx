@@ -1,18 +1,19 @@
 // -----------------------------------------------------------------------------
-// File: liquorbot-provider.tsx        (REPLACEMENT – 27 May 2025)
-// Purpose:  • Persist last-connected LiquorBot ID across app restarts
-//           • Everything else unchanged
+// File: liquorbot-provider.tsx
+// Purpose:  • Persist LiquorBot ID
+//           • Load Cognito groups from cache *or* one-shot session fetch
+//           • Still zero infinite refresh loops — no UI flicker
 // -----------------------------------------------------------------------------
 import React, {
   createContext, useState, useEffect, useContext, ReactNode,
   useRef, useCallback, useMemo,
 } from 'react';
 import { Amplify } from 'aws-amplify';
-import { Hub }     from '@aws-amplify/core';
+import { Hub } from 'aws-amplify/utils';
+import { PubSub }       from '@aws-amplify/pubsub';
 import { fetchAuthSession } from '@aws-amplify/auth';
-import { PubSub }          from '@aws-amplify/pubsub';
-import AsyncStorage        from '@react-native-async-storage/async-storage';
-import config              from '../../src/amplifyconfiguration.json';
+import AsyncStorage     from '@react-native-async-storage/async-storage';
+import config           from '../../src/amplifyconfiguration.json';
 
 Amplify.configure(config);
 
@@ -21,140 +22,133 @@ const pubsub = new PubSub({
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
 
-/*────────────────── Types / Defaults ──────────────────*/
 interface LiquorBotContextValue {
-  isConnected : boolean;
-  slots       : number[];
-  liquorbotId : string;
+  isConnected   : boolean;
+  slots         : number[];
+  liquorbotId   : string;
   forceDisconnect: () => void;
-  updateSlots : (s:number[]) => void;
+  updateSlots   : (s:number[]) => void;
   setLiquorbotId: (id:string)=>void;
-  reconnect   : () => void;
-  groups      : string[];
-  isAdmin     : boolean;
+  reconnect     : () => void;
+  groups        : string[];
+  isAdmin       : boolean;
 }
-const LiquorBotContext = createContext<LiquorBotContextValue>({
-  isConnected:false, slots:Array(15).fill(0), liquorbotId:'000',
-  forceDisconnect:()=>{}, updateSlots:()=>{}, setLiquorbotId:()=>{},
-  reconnect:()=>{}, groups:[], isAdmin:false,
-});
+const LiquorBotContext = createContext<LiquorBotContextValue>({} as any);
+
+/*────────────────── helper ──────────────────*/
+async function grabGroupsOnce(cacheKey='userGroups'):Promise<string[]> {
+  /* 1️⃣ try cache first */
+  const cached = await AsyncStorage.getItem(cacheKey);
+  if (cached) return JSON.parse(cached);
+
+  /* 2️⃣ otherwise pull from the current ID-token */
+  const ses = await fetchAuthSession();
+  const raw = ses.tokens?.idToken?.payload['cognito:groups'] ?? [];
+  const groups = Array.isArray(raw) ? raw.filter((g):g is string => typeof g === 'string') : [];
+  await AsyncStorage.setItem(cacheKey, JSON.stringify(groups));
+  return groups;
+}
 
 /*────────────────── Provider ──────────────────*/
 export function LiquorBotProvider({ children }:{ children:ReactNode }) {
-  /* ---------- liquor-bot state ---------- */
+  /* ---------- liquor-bot basics ---------- */
   const [isConnected, setIsConnected] = useState(false);
-  const [slots, setSlots]             = useState<number[]>(Array(15).fill(0));
-  const [liquorbotId, setIdState]     = useState('000');
+  const [slots,        setSlots]      = useState<number[]>(Array(15).fill(0));
+  const [liquorbotId,  setIdState]    = useState('000');
 
-  /* ---------- persist / re-hydrate ID ---------- */
+  /* ---------- saved ID ---------- */
   useEffect(() => {
     AsyncStorage.getItem('liquorbotId')
-      .then(stored => { if (stored) setIdState(stored); })
+      .then(v => { if (v) setIdState(v); })
       .catch(console.warn);
   }, []);
-  const setLiquorbotId = useCallback(async(id:string) => {
+  const setLiquorbotId = useCallback(async(id:string)=>{
     setIdState(id);
-    try { await AsyncStorage.setItem('liquorbotId', id); } catch {}
-    reconnect();                              // resubscribe with new ID
-  }, []);
+    try{ await AsyncStorage.setItem('liquorbotId', id);}catch{}
+    reconnect();
+  },[]);
 
   /* ---------- Cognito groups ---------- */
   const [groups, setGroups] = useState<string[]>([]);
-  const isAdmin             = groups.includes('ADMIN');
+  const syncGroups = useCallback(
+    () => grabGroupsOnce().then(setGroups).catch(()=>setGroups([])),
+    []
+  );
+
+  /* load once on mount */
+  useEffect(() => { syncGroups(); }, [syncGroups]);
+
+  /* update on auth Hub events */
   useEffect(() => {
-    const load = async () => {
-      try {
-        const ses = await fetchAuthSession({ forceRefresh:true });
-        const gs  = ses.tokens?.idToken?.payload['cognito:groups'] ?? [];
-        setGroups(Array.isArray(gs) ? gs.filter((g):g is string=>typeof g==='string') : []);
-      } catch { setGroups([]); }
-    };
-    load();
     const sub = Hub.listen('auth', ({payload})=>{
-      if(['signIn','tokenRefresh'].includes(payload.event)) load();
-      if(payload.event==='signedOut') setGroups([]);
+      if(payload.event === 'signedIn')         syncGroups();
+      if(payload.event === 'signedOut') { setGroups([]); AsyncStorage.removeItem('userGroups').catch(()=>{}); }
     });
-    return ()=>sub();
-  }, []);
+    return () => sub();
+  }, [syncGroups]);
 
-  /* ---------- reconnect tick ---------- */
-  const lastHeartbeatRef       = useRef<number>(0);
-  const [reconnTick, setTick ] = useState(0);
-  const reconnect  = useCallback(()=>setTick(t=>t+1),[]);
-  const forceDisconnect = useCallback(()=>setIsConnected(false),[]);
+  const isAdmin = groups.includes('ADMIN');    // change string if your group is named differently
 
-  /* ---------- updateSlots helper ---------- */
+  /* ---------- reconnect tick etc. (unchanged) ---------- */
+  const lastHeartbeatRef = useRef(0);
+  const [reTick, setTick] = useState(0);
+  const reconnect        = useCallback(()=>setTick(t=>t+1),[]);
+  const forceDisconnect  = useCallback(()=>setIsConnected(false),[]);
+
   const updateSlots = useCallback((newSlots:number[])=>{
     setSlots(newSlots);
     const topic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
-    pubsub.publish({ topics:[topic], message:{action:'CURRENT_CONFIG',slots:newSlots}})
-          .catch(console.error);
+    pubsub.publish({ topics:[topic], message:{action:'CURRENT_CONFIG', slots:newSlots}}).catch(console.error);
   },[liquorbotId]);
 
-  /* ---------- slot-config subscription ---------- */
+  /* slot-config sub, heartbeat sub, watchdog — same as before … */
   useEffect(()=>{
-    const topic=`liquorbot/liquorbot${liquorbotId}/slot-config`;
+    const topic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
     let sub:any, retry:NodeJS.Timeout;
     const start=()=>{
-      sub = pubsub.subscribe({topics:[topic]}).subscribe({
+      sub = pubsub.subscribe({ topics:[topic]}).subscribe({
         next:d=>{
-          const msg=(d as any).value??d;
-          if(msg.action==='CURRENT_CONFIG'&&Array.isArray(msg.slots))
+          const msg=(d as any).value ?? d;
+          if(msg.action==='CURRENT_CONFIG' && Array.isArray(msg.slots))
             setSlots(msg.slots.map((n:any)=>Number(n)||0));
-          if(msg.action==='SET_SLOT'&&typeof msg.slot==='number')
+          if(msg.action==='SET_SLOT' && typeof msg.slot==='number')
             setSlots(p=>{const n=[...p]; n[msg.slot-1]=Number(msg.ingredientId)||0; return n;});
         },
         error:e=>{console.error('config sub',e); retry=setTimeout(start,5000);}
       });
     }; start();
-    return ()=>{sub?.unsubscribe(); if(retry)clearTimeout(retry);};
-  },[liquorbotId,reconnTick]);
+    return ()=>{sub?.unsubscribe(); if(retry) clearTimeout(retry);};
+  },[liquorbotId,reTick]);
 
-  /* ---------- request config on connect ---------- */
   useEffect(()=>{
-    if(!isConnected) return;
-    pubsub.publish({
-      topics:[`liquorbot/liquorbot${liquorbotId}/slot-config`],
-      message:{action:'GET_CONFIG'}
-    }).catch(console.error);
-  },[isConnected,liquorbotId]);
-
-  /* ---------- heartbeat subscription ---------- */
-  useEffect(()=>{
-    const topic=`liquorbot/liquorbot${liquorbotId}/heartbeat`;
+    const topic = `liquorbot/liquorbot${liquorbotId}/heartbeat`;
     let sub:any, retry:NodeJS.Timeout;
     const start=()=>{
-      sub=pubsub.subscribe({topics:[topic]}).subscribe({
-        next:()=>{lastHeartbeatRef.current=Date.now();},
-        error:e=>{console.error('hb sub',e); retry=setTimeout(start,5000);}
+      sub = pubsub.subscribe({ topics:[topic]}).subscribe({
+        next:()=>{ lastHeartbeatRef.current = Date.now(); },
+        error:e=>{ console.error('hb sub',e); retry=setTimeout(start,5000); }
       });
     }; start();
-    return ()=>{sub?.unsubscribe(); if(retry)clearTimeout(retry);};
-  },[liquorbotId,reconnTick]);
+    return ()=>{sub?.unsubscribe(); if(retry) clearTimeout(retry);};
+  },[liquorbotId,reTick]);
 
-  /* ---------- watchdog ---------- */
   useEffect(()=>{
-    const id=setInterval(()=>{
+    const id = setInterval(()=>{
       const alive = Date.now()-lastHeartbeatRef.current < 7000;
       setIsConnected(prev=>prev===alive?prev:alive);
     },1000);
     return ()=>clearInterval(id);
   },[]);
 
-  /* ---------- memo ---------- */
+  /* ---------- context ---------- */
   const value = useMemo<LiquorBotContextValue>(()=>({
-    isConnected, slots, liquorbotId, forceDisconnect,
-    updateSlots, setLiquorbotId, reconnect,
+    isConnected, slots, liquorbotId,
+    forceDisconnect, updateSlots, setLiquorbotId, reconnect,
     groups, isAdmin,
-  }),[isConnected,slots,liquorbotId,forceDisconnect,
-      updateSlots,reconnect,groups,isAdmin]);
+  }),[isConnected, slots, liquorbotId, forceDisconnect,
+      updateSlots, setLiquorbotId, reconnect, groups, isAdmin]);
 
-  return (
-    <LiquorBotContext.Provider value={value}>
-      {children}
-    </LiquorBotContext.Provider>
-  );
+  return <LiquorBotContext.Provider value={value}>{children}</LiquorBotContext.Provider>;
 }
 
-/*────────────────── Hook ──────────────────*/
-export function useLiquorBot() { return useContext(LiquorBotContext); }
+export function useLiquorBot(){ return useContext(LiquorBotContext); }
