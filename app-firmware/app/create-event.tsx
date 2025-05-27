@@ -548,6 +548,13 @@ export default function EventsScreen(){
     if (liquorbotId === undefined || liquorbotId === null) {
       Alert.alert('Error', 'Device ID not ready – try again in a second'); return;
     }
+
+    // Convert to number and check validity
+    const liquorbotIdNum = Number(liquorbotId);
+    if (isNaN(liquorbotIdNum)) {
+      Alert.alert('Error', 'Invalid Device ID. Please check your device configuration.');
+      return;
+    }
     
     const start = parseDT(startDate, startTime);
     const end = parseDT(multiDay ? endDate : startDate, endTime);
@@ -592,17 +599,17 @@ export default function EventsScreen(){
     const defaultIDs = menu.filter(d => !d.isCustom).map(d => Number(d.id));
     const customRecipeIDs = menu.filter(d => d.isCustom).map(d => d.id);
     
-    const input = {
+     const input = {
       name: name.trim(),
       description,
       location,
       startTime: start.toISOString(),
       endTime: end.toISOString(),
-      liquorbotId: Number(liquorbotId),
+      liquorbotId: liquorbotIdNum, // Use validated number
       inviteCode: existingEvent?.inviteCode || Math.random().toString(36).slice(2, 8).toUpperCase(),
       drinkIDs: defaultIDs,
       customRecipeIDs,
-      owner: currentUser ?? '', // Ensure owner is always a string
+      owner: currentUser ?? '',
     };
 
     try {
@@ -779,7 +786,7 @@ export default function EventsScreen(){
             <Text style={styles.saveTxt}>Save Event</Text>
           </TouchableOpacity>
           <Text style={styles.deviceIdText}>
-            This event will be stored on LiquorBot: {liquorbotId}
+            This event will be hosted on LiquorBot: {liquorbotId}
           </Text>
         </ScrollView>
       )}
