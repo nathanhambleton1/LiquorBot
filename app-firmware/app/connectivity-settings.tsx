@@ -297,7 +297,11 @@ export default function ConnectivitySettings() {
         <Text style={styles.statusTitle}>Device Connectivity</Text>
         <View style={styles.statusRow}>
           <View style={[styles.statusDot, { backgroundColor: isConnected ? '#63d44a' : '#d44a4a' }]} />
-          <Text style={styles.statusText}>{isConnected ? 'Connected' : 'Disconnected'}</Text>
+          <Text style={styles.statusText}>
+            {isConnected
+              ? `Connected - LiquorBot ID: ${liquorbotId || 'UNKNOWN'}`
+              : `Disconnected - LiquorBot ID: ${liquorbotId || 'UNKNOWN'}`}
+          </Text>
         </View>
       </View>
 
