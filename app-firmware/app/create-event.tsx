@@ -47,17 +47,20 @@ const parseIng = (d: Drink): number[] => {
     : [];
 };
 
-const eventFilter = (user: string, liquorbotId: number) => ({
-  and: [
-    { liquorbotId: { eq: liquorbotId } },
-    {
-      or: [
-        { owner:       { eq: user } },
-        { guestOwners: { contains: user } },
-      ],
-    },
-  ],
-});
+const eventFilter = (user: string, liquorbotId: string) => { // Keep as string here
+  const liquorbotIdInt = parseInt(liquorbotId, 16);
+  return {
+    and: [
+      { liquorbotId: { eq: liquorbotIdInt } },
+      {
+        or: [
+          { owner:       { eq: user } },
+          { guestOwners: { contains: user } },
+        ],
+      },
+    ]
+  };
+}
 
 const checkForOverlappingEvents = (
   newStartISO: string,
@@ -545,14 +548,15 @@ export default function EventsScreen(){
 
   /* save */
   const save = async () => {
-    if (liquorbotId === undefined || liquorbotId === null) {
-      Alert.alert('Error', 'Device ID not ready – try again in a second'); return;
+    if (!liquorbotId) {
+      Alert.alert('Error', 'Device ID not configured');
+      return;
     }
 
     // Convert to number and check validity
-    const liquorbotIdNum = Number(liquorbotId);
-    if (isNaN(liquorbotIdNum)) {
-      Alert.alert('Error', 'Invalid Device ID. Please check your device configuration.');
+    const liquorbotIdInt = parseInt(liquorbotId, 16);
+    if (isNaN(liquorbotIdInt)) {
+      Alert.alert('Error', 'Invalid Device ID format');
       return;
     }
     
@@ -562,7 +566,7 @@ export default function EventsScreen(){
     try {
     const { data } = await client.graphql({
       query: listEvents,
-      variables: { filter: eventFilter(currentUser!, Number(liquorbotId)) },
+      variables: { filter: eventFilter(currentUser!, liquorbotId) },
       authMode: 'userPool',
     }) as { data: any };
 
@@ -605,7 +609,7 @@ export default function EventsScreen(){
       location,
       startTime: start.toISOString(),
       endTime: end.toISOString(),
-      liquorbotId: liquorbotIdNum, // Use validated number
+      liquorbotId: liquorbotIdInt, // Use validated number
       inviteCode: existingEvent?.inviteCode || Math.random().toString(36).slice(2, 8).toUpperCase(),
       drinkIDs: defaultIDs,
       customRecipeIDs,
