@@ -201,9 +201,9 @@ export default function Index() {
               styles.dot,
               {
                 backgroundColor: isConnected ? '#63d44a' : '#B81A1A',
-                transform:       [{ scale: glowAnimation }],
-                shadowColor:     isConnected ? '#00FF00' : '#B81A1A',
-                shadowOpacity:   glowAnimation.interpolate({
+                transform: [{ scale: glowAnimation }],
+                shadowColor: isConnected ? '#00FF00' : '#B81A1A',
+                shadowOpacity: glowAnimation.interpolate({
                   inputRange: [1, 1.2],
                   outputRange: [0.3, 0.8],
                 }),
@@ -211,9 +211,7 @@ export default function Index() {
             ]}
           />
           <Text style={styles.connectionText}>
-            {isConnected
-              ? `Connected to LiquorBot #${liquorbotId}`
-              : `LiquorBot #${liquorbotId} Disconnected`}
+            {isConnected ? 'LiquorBot Connected' : 'LiquorBot Disconnected'}
           </Text>
         </View>
       </View>
@@ -334,152 +332,40 @@ export default function Index() {
 
 /* ───────────────────────── styles ───────────────────────── */
 const styles = StyleSheet.create({
-  eventItem: {
-    marginBottom: 4,
-    width: '100%',
-  },
-  eventRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  eventDate: {
-    color: 'rgba(223, 220, 217, 0.7)',
-    fontSize: 12,
-    fontWeight: '500',
-    marginRight: 12,
-    minWidth: 40,
-  },
-  eventTitle: {
-    color: '#DFDCD9',
-    fontSize: 14,
-    fontWeight: '500',
-    flex: 1,
-  },
-  eventsLoader: {
-    marginVertical: 10,
-  },
-  noEventsText: {
-    color: 'rgba(223, 220, 217, 0.7)',
-    fontSize: 14,
-    marginVertical: 30,
-  },
-  eventsContainer: {
-    flexGrow: 1,
-    paddingVertical: 8,
-  },
-   mainTile: {
-    flex: 1,
-    backgroundColor: 'rgba(31, 31, 31, 0.1)',
-    borderRadius: 20,
-    padding: 16,
-    marginRight: 12,
-    overflow: 'hidden',
-  },
-  mainTileContent: {
-    flex: 1,
-    justifyContent: 'space-between',
-  },
-  mainIconTextContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 0,
-  },
-  mainIconContainer: {
-    justifyContent: 'center',
-    marginRight: 8,
-    height: 32, // Matches icon size
-  },
-  mainTextContainer: {
-    justifyContent: 'space-between',
-    height: 36, // Matches icon height
-  },
-  mainTileTitle: {
-    color: '#DFDCD9',
-    fontSize: 16,
-    fontWeight: '600',
-    lineHeight: 20,
-  },
-  mainTileSubtext: {
-    color: 'rgba(223, 220, 217, 0.9)',
-    fontSize: 12,
-    fontWeight: '300',
-    lineHeight: 16,
-  },
-  buttonGrid: {
-    position: 'absolute',
-    bottom: 120,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '90%',
-    height: 140,
-  },
-  rightColumn: {
-    width: '48%',
-    height: '100%',
-    justifyContent: 'space-between',
-  },
-  smallTile: {
-    height: '48%',
-    backgroundColor: 'rgba(31, 31, 31, 0.1)', // Semi-transparent background
-    borderRadius: 16,
-    padding: 12,
-    overflow: 'hidden',
-  },
-  iconTextContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: '100%',
-  },
-  iconContainer: {
-    justifyContent: 'center',
-    marginRight: 12,
-    height: 28, // Matches icon size
-  },
-  textContainer: {
-    justifyContent: 'space-between',
-    height: 28, // Matches icon height
-  },
-  tileTitle: {
-    color: '#DFDCD9',
-    fontSize: 16,
-    fontWeight: '600',
-    lineHeight: 18,
-  },
-  tileSubtext: {
-    color: 'rgba(223, 220, 217, 0.8)',
-    fontSize: 12,
-    fontWeight: '300',
-    lineHeight: 14,
-  },
-  glowOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  
-  background:   { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  overlay:      { position: 'absolute', top: 100, width: '100%', paddingLeft: 20 },
-  title:        { fontSize: 48, color: '#DFDCD9', fontWeight: 'bold' },
-  connectionRow:{ flexDirection: 'row', alignItems: 'center', marginTop: 10 },
-  dot: {
-    width: 8, height: 8, borderRadius: 5, marginRight: 8,
-    shadowOffset: { width: 0, height: 0 }, shadowRadius: 5,
-    shadowOpacity: 0.6, elevation: 5,
-  },
-  connectionText:{ fontSize: 18, color: '#4F4F4F' },
-  menuButton: {
-    position: 'absolute', bottom: 130, alignSelf: 'center',
-    backgroundColor: '#CE975E', paddingVertical: 16, paddingHorizontal: 26,
-    borderRadius: 10, flexDirection: 'row', alignItems: 'center',
-  },
-  menuButtonText:{ color: '#141414', fontSize: 20, fontWeight: 'bold', marginRight: 8 },
-  arrowIcon:    { marginLeft: 5 },
-  wifiIconContainer:{ position: 'absolute', top: 115, right: 40, zIndex: 10 },
-  eventsButton: {
-    position: 'absolute', bottom: 200, alignSelf: 'center',
-    backgroundColor: '#CE975E', paddingVertical: 16, paddingHorizontal: 26,
-    borderRadius: 10, flexDirection: 'row', alignItems: 'center',
-  },
+  eventItem: { marginBottom: 4, width: '100%' },
+  eventRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  eventDate: { color: 'rgba(223, 220, 217, 0.7)', fontSize: 12, fontWeight: '500', marginRight: 12, minWidth: 40 },
+  eventTitle: { color: '#DFDCD9', fontSize: 14, fontWeight: '500', flex: 1 },
+  eventsLoader: { marginVertical: 10 },
+  noEventsText: { color: 'rgba(223, 220, 217, 0.7)', fontSize: 14, marginVertical: 30 },
+  eventsContainer: { flexGrow: 1, paddingVertical: 8 },
+  mainTile: { flex: 1, backgroundColor: 'rgba(31, 31, 31, 0.1)', borderRadius: 20, padding: 16, marginRight: 12, overflow: 'hidden' },
+  mainTileContent: { flex: 1, justifyContent: 'space-between' },
+  mainIconTextContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 0 },
+  mainIconContainer: { justifyContent: 'center', marginRight: 8, height: 32 },
+  mainTextContainer: { justifyContent: 'space-between', height: 36 },
+  mainTileTitle: { color: '#DFDCD9', fontSize: 16, fontWeight: '600', lineHeight: 20 },
+  mainTileSubtext: { color: 'rgba(223, 220, 217, 0.9)', fontSize: 12, fontWeight: '300', lineHeight: 16 },
+  buttonGrid: { position: 'absolute', bottom: 120, flexDirection: 'row', justifyContent: 'space-between', width: '90%', height: 140 },
+  rightColumn: { width: '48%', height: '100%', justifyContent: 'space-between' },
+  smallTile: { height: '48%', backgroundColor: 'rgba(31, 31, 31, 0.1)', borderRadius: 16, padding: 12, overflow: 'hidden' },
+  iconTextContainer: { flexDirection: 'row', alignItems: 'center', height: '100%' },
+  iconContainer: { justifyContent: 'center', marginRight: 12, height: 28 },
+  textContainer: { justifyContent: 'space-between', height: 28 },
+  tileTitle: { color: '#DFDCD9', fontSize: 16, fontWeight: '600', lineHeight: 18 },
+  tileSubtext: { color: 'rgba(223, 220, 217, 0.8)', fontSize: 12, fontWeight: '300', lineHeight: 14 },
+  glowOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255, 255, 255, 0.05)' },
+  background: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  overlay: { position: 'absolute', top: 100, width: '100%', paddingLeft: 20 },
+  title: { fontSize: 48, color: '#DFDCD9', fontWeight: 'bold' },
+  connectionRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
+  dot: { width: 8, height: 8, borderRadius: 5, marginRight: 8, shadowOffset: { width: 0, height: 0 }, shadowRadius: 5, shadowOpacity: 0.6, elevation: 5 },
+  connectionText: { fontSize: 18, color: '#4F4F4F' },
+  menuButton: { position: 'absolute', bottom: 130, alignSelf: 'center', backgroundColor: '#CE975E', paddingVertical: 16, paddingHorizontal: 26, borderRadius: 10, flexDirection: 'row', alignItems: 'center' },
+  menuButtonText: { color: '#141414', fontSize: 20, fontWeight: 'bold', marginRight: 8 },
+  arrowIcon: { marginLeft: 5 },
+  wifiIconContainer: { position: 'absolute', top: 115, right: 40, zIndex: 10 },
+  eventsButton: { position: 'absolute', bottom: 200, alignSelf: 'center', backgroundColor: '#CE975E', paddingVertical: 16, paddingHorizontal: 26, borderRadius: 10, flexDirection: 'row', alignItems: 'center' },
   eventsButtonText: { color: '#141414', fontSize: 20, fontWeight: 'bold', marginRight: 8 },
 });
 

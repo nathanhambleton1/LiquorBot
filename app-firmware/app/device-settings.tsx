@@ -242,22 +242,16 @@ export default function DeviceSettings() {
         {/* connection box */}
         <TouchableOpacity
           style={styles.connectionBox}
-          onPress={() => router.push('/connectivity-settings' as any)}
+          onPress={()=>router.push('/connectivity-settings' as any)}
           activeOpacity={0.6}
         >
           <View style={styles.bluetoothIconContainer}>
-            <Ionicons name="bluetooth-outline" size={24} color="#DFDCD9" />
+            <Ionicons name="bluetooth-outline" size={24} color="#DFDCD9"/>
           </View>
+          <Text style={styles.liquorBotText}>LiquorBot</Text>
           <View style={styles.connectionStatusRow}>
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: isConnected ? '#63d44a' : '#d44a4a' },
-              ]}
-            />
-            <Text style={styles.connectionStatusText}>
-              {isConnected ? 'Connected' : 'Disconnected'}
-            </Text>
+            <View style={[styles.statusDot,{backgroundColor:isConnected?'#63d44a':'#d44a4a'}]}/>
+            <Text style={styles.connectionStatusText}>{isConnected?'Connected':'Disconnected'}</Text>
           </View>
         </TouchableOpacity>
 

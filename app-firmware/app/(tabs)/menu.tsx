@@ -841,7 +841,9 @@ export default function MenuScreen() {
               },
             ]}
           />
-          <Text style={styles.subHeaderText}>LiquorBot #{liquorbotId}</Text>
+          <Text style={styles.subHeaderText}>
+            {isConnected ? 'LiquorBot Connected' : 'LiquorBot Disconnected'}
+          </Text>
         </View>
 
         <TouchableOpacity
