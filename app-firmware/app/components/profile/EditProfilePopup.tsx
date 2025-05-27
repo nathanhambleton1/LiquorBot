@@ -45,7 +45,7 @@ export default function EditProfilePopup({
           <Image
             source={
               user.profilePicture
-                ? { uri: `${user.profilePicture}?${Date.now()}` }
+                ? { uri: user.profilePicture }
                 : require('../../../assets/images/default-profile.png')
             }
             style={styles.avatar}
@@ -110,23 +110,35 @@ const Input = ({ label, style, ...rest }: any) => (
 
 /* ───── styles ───── */
 const styles = StyleSheet.create({
-  body:           { flex: 1, padding: 20, alignItems: 'center' },
-  row:            { flexDirection: 'row', alignItems: 'center', marginBottom: 25 },
-  avatarWrapper:  { width: 100, height: 100, borderRadius: 50, overflow: 'hidden' },
-  avatar:         { width: '100%', height: '100%' },
-  camOverlay:     { position: 'absolute', bottom: 0, left: 0, right: 0, height: '30%', backgroundColor: 'rgba(0,0,0,0.8)', alignItems: 'center', justifyContent: 'center' },
-  username:       { color: '#DFDCD9', fontSize: 20, fontWeight: 'bold' },
-  email:          { color: '#4F4F4F', fontSize: 14, marginTop: 5 },
-  inputContainer: { width: '100%', marginBottom: 18 },
-  label:          { color: '#DFDCD9', fontSize: 16, marginBottom: 5 },
-  input:          { backgroundColor: '#1F1F1F', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 15, color: '#DFDCD9', fontSize: 16 },
-  bioContainer:   { position: 'relative' },
-  bioInput:       { height: 78, textAlignVertical: 'top' },
-  counter:        { position: 'absolute', right: 10, bottom: -18, color: '#4F4F4F', fontSize: 12 },
-  readonly:       { backgroundColor: '#1F1F1F', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 15, color: '#4F4F4F', fontSize: 16 },
-  support:        { color: '#4F4F4F', fontSize: 12, marginTop: 5 },
-  rowBtns:        { flexDirection: 'row', marginTop: 30 },
-  saveBtn:        { backgroundColor: '#CE975E', paddingVertical: 12, paddingHorizontal: 25, borderRadius: 10, marginHorizontal: 10 },
-  cancelBtn:      { backgroundColor: '#444', paddingVertical: 12, paddingHorizontal: 25, borderRadius: 10, marginHorizontal: 10 },
-  btnText:        { color: '#DFDCD9', fontSize: 16, fontWeight: '600' },
+  body:            { flex: 1, padding: 20, alignItems: 'center' },
+  row:             { flexDirection: 'row', alignItems: 'center', marginBottom: 25 },
+  avatarWrapper:   { width: 100, height: 100, borderRadius: 50, overflow: 'hidden' },
+  avatar:          { width: '100%', height: '100%' },
+  camOverlay:      { position: 'absolute', bottom: 0, left: 0, right: 0, height: '30%',
+                     backgroundColor: 'rgba(0,0,0,0.8)', alignItems: 'center', justifyContent: 'center' },
+  username:        { color: '#DFDCD9', fontSize: 20, fontWeight: 'bold' },
+  email:           { color: '#4F4F4F', fontSize: 14, marginTop: 5 },
+
+  inputContainer:  { width: '100%', marginBottom: 18 },
+  label:           { color: '#DFDCD9', fontSize: 16, marginBottom: 5 },
+
+  input:           { backgroundColor: '#1F1F1F', borderRadius: 10, paddingVertical: 12,
+                     paddingHorizontal: 15, color: '#DFDCD9', fontSize: 16 },
+
+  /* bio specific */
+  bioContainer:    { position: 'relative' },
+  bioInput:        { height: 78, textAlignVertical: 'top' },
+  counter:         { position: 'absolute', right: 10, bottom: -18, color: '#4F4F4F', fontSize: 12 },
+
+  readonly:        { backgroundColor: '#1F1F1F', borderRadius: 10, paddingVertical: 12,
+                     paddingHorizontal: 15, color: '#4F4F4F', fontSize: 16 },
+
+  support:         { color: '#4F4F4F', fontSize: 12, marginTop: 5 },
+
+  rowBtns:         { flexDirection: 'row', marginTop: 30 },
+  saveBtn:         { backgroundColor: '#CE975E', paddingVertical: 12, paddingHorizontal: 25,
+                     borderRadius: 10, marginHorizontal: 10 },
+  cancelBtn:       { backgroundColor: '#444',     paddingVertical: 12, paddingHorizontal: 25,
+                     borderRadius: 10, marginHorizontal: 10 },
+  btnText:         { color: '#DFDCD9', fontSize: 16, fontWeight: '600' },
 });
