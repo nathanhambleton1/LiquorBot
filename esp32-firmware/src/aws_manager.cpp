@@ -58,19 +58,18 @@ void setupAWS() {
 
 /* Keep the connection alive and process inbound packets */
 void processAWSMessages() {
-    static bool mqttWasConnected = false;
-    
+    static bool sentReady = false;
+
     if (!mqttClient.connected()) {
         if (mqttClient.connect(MQTT_CLIENT_ID)) {
             mqttClient.subscribe(AWS_PUBLISH_TOPIC);
-            notifyWiFiReady(); // Trigger BLE notification here
-            mqttWasConnected = true;
+            sentReady = false;                   // will re-notify on reconnect
         }
-    } else if (!mqttWasConnected) {
-        notifyWiFiReady();
-        mqttWasConnected = true;
     }
-    
+    if (mqttClient.connected() && !sentReady) {
+        notifyWiFiReady();                       // → BLE char = "1"
+        sentReady = true;
+    }
     mqttClient.loop();
     
     if (pourResultPending) {

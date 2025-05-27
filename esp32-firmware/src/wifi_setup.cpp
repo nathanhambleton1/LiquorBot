@@ -1,69 +1,53 @@
 /*
  * ---------------------------------------------------------------------------
  *  Project : Liquor Bot
- *  File    : wifi_setup.cpp          (REPLACEMENT – 24 May 2025)
- *  Purpose : • Handle credential storage + Wi-Fi connect / disconnect
- *            • Notify BLE layer when the device is online
+ *  File    : wifi_setup.cpp             (REPLACEMENT – 27 May 2025)
+ * ---------------------------------------------------------------------------
+ *  • Store creds in RAM (NVS later)
+ *  • Connect STA, then start MQTT + notify BLE
+ *  • Disconnect helper reboots into BLE-only mode
  * ---------------------------------------------------------------------------
  */
 #include "wifi_setup.h"
 #include <WiFi.h>
-#include "bluetooth_setup.h"
 #include "aws_manager.h"
+#include "bluetooth_setup.h"
 #include "esp_wifi.h"
 
-/* ------- Credential storage -------------------------------------------------
- * Simple RAM copy is fine for now (NVS persistence can be added later).
- */
-std::string ssid     = "";
-std::string password = "";
+/* ───────── Simple RAM storage ───────── */
+static std::string ssid, pw;
 
-/* ---------------------------------------------------------------------------*/
-void setWiFiCredentials(const std::string &newSSID,
-                        const std::string &newPassword)
-{
-    ssid     = newSSID;
-    password = newPassword;
+void setWiFiCredentials(const std::string &s, const std::string &p) {
+    ssid = s; pw = p;
 }
 
-/* ---------------------------------------------------------------------------*/
 bool connectToWiFi() {
-    if (ssid.empty() || password.empty()) {
-        Serial.println("❗ Wi-Fi credentials empty – waiting…");
-        return false;
-    }
+    if (ssid.empty() || pw.empty()) return false;
 
     WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid.c_str(), password.c_str());
+    WiFi.begin(ssid.c_str(), pw.c_str());
     Serial.print("Connecting to Wi-Fi");
 
     for (int i = 0; i < 20 && WiFi.status() != WL_CONNECTED; ++i) {
-        delay(500);
-        Serial.print(".");
+        delay(500); Serial.print(".");
     }
+    Serial.println();
 
     if (WiFi.status() == WL_CONNECTED) {
-        Serial.printf("\n✔ Wi-Fi connected – IP %s\n", WiFi.localIP().toString().c_str());
-
-        /* Start MQTT immediately (non-blocking loop in main) */
-        setupAWS();
-        notifyWiFiReady();
-        /* Tell BLE side that we’re online → char = "1", disconnect central   */
+        Serial.printf("✔ Wi-Fi OK – IP %s\n", WiFi.localIP().toString().c_str());
+        setupAWS();              // init MQTT
+        notifyWiFiReady();       // tell BLE side
         return true;
     }
-
-    Serial.println("\n✖ Wi-Fi connection failed.");
+    Serial.println("✖ Wi-Fi failed – will retry.");
     return false;
 }
 
-/* ---------------- Danger-zone helper -------------------------------------- */
 void disconnectFromWiFi() {
-    Serial.println("⚠  Disconnecting from Wi-Fi → reboot to BLE-only mode");
-
-    WiFi.disconnect(true, true);   // drop + erase
+    Serial.println("⚠  Wi-Fi disconnect requested");
+    WiFi.disconnect(true, true);
     WiFi.mode(WIFI_OFF);
     esp_wifi_stop();
-
     delay(300);
     ESP.restart();
 }
