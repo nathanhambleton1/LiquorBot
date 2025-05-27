@@ -47,20 +47,17 @@ const parseIng = (d: Drink): number[] => {
     : [];
 };
 
-const eventFilter = (user: string, liquorbotId: string) => { // Keep as string here
-  const liquorbotIdInt = parseInt(liquorbotId, 16);
-  return {
-    and: [
-      { liquorbotId: { eq: liquorbotIdInt } },
-      {
-        or: [
-          { owner:       { eq: user } },
-          { guestOwners: { contains: user } },
-        ],
-      },
-    ]
-  };
-}
+const eventFilter = (user: string, liquorbotId: number) => ({
+  and: [
+    { liquorbotId: { eq: liquorbotId } },
+    {
+      or: [
+        { owner:       { eq: user } },
+        { guestOwners: { contains: user } },
+      ],
+    },
+  ],
+});
 
 const checkForOverlappingEvents = (
   newStartISO: string,
@@ -548,16 +545,8 @@ export default function EventsScreen(){
 
   /* save */
   const save = async () => {
-    if (!liquorbotId) {
-      Alert.alert('Error', 'Device ID not configured');
-      return;
-    }
-
-    // Convert to number and check validity
-    const liquorbotIdInt = parseInt(liquorbotId, 16);
-    if (isNaN(liquorbotIdInt)) {
-      Alert.alert('Error', 'Invalid Device ID format');
-      return;
+    if (liquorbotId === undefined || liquorbotId === null) {
+      Alert.alert('Error', 'Device ID not ready – try again in a second'); return;
     }
     
     const start = parseDT(startDate, startTime);
@@ -566,7 +555,7 @@ export default function EventsScreen(){
     try {
     const { data } = await client.graphql({
       query: listEvents,
-      variables: { filter: eventFilter(currentUser!, liquorbotId) },
+      variables: { filter: eventFilter(currentUser!, Number(liquorbotId)) },
       authMode: 'userPool',
     }) as { data: any };
 
@@ -603,17 +592,17 @@ export default function EventsScreen(){
     const defaultIDs = menu.filter(d => !d.isCustom).map(d => Number(d.id));
     const customRecipeIDs = menu.filter(d => d.isCustom).map(d => d.id);
     
-     const input = {
+    const input = {
       name: name.trim(),
       description,
       location,
       startTime: start.toISOString(),
       endTime: end.toISOString(),
-      liquorbotId: liquorbotIdInt, // Use validated number
+      liquorbotId: Number(liquorbotId),
       inviteCode: existingEvent?.inviteCode || Math.random().toString(36).slice(2, 8).toUpperCase(),
       drinkIDs: defaultIDs,
       customRecipeIDs,
-      owner: currentUser ?? '',
+      owner: currentUser ?? '', // Ensure owner is always a string
     };
 
     try {
