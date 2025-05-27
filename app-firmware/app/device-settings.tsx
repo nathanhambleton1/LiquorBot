@@ -248,9 +248,6 @@ export default function DeviceSettings() {
           <View style={styles.bluetoothIconContainer}>
             <Ionicons name="bluetooth-outline" size={24} color="#DFDCD9" />
           </View>
-          <Text style={styles.liquorBotText}>
-            {isConnected ? `LiquorBot #${liquorbotId}` : 'Disconnected'}
-          </Text>
           <View style={styles.connectionStatusRow}>
             <View
               style={[
