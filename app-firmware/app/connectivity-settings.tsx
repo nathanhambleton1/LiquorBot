@@ -284,6 +284,7 @@ export default function ConnectivitySettings() {
     );
   };
 
+  const displayId = liquorbotId === '000' ? 'N/A' : (liquorbotId || 'UNKNOWN');
   return (
     <View style={styles.container}>
       {/* close */}
@@ -299,8 +300,8 @@ export default function ConnectivitySettings() {
           <View style={[styles.statusDot, { backgroundColor: isConnected ? '#63d44a' : '#d44a4a' }]} />
           <Text style={styles.statusText}>
             {isConnected
-              ? `Connected - LiquorBot ID: ${liquorbotId || 'UNKNOWN'}`
-              : `Disconnected - LiquorBot ID: ${liquorbotId || 'UNKNOWN'}`}
+              ? `Connected - LiquorBot ID: ${displayId}`
+              : `Disconnected - LiquorBot ID: ${displayId}`}
           </Text>
         </View>
       </View>

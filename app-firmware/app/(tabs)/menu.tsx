@@ -564,6 +564,27 @@ export default function MenuScreen() {
   const [customFetched, setCustomFetched] = useState(false);
 
   useEffect(() => {
+    (async () => {
+      try {
+        const [dJson, iJson] = await AsyncStorage.multiGet([
+          'drinksJson',
+          'ingredientsJson',
+        ]);
+        const drinksStr       = dJson?.[1] ?? null;
+        const ingredientsStr  = iJson?.[1] ?? null;
+
+        if (drinksStr && ingredientsStr) {
+          setDrinks(JSON.parse(drinksStr));
+          setAllIngredients(JSON.parse(ingredientsStr));
+          setLoading(false);           // initial UI ready instantly
+        }
+      } catch (e) {
+        console.warn('Cache read error', e);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     const subscription = pubsub.subscribe({
       topics: [`liquorbot/liquorbot${liquorbotId}/publish`],
     }).subscribe({
@@ -635,6 +656,7 @@ export default function MenuScreen() {
 
   /* ----- base drinks & ingredient catalogue (S3 JSON) ----- */
   useEffect(() => {
+    if (drinks.length && allIngredients.length) return;
     (async () => {
       try {
         const [drinksUrl, ingUrl] = await Promise.all([
@@ -645,15 +667,22 @@ export default function MenuScreen() {
           fetch(drinksUrl.url),
           fetch(ingUrl.url),
         ]);
-        setDrinks(await drinksRes.json());
-        setAllIngredients(await ingRes.json());
+        const [dText, iText] = await Promise.all([drinksRes.text(), ingRes.text()]);
+
+        await AsyncStorage.multiSet([
+          ['drinksJson',       dText],
+          ['ingredientsJson',  iText],
+        ]);
+
+        setDrinks(JSON.parse(dText));
+        setAllIngredients(JSON.parse(iText));
       } catch (err) {
         console.error(err);
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [drinks.length, allIngredients.length]);
 
   /* ----------------- Cognito username / ID ----------------- */
   useEffect(() => {
