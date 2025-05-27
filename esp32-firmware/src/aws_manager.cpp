@@ -10,6 +10,7 @@
 #include "drink_controller.h"
 #include "state_manager.h"
 #include "wifi_setup.h"
+#include "bluetooth_setup.h"
 
 /* ---------- NVS for slot‑config persistence ---------- */
 #include <Preferences.h>
@@ -57,16 +58,21 @@ void setupAWS() {
 
 /* Keep the connection alive and process inbound packets */
 void processAWSMessages() {
+    static bool mqttWasConnected = false;
+    
     if (!mqttClient.connected()) {
-        // Non-blocking connection attempt
         if (mqttClient.connect(MQTT_CLIENT_ID)) {
             mqttClient.subscribe(AWS_PUBLISH_TOPIC);
-            // ... other subscriptions ...
+            notifyWiFiReady(); // Trigger BLE notification here
+            mqttWasConnected = true;
         }
+    } else if (!mqttWasConnected) {
+        notifyWiFiReady();
+        mqttWasConnected = true;
     }
+    
     mqttClient.loop();
-
-    /* send pour‑result if the background task finished */
+    
     if (pourResultPending) {
         sendData(AWS_RECEIVE_TOPIC, pourResultMessage);
         pourResultPending = false;

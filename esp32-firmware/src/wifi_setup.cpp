@@ -49,7 +49,6 @@ bool connectToWiFi() {
         setupAWS();
 
         /* Tell BLE side that we’re online → char = "1", disconnect central   */
-        notifyWiFiReady();
         return true;
     }
 

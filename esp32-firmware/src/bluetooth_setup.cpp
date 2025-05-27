@@ -60,16 +60,16 @@ bool areCredentialsReceived() { return credentialsReceived; }
 void notifyWiFiReady() {
     if (statusCharacteristic) {
         statusCharacteristic->setValue("1");
-        statusCharacteristic->notify(false);
+        statusCharacteristic->notify(true); // Force notification to all connected
     }
 
     if (bleServer && currentConnId != 0) {
-        // SAFETY CHECK: Use getPeerIDInfo() to verify connection status
         NimBLEConnInfo peerInfo = bleServer->getPeerInfo(currentConnId);
-        if (peerInfo.getConnHandle() != 0) { // Connection is valid
-            bleServer->disconnect(currentConnId); // Safe to disconnect
+        if (peerInfo.getConnHandle() != 0) {
+            delay(250); // Brief delay to ensure notification delivery
+            bleServer->disconnect(currentConnId);
         }
-        currentConnId = 0; // Reset regardless
+        currentConnId = 0;
     }
 }
 
