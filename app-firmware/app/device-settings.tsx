@@ -248,12 +248,16 @@ export default function DeviceSettings() {
           <View style={styles.bluetoothIconContainer}>
             <Ionicons name="bluetooth-outline" size={24} color="#DFDCD9"/>
           </View>
-          <Text style={styles.liquorBotText}>LiquorBot #{liquorbotId}</Text>
+          {/* Conditionally show LiquorBot ID only when connected */}
+          {isConnected && <Text style={styles.liquorBotText}>LiquorBot #{liquorbotId}</Text>}
           <View style={styles.connectionStatusRow}>
             <View style={[styles.statusDot,{backgroundColor:isConnected?'#63d44a':'#d44a4a'}]}/>
-            <Text style={styles.connectionStatusText}>{isConnected?'Connected':'Disconnected'}</Text>
+            <Text style={styles.connectionStatusText}>
+              {isConnected ? 'Connected' : 'Disconnected'}
+            </Text>
           </View>
         </TouchableOpacity>
+
 
         {/* ─────────────────── MAINTENANCE ─────────────────── */}
         <View style={styles.maintenanceContainer}>
