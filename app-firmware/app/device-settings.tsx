@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: device-settings.tsx          (REPLACEMENT – 24 May 2025)
+// File: device-settings.tsx          (REPLACEMENT – 27 May 2025)
 // Purpose:  • Maintenance & slot-configuration
 //           • “Connectivity” button navigates to /connectivity-settings
 //           • Advanced-settings drop-down with Danger-Zone Wi-Fi disconnect
@@ -35,13 +35,21 @@ interface Ingredient {
 // -----------------------------------------------------------------------------
 export default function DeviceSettings() {
   const router = useRouter();
-  const { isAdmin } = useLiquorBot();
-  if (!isAdmin) {
-    router.replace('/');
-    return null;
-  }
 
-  const { isConnected, liquorbotId } = useLiquorBot();
+  /*────────── LiquorBot context ──────────*/
+  const {
+    isAdmin,            // determines access
+    isConnected,        // online/offline flag
+    liquorbotId,        // 3-digit ID string
+  } = useLiquorBot();
+
+  /*────────── Redirect non-admins after first render ──────────*/
+  useEffect(() => {
+    if (isAdmin === false) router.replace('/');
+  }, [isAdmin, router]);
+
+  // Show blank screen while redirecting / until context resolves
+  if (isAdmin === false) return null;
 
   /*────────── State ──────────*/
   const [infoModalVisible, setInfoModalVisible] = useState(false);
