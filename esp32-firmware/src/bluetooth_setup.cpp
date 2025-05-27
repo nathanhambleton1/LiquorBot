@@ -59,16 +59,12 @@ bool areCredentialsReceived() { return credentialsReceived; }
 /*  Called from wifi_setup.cpp once Wi-Fi + MQTT are up  */
 void notifyWiFiReady() {
     if (statusCharacteristic) {
-        statusCharacteristic->setValue("1");
-        statusCharacteristic->notify(true); // Force notification to all connected
+        statusCharacteristic->setValue("1");   // tell central “Wi-Fi OK”
+        statusCharacteristic->notify(false);
+        delay(50);                             // ← NEW: give stack 40-50 ms
     }
-
     if (bleServer && currentConnId != 0) {
-        NimBLEConnInfo peerInfo = bleServer->getPeerInfo(currentConnId);
-        if (peerInfo.getConnHandle() != 0) {
-            delay(250); // Brief delay to ensure notification delivery
-            bleServer->disconnect(currentConnId);
-        }
+        bleServer->disconnect(currentConnId);  // kick the app off BLE
         currentConnId = 0;
     }
 }

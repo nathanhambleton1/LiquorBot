@@ -186,15 +186,23 @@ export default function ConnectivitySettings() {
 
       setWifiModalVisible(false); setPassword('');
 
-      const onDisconnected = async (error:any)=>{
+      const onDisconnected = async (error: any) => {
         disconnectSubscriptionRef.current?.remove();
         setWifiSubmitting(false);
-        if(error){ Alert.alert('Error','Device disconnected unexpectedly.'); return; }
 
-        const newCode = extractLiquorBotId(connectedDevice.name || '');
+        // Accept the normal peer-terminate errors as success ------------
+        const okCodes = [19, 133, '19', '133']; // Android / iOS / string / number
+        const isExpected = !error || okCodes.includes(error?.errorCode);
+
+        const newCode = extractLiquorBotId(connectedDevice?.name || '');
         setLiquorbotId(newCode);
-        reconnect();
-        Alert.alert('Success!','Device '+newCode+' is now online!');
+        reconnect();               // re-establish over MQTT
+
+        if (isExpected) {
+          Alert.alert('Success!', `Device ${newCode} is now online via Wi-Fi 🎉`);
+        } else {
+          Alert.alert('Warning', `Device came online but reported BLE error: ${error?.message}`);
+        }
       };
       disconnectSubscriptionRef.current = connectedDevice.onDisconnected(onDisconnected);
 
