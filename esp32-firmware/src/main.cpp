@@ -1,14 +1,14 @@
 /*
  * ---------------------------------------------------------------------------
  *  Project : Liquor Bot
- *  File    : main.cpp               (REPLACEMENT – 27 May 2025)
- *  Purpose : • Keep BLE advertising permanently
- *            • Connect to Wi-Fi when creds arrive
- *            • Maintain MQTT + heartbeat
+ *  File    : main.cpp                 (REPLACEMENT – 24 May 2025)
+ *  Purpose : Initialise peripherals, keep BLE advertising permanently,
+ *            and kick off Wi-Fi / MQTT when creds arrive.
  * ---------------------------------------------------------------------------
  */
 #include <Arduino.h>
-#include <WiFi.h>
+#include <HardwareSerial.h>
+#include <NimBLEDevice.h>
 #include "bluetooth_setup.h"
 #include "wifi_setup.h"
 #include "aws_manager.h"
@@ -16,7 +16,7 @@
 #include "led_control.h"
 #include "state_manager.h"
 
-/* ───────── Runtime constants ───────── */
+/* ---------------- Runtime constants -------------------------------------- */
 static unsigned long lastHeartbeat = 0;
 static constexpr unsigned long HB_PERIOD = 5000;      // ms
 static unsigned long lastWiFiRetry = 0;
@@ -27,8 +27,15 @@ void setup() {
     Serial.begin(115200);
     Serial.println("\n=== LiquorBot boot ===");
 
-    initializeState();         // IDLE → ready for commands
-    setupBluetooth();          // always advertising
+    initializeState();      // IDLE
+
+    setupBluetooth();       // always advertising
+
+    /* Developers may override creds during bench-test --------------------- */
+    //setWiFiCredentials("WhiteSky-TheWilde", "qg3v2zyr");
+    //setWiFiCredentials("USuites_legacy", "onmyhonor");
+    //connectToWiFi();
+    /* --------------------------------------------------------------------- */
 
     initDrinkController();
     initLED();

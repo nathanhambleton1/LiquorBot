@@ -60,7 +60,7 @@ export default function DeviceSettings() {
   const [configLoading, setConfigLoading] = useState(false);
   const [showConnectPrompt, setShowConnectPrompt] = useState(false);
 
-  /*────────── Redirect non-admins after first render ──────────*/
+  /*────────── Redirect non-admins after first render ──────────
   useEffect(() => {
     if (isAdmin === false) router.replace('/');
   }, [isAdmin, router]);
