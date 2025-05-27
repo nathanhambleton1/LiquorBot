@@ -60,18 +60,28 @@ void setupAWS() {
 void processAWSMessages() {
     static bool sentReady = false;
 
+    /* ---------- (re)connect ---------- */
     if (!mqttClient.connected()) {
         if (mqttClient.connect(MQTT_CLIENT_ID)) {
-            mqttClient.subscribe(AWS_PUBLISH_TOPIC);
-            sentReady = false;                   // will re-notify on reconnect
+            /* subscribe to ALL control topics for this bot */
+            mqttClient.subscribe(AWS_PUBLISH_TOPIC);   // drink commands
+            mqttClient.subscribe(SLOT_CONFIG_TOPIC);   // slot-config RPC
+            mqttClient.subscribe(MAINTENANCE_TOPIC);   // deep-clean, etc.
+            mqttClient.subscribe(HEARTBEAT_TOPIC);     // ping / ignore
+            Serial.println("✔ MQTT connected & topics subscribed");
+            sentReady = false;                        // re-signal after reconnect
         }
     }
+
+    /* ---------- first time MQTT is up → notify BLE char = "1" ---------- */
     if (mqttClient.connected() && !sentReady) {
-        notifyWiFiReady();                       // → BLE char = "1"
+        notifyWiFiReady();   // sets status char + kicks BLE central
         sentReady = true;
     }
-    mqttClient.loop();
-    
+
+    mqttClient.loop();      // process packets
+
+    /* ---------- deferred pour-result publish ---------- */
     if (pourResultPending) {
         sendData(AWS_RECEIVE_TOPIC, pourResultMessage);
         pourResultPending = false;

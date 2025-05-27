@@ -126,7 +126,7 @@ export default function ConnectivitySettings() {
     const newCode = extractLiquorBotId(device.name || '');
     setLiquorbotId(newCode);
     reconnect();
-    Alert.alert('Connected', `LiquorBot ${newCode} is online via Wi-Fi 👍`);
+    Alert.alert('Connected', `LiquorBot ${newCode} is online via Wi-Fi`);
     return true;
   };
 
