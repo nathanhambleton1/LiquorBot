@@ -42,12 +42,13 @@ class ServerCB : public NimBLEServerCallbacks {
 /* ---------------------- Characteristic callback --------------------------- */
 class CredCB : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic* /*c*/, NimBLEConnInfo& /*info*/) override {
-        const std::string ssidVal = ssidCharacteristic    ->getValue();
-        const std::string passVal = passwordCharacteristic->getValue();
-        if (!ssidVal.empty() && !passVal.empty()) {
+        const auto& ssidVal = ssidCharacteristic->getValue();
+        const auto& passVal = passwordCharacteristic->getValue();
+        if (ssidVal.length() > 0 && passVal.length() > 0) {
+            // Copy to heap-allocated strings if needed
             setWiFiCredentials(ssidVal, passVal);
             credentialsReceived = true;
-            connectToWiFi();                    // non-blocking
+            connectToWiFi();
         }
     }
 };
@@ -58,13 +59,14 @@ bool areCredentialsReceived() { return credentialsReceived; }
 /*  Called from wifi_setup.cpp once Wi-Fi + MQTT are up  */
 void notifyWiFiReady() {
     if (statusCharacteristic) {
-        statusCharacteristic->setValue("1");    // “online”
+        statusCharacteristic->setValue("1");
         statusCharacteristic->notify(false);
     }
-    /* Kick current central (if any) so the app swaps to Wi-Fi */
-    if (bleServer && currentConnId) {
+    
+    if (bleServer && currentConnId != 0) {
+        // Attempt to disconnect if a connection exists
         bleServer->disconnect(currentConnId);
-        currentConnId = 0;
+        currentConnId = 0; // Reset regardless to avoid stale handle
     }
 }
 

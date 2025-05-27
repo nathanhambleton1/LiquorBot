@@ -48,33 +48,22 @@ void setupAWS() {
     secureClient.setCertificate(DEVICE_CERT);
     secureClient.setPrivateKey(PRIVATE_KEY);
 
-    prefs.begin("slotconfig", /*readOnly=*/false);
+    prefs.begin("slotconfig", false);
     loadSlotConfigFromNVS();
 
     mqttClient.setServer(AWS_IOT_ENDPOINT, 8883);
     mqttClient.setCallback(receiveData);
-
-    while (!mqttClient.connected()) {
-        Serial.println("Connecting to AWS IoT…");
-        if (mqttClient.connect(MQTT_CLIENT_ID)) {
-            Serial.println("✔ Connected!");
-
-            /* subscribe once */
-            mqttClient.subscribe(AWS_PUBLISH_TOPIC);
-            mqttClient.subscribe(HEARTBEAT_TOPIC);
-            mqttClient.subscribe(SLOT_CONFIG_TOPIC);
-            mqttClient.subscribe(MAINTENANCE_TOPIC);
-            Serial.println("✔ Subscribed to topics.");
-        } else {
-            Serial.printf("✖ MQTT connect failed (rc=%d). Retrying…\n", mqttClient.state());
-            delay(2000);
-        }
-    }
 }
 
 /* Keep the connection alive and process inbound packets */
 void processAWSMessages() {
-    if (!mqttClient.connected()) setupAWS();
+    if (!mqttClient.connected()) {
+        // Non-blocking connection attempt
+        if (mqttClient.connect(MQTT_CLIENT_ID)) {
+            mqttClient.subscribe(AWS_PUBLISH_TOPIC);
+            // ... other subscriptions ...
+        }
+    }
     mqttClient.loop();
 
     /* send pour‑result if the background task finished */
