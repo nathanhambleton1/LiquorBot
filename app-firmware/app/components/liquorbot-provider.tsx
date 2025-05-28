@@ -38,6 +38,8 @@ interface LiquorBotContextValue {
   reconnect      : () => void;
   groups         : string[];
   isAdmin        : boolean;
+  temporaryOverrideId: (id:string, revertAt:Date)=>void;
+  restorePreviousId : () => void;
 }
 const LiquorBotContext = createContext<LiquorBotContextValue>({} as any);
 
@@ -173,14 +175,43 @@ export function LiquorBotProvider({ children }:{ children:ReactNode }) {
           .catch(console.error);
   }, [liquorbotId]);
 
+  /* ───────── event-override helpers ───────── */
+  const [prevLiquorbotId, setPrevLiquorbotId] = useState<string|null>(null);
+  const restorePreviousId = useCallback(() => {
+    if (prevLiquorbotId) {
+      setIdState(prevLiquorbotId);
+      setPrevLiquorbotId(null);
+      reconnect();
+    }
+  }, [prevLiquorbotId, reconnect]);
+
+  /**
+   * Temporarily switch to the event’s LiquorBot-ID until `revertAt`.
+   * If we’re *already* on that ID we do nothing.
+   */
+  const temporaryOverrideId = useCallback(
+    (newId: string, revertAt: Date) => {
+      if (newId === liquorbotId) return;               // already there
+      setPrevLiquorbotId((p) => p ?? liquorbotId);     // remember first ID only
+      setIdState(newId);
+      reconnect();
+
+      const ms = revertAt.getTime() - Date.now();
+      if (ms > 0) setTimeout(restorePreviousId, ms);   // auto-restore @ end
+    },
+    [liquorbotId, restorePreviousId, reconnect],
+  );
+
   const value = useMemo<LiquorBotContextValue>(() => ({
     isConnected, slots, liquorbotId,
     forceDisconnect, updateSlots, setLiquorbotId, reconnect,
     groups, isAdmin,
-  }), [isConnected, slots, liquorbotId,
-       forceDisconnect, updateSlots, setLiquorbotId,
-       reconnect, groups, isAdmin]);
-
+    temporaryOverrideId, restorePreviousId,
+  }), [
+    isConnected, slots, liquorbotId,
+    forceDisconnect, updateSlots, setLiquorbotId, reconnect,
+    groups, isAdmin, temporaryOverrideId, restorePreviousId,
+  ]);
   return (
     <LiquorBotContext.Provider value={value}>
       {children}

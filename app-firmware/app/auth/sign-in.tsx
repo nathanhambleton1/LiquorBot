@@ -8,7 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity,
-  ActivityIndicator, ImageBackground,
+  ActivityIndicator, ImageBackground, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { signIn, getCurrentUser } from 'aws-amplify/auth';
@@ -68,66 +68,71 @@ export default function SignIn() {
   }
 
   return (
-    <ImageBackground
-      source={require('@/assets/images/dark-gradient.png')}
-      style={styles.background}
-      resizeMode="cover"
-      blurRadius={5}
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={styles.container}>
-        <Text style={styles.title}>Sign In</Text>
+      <ImageBackground
+        source={require('@/assets/images/dark-gradient.png')}
+        style={styles.background}
+        resizeMode="cover"
+        blurRadius={5}
+      >
+        <View style={styles.container}>
+          <Text style={styles.title}>Sign In</Text>
 
-        <Text style={styles.label}>Username</Text>
-        <TextInput
-          value={username}
-          onChangeText={setUsername}
-          style={styles.input}
-          autoCapitalize="none"
-        />
-
-        <Text style={styles.label}>Password</Text>
-        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Username</Text>
           <TextInput
-            value={password}
-            onChangeText={setPassword}
+            value={username}
+            onChangeText={setUsername}
             style={styles.input}
-            secureTextEntry={!isPasswordVisible}
+            autoCapitalize="none"
           />
-          <TouchableOpacity
-            onPress={() => setIsPwVis(!isPasswordVisible)}
-            style={styles.eyeIcon}
-          >
-            <MaterialIcons
-              name={isPasswordVisible ? 'visibility' : 'visibility-off'}
-              size={24}
-              color="#4f4f4f"
+
+          <Text style={styles.label}>Password</Text>
+          <View style={styles.inputContainer}>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              style={styles.input}
+              secureTextEntry={!isPasswordVisible}
             />
+            <TouchableOpacity
+              onPress={() => setIsPwVis(!isPasswordVisible)}
+              style={styles.eyeIcon}
+            >
+              <MaterialIcons
+                name={isPasswordVisible ? 'visibility' : 'visibility-off'}
+                size={24}
+                color="#4f4f4f"
+              />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            onPress={() => router.push('./forgot-password')}
+            style={styles.forgotPassword}
+          >
+            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
           </TouchableOpacity>
-        </View>
 
-        <TouchableOpacity
-          onPress={() => router.push('./forgot-password')}
-          style={styles.forgotPassword}
-        >
-          <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-        </TouchableOpacity>
+          {!!error && <Text style={{ color: 'red', marginTop: 10 }}>{error}</Text>}
 
-        {!!error && <Text style={{ color: 'red', marginTop: 10 }}>{error}</Text>}
+          <TouchableOpacity style={styles.button} onPress={onSignInPress}>
+            <Text style={styles.buttonText}>Sign In</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.button} onPress={onSignInPress}>
-          <Text style={styles.buttonText}>Sign In</Text>
-        </TouchableOpacity>
-
-        <View style={styles.signUpContainer}>
-          <Text style={styles.signUpText}>
-            Don’t have an account?{' '}
-            <Text style={styles.signUpLink} onPress={() => router.push('/auth/sign-up')}>
-              Sign Up
+          <View style={styles.signUpContainer}>
+            <Text style={styles.signUpText}>
+              Don’t have an account?{' '}
+              <Text style={styles.signUpLink} onPress={() => router.push('/auth/sign-up')}>
+                Sign Up
+              </Text>
             </Text>
-          </Text>
+          </View>
         </View>
-      </View>
-    </ImageBackground>
+      </ImageBackground>
+    </KeyboardAvoidingView>
   );
 }
 

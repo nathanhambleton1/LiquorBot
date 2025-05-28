@@ -9,10 +9,15 @@
 //              API so they show up alongside built-in drinks.  *NEW:* every
 //              successful pour is persisted to the PouredDrink model so it can
 //              be shown in the pour-history popup.
+//              
+//              *27 May 2025 FIX*: ensure the slot‑configuration request is sent
+//              every time the menu gains focus so that the “only makeable”
+//              filter never shows an empty list due to a missed config reply.
+//              A retry timer adds further redundancy.
 // Author: Nathan Hambleton
-// Updated: Apr 24 2025 – log pours via createPouredDrink
+// Updated: May 28 2025 – redundant get‑config requests on screen focus
 // -----------------------------------------------------------------------------
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Text,
   View,
@@ -32,7 +37,7 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useIsFocused } from '@react-navigation/native'; // << add
+import { useIsFocused } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Amplify & PubSub
@@ -63,6 +68,9 @@ const pubsub = new PubSub({
   region: 'us-east-1',
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
+
+// ─── constants ────────────────────────────────────────────────────────────────
+const CONFIG_REQUEST_PAYLOAD = 'cfg'; // ← update if your firmware expects a different keyword
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -562,6 +570,45 @@ export default function MenuScreen() {
   const [userID, setUserID] = useState<string | null>(null);
   const [likedDrinks, setLikedDrinks] = useState<number[]>([]);
   const [customFetched, setCustomFetched] = useState(false);
+
+  /* ------------------------------------------------------------------ */
+  /*                       NEW: Slot‑config redundancy                   */
+  /* ------------------------------------------------------------------ */
+  const requestSlotConfig = useCallback(async () => {
+    if (!liquorbotId || !isConnected) return;
+    try {
+      await pubsub.publish({
+        topics: [`liquorbot/liquorbot${liquorbotId}/slot-config`],
+        message: GET_CONFIG,
+      });
+      console.log('[Menu] Requested slot configuration');
+    } catch (err) {
+      console.error('[Menu] Failed to request slot config', err);
+    }
+  }, [liquorbotId, isConnected]);
+
+  // Automatically re‑request config whenever the screen is focused
+  useEffect(() => {
+    if (!isFocused) return;
+
+    // 1️⃣ immediate request on focus
+    requestSlotConfig();
+
+    // 2️⃣ retry once after 2 s if slots are still all zero (i.e. not received)
+    const retryTimer = setTimeout(() => {
+      const anyLoaded = slots.some((id) => id > 0);
+      if (!anyLoaded) {
+        console.log('[Menu] No slot data after first request – retrying…');
+        requestSlotConfig();
+      }
+    }, 2000);
+
+    return () => clearTimeout(retryTimer);
+  }, [isFocused, slots, requestSlotConfig]);
+
+  /* ------------------------------------------------------------------ */
+  /*                      existing logic continues …                    */
+  /* ------------------------------------------------------------------ */
 
   useEffect(() => {
     (async () => {

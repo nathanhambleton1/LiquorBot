@@ -55,7 +55,7 @@ interface Event {
 export default function EventManager() {
   /* navigation & device context */
   const router                 = useRouter();
-  const { liquorbotId }        = useLiquorBot();
+  const { liquorbotId, temporaryOverrideId, restorePreviousId } = useLiquorBot();
   const params = useLocalSearchParams<{ join?: string }>();
 
   /* UI state */
@@ -186,6 +186,34 @@ export default function EventManager() {
       fetchCustomRecipesForEvents();
     }
   }, [events]);
+
+  useEffect(() => {
+    if (events.length === 0) return;
+
+    const timers: NodeJS.Timeout[] = [];
+    const now = Date.now();
+
+    events.forEach(ev => {
+      const start = new Date(ev.startTime).getTime();
+      const end   = new Date(ev.endTime).getTime();
+
+      // Already in-progress → switch immediately
+      if (start <= now && end > now) {
+        temporaryOverrideId(String(ev.liquorbotId), new Date(end));
+      }
+
+      // Future start
+      if (start > now) {
+        timers.push(setTimeout(
+          () => temporaryOverrideId(String(ev.liquorbotId), new Date(ev.endTime)),
+          start - now,
+        ));
+      }
+    });
+
+    // Cleanup on event list change / unmount
+    return () => timers.forEach(clearTimeout);
+  }, [events, temporaryOverrideId]);
 
   /* ---------- filtering / searching ---------- */
   const filteredEvents = useMemo(() => {
@@ -361,6 +389,7 @@ export default function EventManager() {
         authMode: 'userPool'
       });
       setEvents(prev => prev.filter(e => e.id !== eventId));
+      restorePreviousId();
     } catch (error) {
       Alert.alert('Error', 'Failed to leave event');
     } finally {

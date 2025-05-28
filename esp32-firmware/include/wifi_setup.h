@@ -20,7 +20,10 @@ extern std::string ssid;
 extern std::string password;
 
 // Function declarations
+void initWiFiStorage();
 void setWiFiCredentials(const std::string &newSSID, const std::string &newPassword);
+bool attemptSavedWiFiConnection();
+void clearWiFiCredentials();
 bool connectToWiFi();
 void disconnectFromWiFi();
 

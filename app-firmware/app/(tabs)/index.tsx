@@ -6,7 +6,7 @@
 // Author: Nathan Hambleton
 // Updated: 15 May 2025  (static SDK import – no tsconfig tweaks needed)
 // -----------------------------------------------------------------------------
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import {
   StyleSheet,
   ImageBackground,
@@ -81,51 +81,55 @@ export default function Index() {
   }, []);
 
 
-  useEffect(() => {
-    if (!currentUser) return;
-    const fetchEvents = async () => {
-      try {
-        const { data } = await generateClient().graphql({
-          query: listEvents,
-          variables: {
-            filter: {
-              and: [
-                { liquorbotId: { eq: Number(liquorbotId) } },
-                {
-                  or: [
-                    { owner:       { eq: currentUser } },
-                    { guestOwners: { contains: currentUser } },
-                  ],
-                },
-              ],
-            },
-          },
-          authMode: 'userPool',
-        });
-        
-        const now = new Date();
-        const filtered = data.listEvents.items
-          .map((item: any) => ({
-            id: item.id,
-            name: item.name,
-            startTime: item.startTime,
-            endTime: item.endTime,
-          }))
-          // Changed from startTime to endTime comparison
-          .filter((event: Event) => new Date(event.endTime) > now)
-          .sort((a: Event, b: Event) => 
-            new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-          );
+  const fetchEvents = useCallback(async () => {
+    if (!currentUser || !liquorbotId) return;
 
-        setUpcomingEvents(filtered);
-      } catch (error) {
-        console.error('Error fetching events:', error);
-      } finally {
-        setEventsLoading(false);
-      }
-    };
-    fetchEvents();
-  }, [liquorbotId, currentUser]);
+    try {
+      const { data } = await generateClient().graphql({
+        query: listEvents,
+        variables: {
+          filter: {
+            and: [
+              { liquorbotId: { eq: Number(liquorbotId) } },
+              {
+                or: [
+                  { owner:       { eq: currentUser } },
+                  { guestOwners: { contains: currentUser } },
+                ],
+              },
+            ],
+          },
+        },
+        authMode: 'userPool',
+      });
+
+      const now = new Date();
+      const filtered = data.listEvents.items
+        .map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          startTime: item.startTime,
+          endTime: item.endTime,
+        }))
+        .filter((event: Event) => new Date(event.endTime) > now)
+        .sort((a: Event, b: Event) =>
+          new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+        );
+
+      setUpcomingEvents(filtered);
+    } catch (error) {
+      console.error('Error fetching events:', error);
+    } finally {
+      setEventsLoading(false);
+    }
+  }, [currentUser, liquorbotId]);
+
+  // Run once currentUser is available
+  useEffect(() => {
+    if (currentUser && liquorbotId) {
+      fetchEvents();
+    }
+  }, [currentUser, liquorbotId]);
 
   useEffect(() => {
     /* ---------- glow animation ---------- */

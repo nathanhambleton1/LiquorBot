@@ -28,36 +28,42 @@ void setup() {
     Serial.println("\n=== LiquorBot boot ===");
 
     initializeState();      // IDLE
-
+    initWiFiStorage();      // load saved creds from NVS
     setupBluetooth();       // always advertising
+
+    if (!attemptSavedWiFiConnection()) {
+        Serial.println("No saved WiFi credentials. Waiting for BLE...");
+    }
+    
+    initDrinkController();
+    initLED();
 
     /* Developers may override creds during bench-test --------------------- */
     //setWiFiCredentials("WhiteSky-TheWilde", "qg3v2zyr");
     //setWiFiCredentials("USuites_legacy", "onmyhonor");
     //connectToWiFi();
     /* --------------------------------------------------------------------- */
-
-    initDrinkController();
-    initLED();
 }
 
 /* ------------------------------------------------------------------------- */
 void loop() {
-    /* 1 · Try Wi-Fi again if creds have been written ---------------------- */
-    if (areCredentialsReceived() &&
-        WiFi.status() != WL_CONNECTED &&
-        millis() - lastWiFiRetry >= WIFI_RETRY_PERIOD) {
-        lastWiFiRetry = millis();
-        connectToWiFi();       // non-blocking retry loop inside
+    /* 1 · Always try WiFi if disconnected */
+    if (WiFi.status() != WL_CONNECTED) {
+        static unsigned long lastRetry = 0;
+        if (millis() - lastRetry >= WIFI_RETRY_PERIOD) {
+            lastRetry = millis();
+            connectToWiFi();  // Will use saved credentials
+        }
     }
 
-    /* 2 · Handle MQTT traffic (non-blocking) ------------------------------ */
-    if (WiFi.status() == WL_CONNECTED)
+    /* 2 · Handle MQTT */
+    if (WiFi.status() == WL_CONNECTED) {
         processAWSMessages();
+    }
 
-    /* 3 · Heartbeat every 5 s -------------------------------------------- */
+    /* 3 · Heartbeat */
     if (millis() - lastHeartbeat >= HB_PERIOD) {
-        sendHeartbeat();
+        if (WiFi.status() == WL_CONNECTED) sendHeartbeat();
         lastHeartbeat = millis();
     }
 }
