@@ -320,6 +320,23 @@ export default function EventsScreen(){
     })();
   }, [currentUser]);
 
+  /* auto‑set start date */
+  useEffect(() => {
+    if (!startDate || !startTime || !endTime) return;
+
+    const sameDayEnd = parseDT(startDate, endTime);
+    const start      = parseDT(startDate, startTime);
+
+    /* crosses 00:00 → force multi-day + default next-day date */
+    if (sameDayEnd <= start) {
+      if (!multiDay) setMD(true);
+      if (!endDate)  setED(nextDay(startDate));
+    } else if (multiDay && endDate === '') {
+      /* user cleared the date box but kept toggle on → restore */
+      setED(nextDay(startDate));
+    }
+  }, [startDate, startTime, endTime]);
+
   useEffect(() => {
   const unsub = on('recipe-created', (r: CustomRecipe) => {
       const drink: Drink = {
@@ -350,6 +367,25 @@ export default function EventsScreen(){
     const after=new Set([...ingredientSet,...parseIng(d)]);
     if(after.size>15){Alert.alert('Too many ingredients');return;}
     setMenu(m=>[...m,d]);setPV(false);setQ('');
+  };
+  function nextDay(mmddyyyy: string) {
+    const [mo, da, yr] = mmddyyyy.split('/').map(Number);
+    const d = new Date(yr, mo - 1, da);
+    d.setDate(d.getDate() + 1);
+    return fmt(d);
+  }
+  const toggleMultiDay = () => {
+    LayoutAnimation.easeInEaseOut();
+    if (multiDay) {
+      /* turning OFF → same-day event finishes at 23:59 and shares the start-date */
+      setMD(false);
+      setED('');
+      setET('23:59');
+    } else {
+      /* turning ON → if end-time is earlier than start-time default to next day */
+      if (!endDate) setED(nextDay(startDate || today));
+      setMD(true);
+    }
   };
   const removeDrink = (id:string)  => setMenu(m => m.filter(d => d.id !== id));
 
@@ -535,6 +571,9 @@ export default function EventsScreen(){
     
     const start = parseDT(startDate, startTime);
     const end = parseDT(multiDay ? endDate : startDate, endTime);
+    if (!multiDay && end <= start) {
+      setET('23:59');
+    }
 
     try {
     const { data } = await client.graphql({
@@ -680,8 +719,8 @@ export default function EventsScreen(){
 
           {/* ── MULTI‑DAY TOGGLE ── */}
           <TouchableOpacity
-            style={[styles.mdToggle,multiDay&&styles.mdToggleOn]}
-            onPress={()=>{LayoutAnimation.easeInEaseOut();setMD(!multiDay);}}>
+            style={[styles.mdToggle, multiDay && styles.mdToggleOn]}
+            onPress={toggleMultiDay}>
             <Ionicons name={multiDay?'checkbox':'square-outline'} size={22}
                       color={multiDay?'#CE975E':'#DFDCD9'} />
             <Text style={styles.mdToggleTxt}>Multi‑day event</Text>
