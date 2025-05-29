@@ -1057,6 +1057,6 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#141414' },
   deviceIdText:     { color: '#4F4F4F', fontSize: 12, textAlign: 'center', marginTop: 16 },
   backdrop:         { ...StyleSheet.absoluteFillObject, backgroundColor: '#0009' },
-  card:             { position: 'absolute', backgroundColor: '#1F1F1F', borderRadius: 16, overflow: 'hidden', justifyContent: 'center', },
+  card:             { position: 'absolute', backgroundColor: '#1F1F1F', borderRadius: 16, overflow: 'hidden', justifyContent: 'center', marginRight: 20, marginLeft: 20, padding: 20, },
   closeIcon:        { position: 'absolute', top: 6, right: 6, padding: 6, zIndex: 10, elevation: 10 },
 });
