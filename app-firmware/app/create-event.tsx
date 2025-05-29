@@ -322,20 +322,15 @@ export default function EventsScreen(){
 
   /* auto‑set start date */
   useEffect(() => {
-    if (!startDate || !startTime || !endTime) return;
+    if (!startTime || !endTime) return;          // times not filled yet
 
-    const sameDayEnd = parseDT(startDate, endTime);
-    const start      = parseDT(startDate, startTime);
+    const crossesMidnight = timeToMins(endTime) <= timeToMins(startTime);
 
-    /* crosses 00:00 → force multi-day + default next-day date */
-    if (sameDayEnd <= start) {
-      if (!multiDay) setMD(true);
-      if (!endDate)  setED(nextDay(startDate));
-    } else if (multiDay && endDate === '') {
-      /* user cleared the date box but kept toggle on → restore */
-      setED(nextDay(startDate));
+    if (crossesMidnight) {
+      if (!multiDay) setMD(true);                // flip the toggle visibly
+      if (startDate && !endDate) setED(nextDay(startDate));  // pre-fill date if we can
     }
-  }, [startDate, startTime, endTime]);
+  }, [startTime, endTime, startDate, endDate, multiDay]);
 
   useEffect(() => {
   const unsub = on('recipe-created', (r: CustomRecipe) => {
@@ -373,6 +368,10 @@ export default function EventsScreen(){
     const d = new Date(yr, mo - 1, da);
     d.setDate(d.getDate() + 1);
     return fmt(d);
+  }
+  function timeToMins(t: string) {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
   }
   const toggleMultiDay = () => {
     LayoutAnimation.easeInEaseOut();
