@@ -20,7 +20,7 @@ import {
   Modal, FlatList, Platform, KeyboardAvoidingView, Image, Dimensions,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 
 import { Amplify } from 'aws-amplify';
 import { getUrl, uploadData } from 'aws-amplify/storage';
@@ -114,9 +114,12 @@ const CANVAS_W = 300, CANVAS_H = 300, THUMB = 70;
 /* ═════════════  COMPONENT  ═════════════ */
 export default function CreateDrinkScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const params = useLocalSearchParams<{
     edit?: string; recipeId?: string; name?: string;
     desc?: string; ingredients?: string; imageKey?: string;
+    // Add this new param to track where we came from
+    from?: 'event' | 'drink-list';
   }>();
 
   const isEditing = params.edit === '1';
@@ -172,6 +175,24 @@ export default function CreateDrinkScreen() {
   /* ----------- Skia images ----------- */
   const baseImage   = useImage(GLASS_COLOUR_ASSETS[glassIdx][colourIdx]);
   const garnishImage= useImage(garnishIdx!==null ? GARNISH_ASSETS[garnishIdx] : undefined);
+
+  const roundToQuarter = (value: number): number => {
+    return Math.round(value * 4) / 4;
+  };
+
+  /* ═════════════  VALIDATION  ═════════════ */
+  const isValidNumberInput = (text: string): boolean => {
+  // Allow empty string temporarily
+  if (text === '') return true;
+  
+  // Allow numbers and single decimal point
+  if (/^\d*\.?\d*$/.test(text)) {
+    // Only allow one decimal point
+    const decimalCount = (text.match(/\./g) || []).length;
+    return decimalCount <= 1;
+  }
+  return false;
+};
 
   /* ═════════════  DATA LOAD  ═════════════ */
   useEffect(() => {
@@ -312,8 +333,31 @@ export default function CreateDrinkScreen() {
 
         emit('recipe-created', data.createCustomRecipe);   // ← tell whoever opened us
       }
-      router.back();
+      navigation.goBack();
     }catch(e){ console.error('Save failed',e); alert('Save failed – see console.'); }
+  };
+
+  // Update the close button handlers
+  const handleClose = () => {
+    navigation.goBack();
+  };
+
+  /* ═════════════  VOLUME BLUR  ═════════════ */
+  const handleVolumeBlur = (idx: number) => {
+    setRows(prev => prev.map((r, i) => {
+      if (i === idx) {
+        let newValue = r.volume;
+        
+        // Ensure value is within range
+        newValue = Math.max(0.25, Math.min(99.75, newValue));
+        
+        // Round to nearest 0.25
+        newValue = roundToQuarter(newValue);
+        
+        return { ...r, volume: newValue };
+      }
+      return r;
+    }));
   };
 
   /* ═════════════  PREVIEW THUMB  ═════════════ */
@@ -333,16 +377,11 @@ export default function CreateDrinkScreen() {
     <KeyboardAvoidingView style={styles.container}
       behavior={Platform.OS==='ios'?'padding':undefined}>
       {/* close */}
-      <TouchableOpacity style={styles.closeButton} onPress={()=>router.push('/menu')}>
-        <Ionicons name="close" size={30} color="#DFDCD9"/>
+      <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
+        <Ionicons name="close" size={30} color="#DFDCD9" />
       </TouchableOpacity>
 
-      {/* list button */}
-      <TouchableOpacity style={styles.listButton} onPress={() => router.push('/drink-list')}>
-        <Ionicons name="list" size={30} color="#DFDCD9" />
-      </TouchableOpacity>
-
-      <Text style={styles.headerText}>{isEditing?'Edit Drink':'Custom Drink'}</Text>
+      <Text style={styles.headerText}>{isEditing ? 'Edit Drink' : 'Custom Drink'}</Text>
 
       <ScrollView contentContainerStyle={styles.contentContainer}
         keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -398,9 +437,54 @@ export default function CreateDrinkScreen() {
                       <Ionicons name="remove" size={18} color="#DFDCD9"/>
                     </TouchableOpacity>
                     <TextInput
-                      style={styles.volumeInput} keyboardType="decimal-pad"
-                      value={row.volume.toFixed(2)} onChangeText={txt=>setVolDirect(idx,txt)}
-                      maxLength={5}/>
+                      style={styles.volumeInput}
+                      keyboardType="decimal-pad"
+                      value={String(row.volume)}
+                      onChangeText={txt => {
+                        // Validate input format
+                        if (isValidNumberInput(txt)) {
+                          // Handle empty input
+                          if (txt === '') {
+                            setRows(prev => prev.map((r, i) => 
+                              i === idx ? {...r, volume: 0} : r
+                            ));
+                            return;
+                          }
+                          
+                          // Handle decimal point at end (like "1.")
+                          if (txt.endsWith('.')) {
+                            setRows(prev => prev.map((r, i) => 
+                              i === idx ? {...r, volume: parseFloat(txt)} : r
+                            ));
+                            return;
+                          }
+                          
+                          const num = parseFloat(txt);
+                          if (!isNaN(num)) {
+                            setRows(prev => prev.map((r, i) => 
+                              i === idx ? {...r, volume: num} : r
+                            ));
+                          }
+                        }
+                      }}
+                      onBlur={() => {
+                        setRows(prev => prev.map((r, i) => {
+                          if (i === idx) {
+                            let newValue = r.volume;
+                            
+                            // Ensure value is within range
+                            newValue = Math.max(0.25, Math.min(99.75, newValue));
+                            
+                            // Round to nearest 0.25
+                            newValue = Math.round(newValue * 4) / 4;
+                            
+                            return {...r, volume: newValue};
+                          }
+                          return r;
+                        }));
+                      }}
+                      maxLength={5}
+                    />
                     <TouchableOpacity onPress={()=>adjustVol(idx,0.25)} style={styles.volBtn}>
                       <Ionicons name="add" size={18} color="#DFDCD9"/>
                     </TouchableOpacity>
@@ -445,10 +529,12 @@ export default function CreateDrinkScreen() {
 
       {/* ---------- IMAGE BUILDER MODAL ---------- */}
       <Modal
-        visible={builderVisible}
-        animationType="slide"
-        onRequestClose={() => setBuilderVisible(false)}
-      >
+          visible={builderVisible}
+          animationType="slide"
+          // Add this for iOS modal stacking
+          presentationStyle={Platform.OS === 'ios' ? 'formSheet' : 'fullScreen'}
+          onRequestClose={() => setBuilderVisible(false)}
+        >
         <View style={styles.builderModal}>
           {/* Header */}
           <TouchableOpacity
@@ -573,7 +659,8 @@ export default function CreateDrinkScreen() {
         visible={pickerVisible}
         animationType="slide"
         transparent={false}
-        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
+        // Add this for iOS modal stacking
+        presentationStyle={Platform.OS === 'ios' ? 'formSheet' : 'fullScreen'}
         onRequestClose={() => setPickerVisible(false)}
       >
         <View style={styles.modalContainer}>
@@ -707,313 +794,73 @@ export default function CreateDrinkScreen() {
 const { width: SCREEN_W } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#141414',
-    paddingTop: 60,
-    paddingHorizontal: 20,
-  },
-  closeButton: {
-    position: 'absolute',
-    top: 75,
-    left: 20,
-    zIndex: 10,
-    padding: 10,
-  },
-  listButton: {
-    position: 'absolute',
-    top: 75,
-    right: 20,
-    zIndex: 10,
-    padding: 10,
-  },
-  headerText: {
-    fontSize: 28,
-    color: '#DFDCD9',
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 10,
-    marginTop: 20,
-  },
+  container: { flex: 1, backgroundColor: '#141414', paddingTop: 60, paddingHorizontal: 20 },
+  closeButton: { position: 'absolute', top: 75, left: 20, zIndex: 10, padding: 10 },
+  headerText: { fontSize: 28, color: '#DFDCD9', fontWeight: 'bold', textAlign: 'center', marginBottom: 10, marginTop: 20 },
   contentContainer: { paddingVertical: 20 },
-
-  /* ---------- image-builder entry ---------- */
-  imageBuilderEntry: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 25,
-  },
-  previewCanvasSmall: {
-    width: THUMB,
-    height: THUMB,
-    backgroundColor: 'transparent',
-    borderRadius: 8,
-  },
-  buildBtn: {
-    marginLeft: 15,
-    backgroundColor: '#1F1F1F',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-  },
+  imageBuilderEntry: { flexDirection: 'row', alignItems: 'center', marginBottom: 25 },
+  previewCanvasSmall: { width: THUMB, height: THUMB, backgroundColor: 'transparent', borderRadius: 8 },
+  buildBtn: { marginLeft: 15, backgroundColor: '#1F1F1F', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
   buildBtnText: { color: '#DFDCD9', fontSize: 16 },
-
-  /* ---------- builder modal ---------- */
-  builderModal: {
-    flex: 1,
-    backgroundColor: '#141414',
-    padding: 20,
-  },
+  builderModal: { flex: 1, backgroundColor: '#141414', padding: 20 },
   modalCloseButton: { position: 'absolute', top: 80, left: 20, zIndex: 10 },
-  modalHeaderText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#DFDCD9',
-    textAlign: 'center',
-    marginTop: 60,
-    marginBottom: 10,
-  },
-  previewCanvas: {
-    width: CANVAS_W,
-    height: CANVAS_H,
-    alignSelf: 'center',
-    borderRadius: 10,
-    backgroundColor: 'transparent',
-    marginTop: 30,
-  },
-  selectorRow: {
-    flexDirection: 'row',
-    marginTop: 30,
-  },
-  selectorThumb: {
-    width: 50,
-    height: 50,
-    borderRadius: 8,
-    backgroundColor: '#1F1F1F',
-    marginRight: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  selectedThumb: {
-    borderWidth: 2,
-    borderColor: '#CE975E',
-  },
+  modalHeaderText: { fontSize: 20, fontWeight: 'bold', color: '#DFDCD9', textAlign: 'center', marginTop: 60, marginBottom: 10 },
+  previewCanvas: { width: CANVAS_W, height: CANVAS_H, alignSelf: 'center', borderRadius: 10, backgroundColor: 'transparent', marginTop: 30 },
+  selectorRow: { flexDirection: 'row', marginTop: 30 },
+  selectorThumb: { width: 50, height: 50, borderRadius: 8, backgroundColor: '#1F1F1F', marginRight: 10, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  selectedThumb: { borderWidth: 2, borderColor: '#CE975E' },
   thumbImage: { width: 40, height: 40, resizeMode: 'contain' },
   garnishThumb: { width: 40, height: 40, resizeMode: 'contain' },
-  colourSwatchContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  selectedColourSwatchContainer: {
-    borderWidth: 2,
-    borderColor: '#CE975E', // Gold border
-  },
-  colourSwatch: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  selectedColourSwatch: {
-    width: 24, // Smaller size for selected color
-    height: 24,
-    borderRadius: 12,
-  },
-  doneBtn: {
-    marginTop: 50,
-    backgroundColor: '#CE975E',
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
+  colourSwatchContainer: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  selectedColourSwatchContainer: { borderWidth: 2, borderColor: '#CE975E' },
+  colourSwatch: { width: 32, height: 32, borderRadius: 16 },
+  selectedColourSwatch: { width: 24, height: 24, borderRadius: 12 },
+  doneBtn: { marginTop: 50, backgroundColor: '#CE975E', borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
   doneBtnText: { color: '#141414', fontSize: 16, fontWeight: 'bold' },
-  drinkNameInput: {
-    borderWidth: 2,
-    borderColor: '#CE975E', // Gold border
-  },
+  drinkNameInput: { borderWidth: 2, borderColor: '#CE975E' },
   nameHint: { color: '#4F4F4F', fontSize: 12, marginTop: 5 },
-  selectionContainer: {
-    alignItems: 'center', // Center align items horizontally
-    justifyContent: 'center', // Center align items vertically
-    marginTop: 20, // Optional: Add spacing above the container
-  },
-  // rows
+  selectionContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 20 },
   ingredientsSection: { marginBottom: 30 },
   rowContainer: { marginBottom: 20 },
   ingredientRow: { flexDirection: 'row', alignItems: 'center' },
-  ingredientBox: {
-    backgroundColor: '#1F1F1F',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
+  ingredientBox: { backgroundColor: '#1F1F1F', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', flex: 1 },
   ingredientBoxText: { color: '#4F4F4F', fontSize: 16, flex: 1 },
   ingredientBoxTextSelected: { color: '#DFDCD9' },
   deleteBtn: { marginLeft: 10, padding: 6 },
-  volumeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8, // Removed justifyContent to keep groups together on the left
-  },
-  volumeGroup: {
-    alignItems: 'flex-start',
-  },
-  priorityGroup: {
-    alignItems: 'flex-start',
-    marginLeft: 15, // Adds spacing between volume and priority groups
-  },
-  counterLabel: {
-    color: '#808080',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  volBtn: {
-    backgroundColor: '#1F1F1F',
-    padding: 8,
-    borderRadius: 8,
-    minWidth: 36, // Ensure consistent size
-    alignItems: 'center', // Center icon
-    justifyContent: 'center', // Center icon
-  },
-  volumeInput: {
-    backgroundColor: '#1F1F1F',
-    marginHorizontal: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    color: '#DFDCD9',
-    fontSize: 16,
-    minWidth: 60,
-    textAlign: 'center',
-  },
-  // priority controls
-  priorityContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    // Removed marginLeft to keep the priority box aligned to the left
-  },
-  priBtn: {
-    backgroundColor: '#1F1F1F',
-    padding: 8,
-    borderRadius: 8,
-    minWidth: 36, // Ensure consistent size
-    alignItems: 'center', // Center icon
-    justifyContent: 'center', // Center icon
-  },
-  priorityValue: {
-    color: '#DFDCD9',
-    fontSize: 16,
-    marginHorizontal: 8,
-    minWidth: 16,
-    textAlign: 'center',
-  },
+  volumeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
+  volumeGroup: { alignItems: 'flex-start' },
+  priorityGroup: { alignItems: 'flex-start', marginLeft: 15 },
+  counterLabel: { color: '#808080', fontSize: 12, marginTop: 4 },
+  volBtn: { backgroundColor: '#1F1F1F', padding: 8, borderRadius: 8, minWidth: 36, alignItems: 'center', justifyContent: 'center' },
+  volumeInput: { backgroundColor: '#1F1F1F', marginHorizontal: 10, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, color: '#DFDCD9', fontSize: 16, minWidth: 60, textAlign: 'center' },
+  priorityContainer: { flexDirection: 'row', alignItems: 'center' },
+  priBtn: { backgroundColor: '#1F1F1F', padding: 8, borderRadius: 8, minWidth: 36, alignItems: 'center', justifyContent: 'center' },
+  priorityValue: { color: '#DFDCD9', fontSize: 16, marginHorizontal: 8, minWidth: 16, textAlign: 'center' },
   addIngredientText: { color: '#4F4F4F', fontSize: 14, marginTop: 5 },
-  saveButton: {
-    backgroundColor: '#CE975E',
-    borderRadius: 10,
-    paddingVertical: 15,
-    alignItems: 'center',
-    marginTop: 10,
-  },
+  saveButton: { backgroundColor: '#CE975E', borderRadius: 10, paddingVertical: 15, alignItems: 'center', marginTop: 10 },
   saveButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
-  // modal
   modalContainer: { flex: 1, backgroundColor: '#141414', padding: 20 },
   horizontalPickerContainer: { alignItems: 'center', paddingVertical: 5 },
   horizontalPicker: { flexDirection: 'row', alignItems: 'center' },
-  categoryButton: {
-    marginTop: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 5,
-    marginHorizontal: 15,
-  },
+  categoryButton: { marginTop: 10, paddingVertical: 10, paddingHorizontal: 5, marginHorizontal: 15 },
   categoryButtonContent: { alignItems: 'center' },
   categoryButtonText: { color: '#4F4F4F', fontSize: 14 },
   selectedCategoryText: { color: '#CE975E' },
-  underline: {
-    height: 2,
-    backgroundColor: '#CE975E',
-    marginTop: 2,
-    width: '100%',
-  },
-  searchBarContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1F1F1F',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    marginBottom: 15,
-    marginTop: 10,
-  },
+  underline: { height: 2, backgroundColor: '#CE975E', marginTop: 2, width: '100%' },
+  searchBarContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, paddingHorizontal: 15, marginBottom: 15, marginTop: 10 },
   searchIcon: { marginRight: 10 },
   searchBar: { flex: 1, color: '#DFDCD9', fontSize: 16, paddingVertical: 10 },
   loadingText: { color: '#DFDCD9', textAlign: 'center', margin: 10 },
-  ingredientItem: {
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333333',
-  },
+  ingredientItem: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#333333' },
   ingredientText: { color: '#DFDCD9', fontSize: 16 },
-  infoBtn: {
-    marginLeft: 10,
-    justifyContent: 'center',
-  },
-  popupOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  popupContainer: {
-    backgroundColor: '#1F1F1F',
-    padding: 20,
-    borderRadius: 10,
-    marginHorizontal: 30,
-    position: 'relative',
-  },
-  popupText: {
-    color: '#DFDCD9',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  popupCloseBtn: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    padding: 5,
-  },
-  goldText: {
-    color: '#CE975E',
-    fontWeight: 'bold',
-    fontSize: 16,
-    marginBottom: 5,
-  },
-  grayText: {
-    color: '#4f4f4f',
-    fontSize: 12,
-    lineHeight: 20,
-    fontStyle: 'italic',
-  },
-  formGroup: {                     // <<  NEW
-    marginBottom: 20,
-  },
-  label: {                         // <<  NEW
-    color: '#DFDCD9',
-    marginBottom: 5,
-    fontSize: 16,
-  },
-  input: {                         // <<  NEW
-    backgroundColor: '#1F1F1F',
-    color: '#DFDCD9',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16,
-  },
+  infoBtn: { marginLeft: 10, justifyContent: 'center' },
+  popupOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  popupContainer: { backgroundColor: '#1F1F1F', padding: 20, borderRadius: 10, marginHorizontal: 30, position: 'relative' },
+  popupText: { color: '#DFDCD9', fontSize: 14, lineHeight: 20 },
+  popupCloseBtn: { position: 'absolute', top: 10, right: 10, padding: 5 },
+  goldText: { color: '#CE975E', fontWeight: 'bold', fontSize: 16, marginBottom: 5 },
+  grayText: { color: '#4f4f4f', fontSize: 12, lineHeight: 20, fontStyle: 'italic' },
+  formGroup: { marginBottom: 20 },
+  label: { color: '#DFDCD9', marginBottom: 5, fontSize: 16 },
+  input: { backgroundColor: '#1F1F1F', color: '#DFDCD9', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16 },
 });

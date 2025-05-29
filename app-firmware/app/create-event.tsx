@@ -10,7 +10,7 @@ import React, {
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView,
   Modal, FlatList, Platform, ActivityIndicator, Dimensions, Alert,
-  LayoutAnimation, UIManager, Animated,
+  LayoutAnimation, UIManager,
 } from 'react-native';
 import Ionicons           from '@expo/vector-icons/Ionicons';
 import * as Clipboard      from 'expo-clipboard';
@@ -30,6 +30,7 @@ import type { RecipeIngredient, CustomRecipe } from '../src/API';
 import { on } from '../src/event-bus';
 import { useFocusEffect } from 'expo-router';
 import { listEvents } from '../src/graphql/queries';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 Amplify.configure(config);
 const client = generateClient();
@@ -140,96 +141,69 @@ const categories=['All','Vodka','Rum','Tequila','Whiskey','Custom'];
 const ITEM_H=36;
 type Anchor={x:number;y:number;width:number;height:number};
 
-const TimeWheel=({
-  visible,value24,anchor,onClose,onPick,
-}:{
-  visible:boolean;value24:string;anchor:Anchor|null;
-  onClose:()=>void;onPick:(v24:string)=>void;
-})=>{
-  const base=useMemo(()=>{
-    const a:string[]=[];
-    for(let h=0;h<24;h++){a.push(`${String(h).padStart(2,'0')}:00`);
-                          a.push(`${String(h).padStart(2,'0')}:30`);}
-    return a;
-  },[]);
-  const data=[...base,...base,...base];
-  const midIdx=base.indexOf(value24)+base.length;
-  const listRef=useRef<FlatList<string>>(null);
+type Props = {
+  visible: boolean;
+  value24: string;               // “18:30”
+  anchor: { x: number; y: number; width: number; height: number } | null;
+  onPick: (v24: string) => void; // ⇠ callback → “HH:MM”
+  onClose: () => void;
+};
 
-  /* expansion animation */
-  const scaleAnim=useRef(new Animated.Value(0)).current;
-  useEffect(()=>{
-    if(visible){
-      Animated.spring(scaleAnim,{toValue:1,useNativeDriver:true}).start();
-      setTimeout(()=>listRef.current?.
-        scrollToIndex({index:midIdx-2,animated:false}),40);
-    }else{scaleAnim.setValue(0);}
-  },[visible]);
+export function TimePickerModal({
+  visible,
+  value24,
+  anchor,
+  onPick,
+  onClose,
+}: Props) {
+  /* convert the incoming “18:30” → Date */
+  const initial = useMemo(() => {
+    const [h, m] = value24.split(':').map(Number);
+    return new Date(2025, 0, 1, h, m);
+  }, [value24]);
 
-  const clamp=(n:number,len:number)=>((n%len)+len)%len;
+  const [date, setDate] = useState(initial);
 
-
-
-  /* snap after inertia */
-  const alignToNearest=(y:number)=>{
-    const idx=Math.round(y/ITEM_H);
-    listRef.current?.scrollToOffset({offset:idx*ITEM_H,animated:true});
-    onPick(base[clamp(idx,base.length)]);
+  const commit = (d: Date) => {
+    const hh = d.getHours().toString().padStart(2, '0');
+    const mm = d.getMinutes().toString().padStart(2, '0');
+    onPick(`${hh}:${mm}`);
   };
 
-  const handleEnd=({nativeEvent}:{nativeEvent:any})=>
-    alignToNearest(nativeEvent.contentOffset.y);
+  /* Don’t render at all when hidden */
+  if (!visible || !anchor) return null;
 
-  /* quick‑tap selection */
-  const handleTap=(idx:number)=>{
-    const trueIdx=clamp(idx,base.length);
-    onPick(base[trueIdx]);
-    onClose();
-  };
+  /* Card geometry (same pop-up position you already calculate) */
+  const CARD_W = 220;
+  const CARD_H = Platform.OS === 'ios' ? 200 : 250;
+  const left = anchor.x + anchor.width / 2 - CARD_W / 2;
+  const top  = anchor.y + anchor.height / 2 - CARD_H / 2;
 
-  if(!visible||!anchor) return null;
-  /* final card geometry */
-  const CARD_W=180;
-  const CARD_H=ITEM_H*5;
-  const centerX=anchor.x+anchor.width/2;
-  const centerY=anchor.y+anchor.height/2;
-  const cardLeft=centerX-CARD_W/2;
-  const cardTop =centerY-CARD_H/2;
-
-  return(
-    <Modal transparent animationType="none" onRequestClose={onClose}>
-      <TouchableOpacity style={styles.twBackdrop} activeOpacity={1} onPress={onClose}/>
-      <Animated.View
-        style={[
-          styles.twCard,
-          {width:CARD_W,height:CARD_H,left:cardLeft,top:cardTop,
-           transform:[{scale:scaleAnim}]},
-        ]}>
-        <FlatList
-          ref={listRef}
-          data={data}
-          keyExtractor={(_,i)=>String(i)}
-          getItemLayout={(_,i)=>({length:ITEM_H,offset:i*ITEM_H,index:i})}
-          showsVerticalScrollIndicator={false}
-          snapToInterval={ITEM_H}
-          snapToAlignment="center"
-          decelerationRate={0.9}
-          onMomentumScrollEnd={handleEnd}
-          onScrollEndDrag={e=>alignToNearest(e.nativeEvent.contentOffset.y)}
-          renderItem={({item,index})=>(
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={()=>handleTap(index)}
-              style={{height:ITEM_H,justifyContent:'center',alignItems:'center'}}>
-              <Text style={styles.twItem}>{to12(item)}</Text>
-            </TouchableOpacity>
-          )}
+  return (
+    <Modal transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity
+        style={styles.backdrop}
+        activeOpacity={1}
+        onPress={onClose}
+      />
+      <View style={[styles.card, { width: CARD_W, height: CARD_H, left, top }]}>
+        <DateTimePicker
+          value={date}
+          mode="time"
+          display={Platform.OS === 'ios' ? 'spinner' : 'clock'}
+          minuteInterval={30}          // keeps your 00 / 30 steps
+          onChange={(_, d) => d && setDate(d)}
+          onTouchEnd={() => {
+            /* iOS finishes selection on scroll-end; Android fires instantly */
+            commit(date);
+            if (Platform.OS !== 'ios') onClose();
+          }}
+          textColor="#DFDCD9"          // keeps the dark-theme look (iOS only)
         />
-        <View pointerEvents="none" style={styles.twHighlight}/>
-      </Animated.View>
+      </View>
     </Modal>
   );
-};
+}
 
 /* ═════════════ component ═════════════ */
 export default function EventsScreen(){
@@ -823,11 +797,12 @@ export default function EventsScreen(){
       </Modal>
 
       {/* animated time‑picker */}
-      <TimeWheel
-        visible={!!twTarget} value24={twTarget==='start'?startTime:endTime}
+      <TimePickerModal
+        visible={!!twTarget}
+        value24={twTarget === 'start' ? startTime : endTime}
         anchor={twAnchor}
-        onClose={()=>{setTWT(null);setTWA(null);}}
-        onPick={v=>twTarget==='start'?setST(v):setET(v)}
+        onClose={() => { setTWT(null); setTWA(null); }}
+        onPick={(v) => (twTarget === 'start' ? setST(v) : setET(v))}
       />
     </View>
   );
@@ -937,6 +912,11 @@ const TimeBox=forwardRef(({label,onPress,tag}:{label:string;onPress:()=>void;tag
 const PickerModal = ({ cat, setCat, q, setQ, filtered, loading, addDrink, close }: any) => {
   const router = useRouter();
 
+  function openCustomDrink() {
+    close(); // Close the picker modal first
+    router.push(`/create-drink?from=drink-list`);
+  }
+
   return (
     <View style={styles.modal}>
       <View style={styles.modalHeader}>
@@ -952,7 +932,7 @@ const PickerModal = ({ cat, setCat, q, setQ, filtered, loading, addDrink, close 
 
           {/* Edit button (right-aligned) */}
           <TouchableOpacity 
-            onPress={() => router.push('/create-drink')}
+            onPress={openCustomDrink}
             style={styles.editButton}
           >
             <Ionicons name="create-outline" size={24} color="#CE975E" />
@@ -1065,5 +1045,7 @@ const styles = StyleSheet.create({
   infoText:         { color: '#DFDCD9', fontSize: 14, lineHeight: 20 },
   infoClose:        { position: 'absolute', top: 12, right: 12, padding: 4 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#141414' },
-  deviceIdText:     { color: '#4F4F4F', fontSize: 12, textAlign: 'center', marginTop: 8 },
+  deviceIdText:     { color: '#4F4F4F', fontSize: 12, textAlign: 'center', marginTop: 16 },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#0009' },
+  card:     { position: 'absolute', backgroundColor: '#1F1F1F', borderRadius: 16, overflow: 'hidden', justifyContent: 'center', },
 });

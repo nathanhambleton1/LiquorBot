@@ -527,7 +527,7 @@ function DrinkItem({
 export default function MenuScreen() {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
-  const { isConnected, slots, liquorbotId } = useLiquorBot();
+  const { isConnected, slots, liquorbotId, isAdmin } = useLiquorBot();
   const isFocused = useIsFocused();
 
   /* ------------------------- STATE ------------------------- */
@@ -903,12 +903,14 @@ export default function MenuScreen() {
           </Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.editIconContainer}
-          onPress={() => router.push('/create-drink')}
-        >
-          <Ionicons name="create-outline" size={30} color="#CE975E" />
-        </TouchableOpacity>
+        {isAdmin && (
+          <TouchableOpacity
+            style={styles.editIconContainer}
+            onPress={() => router.push('/create-drink')}
+          >
+            <Ionicons name="create-outline" size={30} color="#CE975E" />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* ------------ CATEGORY PICKER ------------ */}

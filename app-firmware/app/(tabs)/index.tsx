@@ -82,21 +82,16 @@ export default function Index() {
 
 
   const fetchEvents = useCallback(async () => {
-    if (!currentUser || !liquorbotId) return;
+    if (!currentUser) return; // Removed liquorbotId check
 
     try {
       const { data } = await generateClient().graphql({
         query: listEvents,
         variables: {
           filter: {
-            and: [
-              { liquorbotId: { eq: Number(liquorbotId) } },
-              {
-                or: [
-                  { owner:       { eq: currentUser } },
-                  { guestOwners: { contains: currentUser } },
-                ],
-              },
+            or: [ // Removed liquorbotId filter
+              { owner:       { eq: currentUser } },
+              { guestOwners: { contains: currentUser } },
             ],
           },
         },
@@ -122,7 +117,7 @@ export default function Index() {
     } finally {
       setEventsLoading(false);
     }
-  }, [currentUser, liquorbotId]);
+  }, [currentUser]);
 
   // Run once currentUser is available
   useEffect(() => {

@@ -34,6 +34,7 @@ import { generateClient } from 'aws-amplify/api';
 import { listLikedDrinks, getUserProfile } from '../../src/graphql/queries';
 import { createUserProfile, updateUserProfile } from '../../src/graphql/mutations';
 import { useAuthenticator } from '@aws-amplify/ui-react-native';
+import { useLiquorBot } from '../components/liquorbot-provider'; 
 
 Amplify.configure(config);
 const client = generateClient();
@@ -75,6 +76,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // ---------------------------------------------------------------------------
 export default function ProfileScreen() {
   // ───────────────────────── STATE ─────────────────────────────────────────
+  const { isAdmin } = useLiquorBot();   
   const [user, setUser] = useState<UserState>({ username: 'Loading…', email: 'Loading…', profilePicture: null });
   const [registeredUsername, setRegisteredUsername] = useState('');
   const [userProfileId, setUserProfileId] = useState('');
@@ -233,7 +235,7 @@ export default function ProfileScreen() {
   const buttons = [
     { title: 'Edit Profile', icon: 'create-outline' as const },
     { title: 'Liked Drinks', icon: 'heart-outline' as const },
-    { title: 'My Drinks',    icon: 'wine-outline'  as const },
+     ...(isAdmin ? [{ title: 'My Drinks', icon: 'wine-outline' as const }] : []),
     { title: 'Pour History', icon: 'time-outline'  as const },
     { title: 'Settings',      icon: 'settings-outline' as const },   // placeholders
     { title: 'Help',          icon: 'help-circle-outline' as const },

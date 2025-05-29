@@ -24,15 +24,10 @@ const client = generateClient();
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 /* ---------- local helpers ---------- */
-const eventFilter = (user: string, liquorbotId: number) => ({
-  and: [
-    { liquorbotId: { eq: liquorbotId } },
-    {
-      or: [
-        { owner:       { eq: user } },
-        { guestOwners: { contains: user } },
-      ],
-    },
+const eventFilter = (user: string) => ({
+  or: [
+    { owner:       { eq: user } },
+    { guestOwners: { contains: user } },
   ],
 });
 
@@ -80,12 +75,15 @@ export default function EventManager() {
 
   /* who am I? */
   const [currentUser, setCurrentUser] = useState<string|null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
     (async () => {
       try {
         const ses = await fetchAuthSession();
         const u   = ses.tokens?.idToken?.payload['cognito:username'];
         setCurrentUser(typeof u === 'string' ? u : null);
+        const groups = ses.tokens?.idToken?.payload['cognito:groups'] as string[] | undefined;
+        setIsAdmin(groups?.includes('ADMIN') ?? false);
       } catch { setCurrentUser(null); }
     })();
   }, []);
@@ -101,13 +99,13 @@ export default function EventManager() {
 
   /* fetch events that belong to me */
   useEffect(() => {
-    if (!currentUser || liquorbotId === undefined || liquorbotId === null) return;
+    if (!currentUser) return;
 
     (async () => {
       try {
         const { data } = await client.graphql({
           query: listEvents,
-          variables: { filter: eventFilter(currentUser, Number(liquorbotId)) },
+          variables: { filter: eventFilter(currentUser) }, // Removed liquorbotId
           authMode:  'userPool',
         }) as { data: any };
 
@@ -116,6 +114,7 @@ export default function EventManager() {
             id:          i.id,
             name:        i.name,
             location:    i.location ?? undefined,
+            description: i.description ?? undefined,
             startTime:   i.startTime,
             endTime:     i.endTime,
             liquorbotId: i.liquorbotId,
@@ -218,26 +217,44 @@ export default function EventManager() {
   /* ---------- filtering / searching ---------- */
   const filteredEvents = useMemo(() => {
     const now = new Date();
-    let list  = events.filter((e) => {
-      const s = new Date(e.startTime);
-      const f = new Date(e.endTime);
-      if (filter === 'past')     return f < now;
-      if (filter === 'current')  return s <= now && f >= now;
-      if (filter === 'upcoming') return s > now;
-      return true;
+    
+    // Create groups for each event type
+    const currentEvents = events.filter(e => {
+      const start = new Date(e.startTime);
+      const end = new Date(e.endTime);
+      return start <= now && end >= now;
     });
 
+    const upcomingEvents = events.filter(e => {
+      const start = new Date(e.startTime);
+      return start > now;
+    }).sort((a, b) => 
+      new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+    );
+
+    const pastEvents = events.filter(e => {
+      const end = new Date(e.endTime);
+      return end < now;
+    }).sort((a, b) => 
+      new Date(b.endTime).getTime() - new Date(a.endTime).getTime()
+    );
+
+    // Combine groups in the desired order
+    let list = [...currentEvents, ...upcomingEvents, ...pastEvents];
+
+    // Apply search filter if needed
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      list = list.filter((e) => e.name.toLowerCase().includes(q));
+      list = list.filter(e => e.name.toLowerCase().includes(q));
     }
 
-    list.sort(alphabetical
-      ? (a, b) => a.name.localeCompare(b.name)
-      : (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
-    );
+    // Apply alphabetical sorting if enabled
+    if (alphabetical) {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
     return list;
-  }, [events, filter, searchQuery, alphabetical]);
+  }, [events, searchQuery, alphabetical]);
 
   /* ---------- delete ---------- */
   const confirmDelete = (ev: Event) =>
@@ -327,6 +344,12 @@ export default function EventManager() {
         );
         return;
       }
+      
+      // Check if event has already ended
+      if (new Date(newEvent.endTime) < new Date()) {
+        setJoinError('This event has already ended.');
+        return;
+      }
 
       // Proceed with joining
       const { data } = await client.graphql({
@@ -405,6 +428,7 @@ export default function EventManager() {
   const renderItem = ({ item }: { item: Event }) => {
     const isOwner = item.owner === currentUser;
     const isGuest = item.guestOwners?.includes?.(currentUser ?? '') ?? false;
+    const isPast = new Date(item.endTime) < new Date();
     const isExpanded = expandedEventId === item.id;
 
     return (
@@ -417,22 +441,24 @@ export default function EventManager() {
           <Text style={styles.name}>{item.name}</Text>
           <View style={styles.actions}>
             {isOwner ? (
-              <>
-                <TouchableOpacity onPress={() => router.push(`/create-event?edit=${item.id}`)}>
-                  <Ionicons name="create-outline" size={22} color="#CE975E" />
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  onPress={() => confirmDelete(item)}
-                  disabled={processingEvents.includes(item.id)}
-                >
-                  {processingEvents.includes(item.id) ? (
-                    <ActivityIndicator size="small" color="#D9534F" />
-                  ) : (
-                    <Ionicons name="trash-outline" size={22} color="#D9534F" />
+                <>
+                  {!isPast && (
+                    <TouchableOpacity onPress={() => router.push(`/create-event?edit=${item.id}`)}>
+                      <Ionicons name="create-outline" size={22} color="#CE975E" />
+                    </TouchableOpacity>
                   )}
-                </TouchableOpacity>
-              </>
-            ) : isGuest && (
+                  <TouchableOpacity
+                    onPress={() => confirmDelete(item)}
+                    disabled={processingEvents.includes(item.id)}
+                  >
+                    {processingEvents.includes(item.id) ? (
+                      <ActivityIndicator size="small" color="#D9534F" />
+                    ) : (
+                      <Ionicons name="trash-outline" size={22} color="#D9534F" />
+                    )}
+                  </TouchableOpacity>
+                </>
+              ) : isGuest && (
               <TouchableOpacity 
                 onPress={() => handleLeaveEvent(item)} 
                 disabled={processingEvents.includes(item.id)}
@@ -449,6 +475,9 @@ export default function EventManager() {
 
         <Text style={styles.detail}>{item.location || 'No location'}</Text>
         <Text style={styles.detail}>{formatRange(item.startTime, item.endTime)}</Text>
+        {isExpanded && item.description ? (
+          <Text style={styles.detail}>{item.description}</Text>
+        ) : null}
 
         {/* Expanded content */}
         {isExpanded && (
@@ -476,7 +505,12 @@ export default function EventManager() {
 
             {/* Invite Link */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Event Link</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.sectionTitle}>Event Link</Text>
+                {isExpanded && isAdmin && (
+                  <Text style={styles.deviceId}>Device ID: {item.liquorbotId}</Text>
+                )}
+              </View>
               <View style={styles.inviteRow}>
                 <Text style={styles.inviteLink}>https://yourapp.com/join/{item.inviteCode}</Text>
                 <TouchableOpacity
@@ -701,4 +735,5 @@ const styles = StyleSheet.create({
   inviteRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#2F2F2F', borderRadius: 8, padding: 12 },
   inviteLink: { color: '#8F8F8F', fontSize: 12, flex: 1, marginRight: 8 },
   copyButton: { padding: 4 },
+  deviceId: { color:'#4F4F4F', fontSize:10, marginRight: 4, textAlign: 'right' },
 });
