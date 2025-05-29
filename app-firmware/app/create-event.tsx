@@ -175,7 +175,7 @@ export function TimePickerModal({
 
   /* Card geometry (same pop-up position you already calculate) */
   const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-  const CARD_W = 220;
+  const CARD_W = 320;
   const CARD_H = Platform.OS === 'ios' ? 200 : 250;
 
   const rawLeft = anchor.x + anchor.width / 2 - CARD_W / 2;
