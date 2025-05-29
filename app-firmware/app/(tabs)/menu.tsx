@@ -464,7 +464,7 @@ function DrinkItem({
                 (!isMakeable || logging || !isConnected) && styles.disabledButtonText,
               ]}>
                 { !isConnected
-                    ? 'Not Connected'
+                    ? 'No Pouring Device Connected'
                     : !isMakeable
                     ? 'Missing Ingredients'
                     : logging
