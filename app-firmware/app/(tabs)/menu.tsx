@@ -19,44 +19,28 @@
 // -----------------------------------------------------------------------------
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Text,
-  View,
-  StyleSheet,
-  ScrollView,
-  Image,
-  TouchableOpacity,
-  Dimensions,
-  LayoutAnimation,
-  Platform,
-  UIManager,
-  Animated,
-  TextInput,
-  Modal,
-  Switch,
-  ActivityIndicator,
+  Text, View, StyleSheet, ScrollView, Image, TouchableOpacity,
+  Dimensions, LayoutAnimation, Platform, UIManager, Animated,
+  TextInput, Modal, Switch, ActivityIndicator,
 } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons      from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage  from '@react-native-async-storage/async-storage';
 
 // Amplify & PubSub
-import { Amplify } from 'aws-amplify';
-import { PubSub } from '@aws-amplify/pubsub';
-import config from '../../src/amplifyconfiguration.json';
+import { Amplify }   from 'aws-amplify';
+import { PubSub }    from '@aws-amplify/pubsub';
+import config        from '../../src/amplifyconfiguration.json';
 
 // GraphQL & Auth
 import { generateClient } from 'aws-amplify/api';
 import {
-  createLikedDrink,
-  deleteLikedDrink,
-  createPouredDrink,
+  createLikedDrink, deleteLikedDrink, createPouredDrink,
 } from '../../src/graphql/mutations';
-import {
-  listLikedDrinks,
-} from '../../src/graphql/queries';
-import { getCurrentUser } from 'aws-amplify/auth';
-import { getUrl } from 'aws-amplify/storage';
+import { listLikedDrinks } from '../../src/graphql/queries';
+import { getCurrentUser }  from 'aws-amplify/auth';
+import { getUrl }          from 'aws-amplify/storage';
 
 // LiquorBot context
 import { useLiquorBot } from '../components/liquorbot-provider';
@@ -65,12 +49,13 @@ Amplify.configure(config);
 const client = generateClient();
 
 const pubsub = new PubSub({
-  region: 'us-east-1',
+  region  : 'us-east-1',
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
 
 // ─── constants ────────────────────────────────────────────────────────────────
-const CONFIG_REQUEST_PAYLOAD = 'cfg'; // ← update if your firmware expects a different keyword
+/** payload understood by device-firmware & DeviceSettings screen */
+const GET_CONFIG = { action: 'GET_CONFIG' };
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -86,11 +71,7 @@ const LIST_CUSTOM_RECIPES_WITH_ING = /* GraphQL */ `
         name
         description
         image
-        ingredients {
-          ingredientID
-          amount
-          priority
-        }
+        ingredients { ingredientID amount priority }
         createdAt
       }
     }
