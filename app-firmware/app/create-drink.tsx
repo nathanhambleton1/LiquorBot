@@ -106,7 +106,7 @@ const GARNISH_PLACEMENTS = [
 interface Ingredient {
   id: number; name: string; type: 'Alcohol'|'Mixer'|'Sour'|'Sweet'|'Misc'; description: string;
 }
-interface RecipeRow { id: number; volume: number; priority: number; }
+interface RecipeRow { id: number; volume: number; priority: number; volStr?: string;}
 interface DrinkMeta  { id: number; name: string; }
 
 const CANVAS_W = 300, CANVAS_H = 300, THUMB = 70;
@@ -142,10 +142,10 @@ export default function CreateDrinkScreen() {
         .filter(Boolean)
         .map((c) => {
           const [id, vol, pri] = c.split(':');
-          return { id: Number(id), volume: Number(vol), priority: Number(pri ?? 1) };
+          return { id: Number(id), volume: Number(vol), priority: Number(pri ?? 1), volStr: String(Number(vol)) };
         }),
-      { id: 0, volume: 1.5, priority: 1 },
-    ];
+      { id: 0, volume: 1.5, priority: 1, volStr: '1.5' },
+      ];
   });
 
   /* ----------- state: search & picker ----------- */
@@ -254,13 +254,13 @@ export default function CreateDrinkScreen() {
     setRows(next.length ? next : [{ id:0, volume:1.5, priority:1 }]);
   };
 
-  const adjustVol   = (idx:number, d:number) => setRows(p=>
-    p.map((r,i)=>i===idx ? {...r, volume:Math.max(0, +(r.volume+d).toFixed(2))}:r));
-
-  const setVolDirect= (idx:number, txt:string) => {
-    const num=parseFloat(txt); if (!isNaN(num))
-      setRows(p=>p.map((r,i)=>i===idx?{...r, volume:num}:r));
-  };
+  const adjustVol = (idx: number, d: number) => setRows(prev =>
+    prev.map((r, i) => {
+      if (i !== idx) return r;
+      const newVol = Math.max(0, +(r.volume + d).toFixed(2));
+      return { ...r, volume: newVol, volStr: String(newVol) };  // ← keep volStr matched
+    })
+  );
 
   const adjustPriority = (idx:number, d:number) => setRows(p=>
     p.map((r,i)=>i===idx?{...r,priority:Math.min(9,Math.max(1,r.priority+d))}:r));
@@ -439,48 +439,31 @@ export default function CreateDrinkScreen() {
                     <TextInput
                       style={styles.volumeInput}
                       keyboardType="decimal-pad"
-                      value={String(row.volume)}
+                      value={row.volStr ?? String(row.volume)}
                       onChangeText={txt => {
-                        // Validate input format
-                        if (isValidNumberInput(txt)) {
-                          // Handle empty input
-                          if (txt === '') {
-                            setRows(prev => prev.map((r, i) => 
-                              i === idx ? {...r, volume: 0} : r
-                            ));
-                            return;
-                          }
-                          
-                          // Handle decimal point at end (like "1.")
-                          if (txt.endsWith('.')) {
-                            setRows(prev => prev.map((r, i) => 
-                              i === idx ? {...r, volume: parseFloat(txt)} : r
-                            ));
-                            return;
-                          }
-                          
-                          const num = parseFloat(txt);
-                          if (!isNaN(num)) {
-                            setRows(prev => prev.map((r, i) => 
-                              i === idx ? {...r, volume: num} : r
-                            ));
-                          }
-                        }
+                        if (!isValidNumberInput(txt)) return;      // refuse bad chars
+
+                        setRows(prev => prev.map((r, i) =>
+                          i === idx ? { ...r, volStr: txt } : r
+                        ));
                       }}
                       onBlur={() => {
                         setRows(prev => prev.map((r, i) => {
-                          if (i === idx) {
-                            let newValue = r.volume;
-                            
-                            // Ensure value is within range
-                            newValue = Math.max(0.25, Math.min(99.75, newValue));
-                            
-                            // Round to nearest 0.25
-                            newValue = Math.round(newValue * 4) / 4;
-                            
-                            return {...r, volume: newValue};
+                          if (i !== idx) return r;
+
+                          const raw = r.volStr ?? '';
+                          const num = parseFloat(raw);
+
+                          // If the user left it empty or just ".", keep the old volume
+                          if (isNaN(num)) {
+                            return { ...r, volStr: String(r.volume) };
                           }
-                          return r;
+
+                          // Clamp & round to nearest 0.25
+                          const clamped = Math.max(0.25, Math.min(99.75, num));
+                          const rounded = Math.round(clamped * 4) / 4;
+
+                          return { ...r, volume: rounded, volStr: String(rounded) };
                         }));
                       }}
                       maxLength={5}
