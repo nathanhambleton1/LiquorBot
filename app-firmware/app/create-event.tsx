@@ -831,22 +831,29 @@ export default function EventsScreen(){
           onPress={() => setShowTimeInfo(false)}
         >
           <View style={styles.infoPopup}>
-            <Text style={styles.infoTitle}>Event Timing Information</Text>
-            <Text style={styles.infoText}>
-              The start time indicates when the Liquorbot will unlock and begin serving drinks.
-              {"\n\n"}
-              The end time is when the device will automatically lock and stop serving.
-              {"\n\n"}
-              For multi-day events, the device will remain active continuously even if the event 
-              spans multiple calendar days. Note that events can be longer than 24 hours.
-            </Text>
-            <TouchableOpacity 
-              style={styles.infoClose}
-              onPress={() => setShowTimeInfo(false)}
-            >
-              <Ionicons name="close" size={24} color="#DFDCD9" />
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.infoTitle}>Event Timing Information</Text>
+
+          <Text style={styles.infoText}>
+            • <Text style={{ fontWeight: 'bold' }}>Start time</Text> – when LiquorBot unlocks and begins serving.{'\n\n'}
+            • <Text style={{ fontWeight: 'bold' }}>End time</Text> – when it locks again and stops serving.{'\n\n'}
+            If you pick an end-time that is{' '}
+            <Text style={{ fontStyle: 'italic' }}>earlier</Text> than the start-time
+            (for example 6 PM → 1 AM), the app automatically switches the event to{' '}
+            <Text style={{ fontWeight: 'bold' }}>Multi-day</Text> and pre-fills the
+            second date with the following day.{'\n\n'}
+            Turning <Text style={{ fontWeight: 'bold' }}>Multi-day</Text> back off
+            keeps your chosen end-time <Text style={{ fontStyle: 'italic' }}>unless</Text>{' '}
+            it would now be earlier than the start-time—in that case the app safely
+            bumps it to <Text style={{ fontWeight: 'bold' }}>11 : 59 PM</Text>.
+          </Text>
+
+          <TouchableOpacity
+            style={styles.infoClose}
+            onPress={() => setShowTimeInfo(false)}
+          >
+            <Ionicons name="close" size={24} color="#DFDCD9" />
+          </TouchableOpacity>
+        </View>
         </TouchableOpacity>
       </Modal>
 
