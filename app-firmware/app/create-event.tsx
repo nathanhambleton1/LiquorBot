@@ -175,7 +175,7 @@ export function TimePickerModal({
 
   /* Card geometry (same pop-up position you already calculate) */
   const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-  const CARD_W = 320;
+  const CARD_W = 280;
   const CARD_H = Platform.OS === 'ios' ? 200 : 250;
 
   const rawLeft = anchor.x + anchor.width / 2 - CARD_W / 2;
@@ -193,20 +193,23 @@ export function TimePickerModal({
         onPress={() => { commit(date); onClose(); }}
       />
       <View style={[styles.card, { width: CARD_W, height: CARD_H, left, top }]}>
+        {/* 1️⃣ keep the picker first so it’s “under” the close-icon */}
+        <DateTimePicker
+          value={date}
+          mode="time"
+          display={Platform.OS === 'ios' ? 'spinner' : 'clock'}
+          minuteInterval={30}
+          onChange={(_, d) => d && setDate(d)}
+          onTouchEnd={() => { commit(date); if (Platform.OS !== 'ios') onClose(); }}
+          textColor="#DFDCD9"
+        />
+
+        {/* 2️⃣ then the close button -- now it’s the top-most touchable */}
         <TouchableOpacity
           style={styles.closeIcon}
           onPress={() => { commit(date); onClose(); }}>
           <Ionicons name="close" size={22} color="#DFDCD9" />
         </TouchableOpacity>
-        <DateTimePicker
-          value={date}
-          mode="time"
-          display={Platform.OS === 'ios' ? 'spinner' : 'clock'}
-          minuteInterval={30}          // keeps your 00 / 30 steps
-          onChange={(_, d) => d && setDate(d)}
-          onTouchEnd={() => { commit(date); if (Platform.OS !== 'ios') onClose(); }}
-          textColor="#DFDCD9"          // keeps the dark-theme look (iOS only)
-        />
       </View>
     </Modal>
   );
@@ -1053,7 +1056,7 @@ const styles = StyleSheet.create({
   infoClose:        { position: 'absolute', top: 12, right: 12, padding: 4 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#141414' },
   deviceIdText:     { color: '#4F4F4F', fontSize: 12, textAlign: 'center', marginTop: 16 },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#0009' },
-  card:     { position: 'absolute', backgroundColor: '#1F1F1F', borderRadius: 16, overflow: 'hidden', justifyContent: 'center', },
-  closeIcon: { position: 'absolute', top: 6, right: 6, padding: 6, },
+  backdrop:         { ...StyleSheet.absoluteFillObject, backgroundColor: '#0009' },
+  card:             { position: 'absolute', backgroundColor: '#1F1F1F', borderRadius: 16, overflow: 'hidden', justifyContent: 'center', },
+  closeIcon:        { position: 'absolute', top: 6, right: 6, padding: 6, zIndex: 10, elevation: 10 },
 });
