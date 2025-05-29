@@ -174,30 +174,37 @@ export function TimePickerModal({
   if (!visible || !anchor) return null;
 
   /* Card geometry (same pop-up position you already calculate) */
+  const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
   const CARD_W = 220;
   const CARD_H = Platform.OS === 'ios' ? 200 : 250;
-  const left = anchor.x + anchor.width / 2 - CARD_W / 2;
-  const top  = anchor.y + anchor.height / 2 - CARD_H / 2;
+
+  const rawLeft = anchor.x + anchor.width / 2 - CARD_W / 2;
+  const rawTop  = anchor.y + anchor.height / 2 - CARD_H / 2;
+
+  // keep 8 px padding all round
+  const left = Math.max(8, Math.min(SCREEN_W - CARD_W - 8, rawLeft));
+  const top  = Math.max(8, Math.min(SCREEN_H - CARD_H - 8, rawTop));
 
   return (
     <Modal transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity
         style={styles.backdrop}
         activeOpacity={1}
-        onPress={onClose}
+        onPress={() => { commit(date); onClose(); }}
       />
       <View style={[styles.card, { width: CARD_W, height: CARD_H, left, top }]}>
+        <TouchableOpacity
+          style={styles.closeIcon}
+          onPress={() => { commit(date); onClose(); }}>
+          <Ionicons name="close" size={22} color="#DFDCD9" />
+        </TouchableOpacity>
         <DateTimePicker
           value={date}
           mode="time"
           display={Platform.OS === 'ios' ? 'spinner' : 'clock'}
           minuteInterval={30}          // keeps your 00 / 30 steps
           onChange={(_, d) => d && setDate(d)}
-          onTouchEnd={() => {
-            /* iOS finishes selection on scroll-end; Android fires instantly */
-            commit(date);
-            if (Platform.OS !== 'ios') onClose();
-          }}
+          onTouchEnd={() => { commit(date); if (Platform.OS !== 'ios') onClose(); }}
           textColor="#DFDCD9"          // keeps the dark-theme look (iOS only)
         />
       </View>
@@ -1048,4 +1055,5 @@ const styles = StyleSheet.create({
   deviceIdText:     { color: '#4F4F4F', fontSize: 12, textAlign: 'center', marginTop: 16 },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#0009' },
   card:     { position: 'absolute', backgroundColor: '#1F1F1F', borderRadius: 16, overflow: 'hidden', justifyContent: 'center', },
+  closeIcon: { position: 'absolute', top: 6, right: 6, padding: 6, },
 });
