@@ -375,17 +375,23 @@ export default function EventsScreen(){
   }
   const toggleMultiDay = () => {
     LayoutAnimation.easeInEaseOut();
+
     if (multiDay) {
-      /* turning OFF → same-day event finishes at 23:59 and shares the start-date */
+      /* 🔽 turning OFF */
       setMD(false);
-      setED('');
-      setET('23:59');
+      setED('');                           // hide the second date box
+
+      /* only auto-fix if end-time ≤ start-time */
+      if (timeToMins(endTime) <= timeToMins(startTime)) {
+        setET('23:59');
+      }
     } else {
-      /* turning ON → if end-time is earlier than start-time default to next day */
-      if (!endDate) setED(nextDay(startDate || today));
+      /* 🔼 turning ON */
+      if (!endDate) setED(nextDay(startDate || today));  // pre-fill “tomorrow”
       setMD(true);
     }
   };
+
   const removeDrink = (id:string)  => setMenu(m => m.filter(d => d.id !== id));
 
   /* auto-close ingredient list */
