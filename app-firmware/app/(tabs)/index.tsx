@@ -184,14 +184,14 @@ export default function Index() {
   return (
     <ImageBackground
       source={require('@/assets/images/home-background.jpg')}
-      style={[styles.background, { backgroundColor: '#1F1F1F' }]}
+      style={[styles.background, { backgroundColor: '#1F1F1F' }, ]}
       resizeMode="cover"
     >
       {/* Device-Settings button — ADMIN only */}
       {isAdmin && (
         <View style={styles.wifiIconContainer}>
           <TouchableOpacity onPress={() => router.push('/device-settings')}>
-            <Ionicons name="hardware-chip" size={36} color="#FFFFFF" />
+            <Ionicons name="hardware-chip" size={36} color="#DFDCD9" />
           </TouchableOpacity>
         </View>
       )}
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
   tileTitle: { color: '#DFDCD9', fontSize: 16, fontWeight: '600', lineHeight: 18 },
   tileSubtext: { color: 'rgba(223, 220, 217, 0.8)', fontSize: 12, fontWeight: '300', lineHeight: 14 },
   glowOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255, 255, 255, 0.05)' },
-  background: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  background: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1F1F1F' },
   overlay: { position: 'absolute', top: 100, width: '100%', paddingLeft: 20 },
   title: { fontSize: 48, color: '#DFDCD9', fontWeight: 'bold' },
   connectionRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
