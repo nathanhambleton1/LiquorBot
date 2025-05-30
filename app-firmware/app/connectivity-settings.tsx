@@ -11,7 +11,7 @@ import React, {
 import {
   View, StyleSheet, TouchableOpacity, Text, FlatList, Modal,
   PermissionsAndroid, Platform, ActivityIndicator, TextInput,
-  Alert, Animated, RefreshControl,
+  Alert, Animated, RefreshControl, Linking,
 } from 'react-native';
 import Ionicons                      from '@expo/vector-icons/Ionicons';
 import { BleManager, BleError, Characteristic } from 'react-native-ble-plx';
@@ -45,6 +45,7 @@ export default function ConnectivitySettings() {
   const [isScanning, setIsScanning]           = useState(false);
   const [connectedDevice, setConnectedDevice] = useState<any | null>(null);
   const [currentConnectingId, setCurrentConnectingId] = useState<string | null>(null);
+  const hasShownBtOffAlertRef = { current: false };
 
   /*──────── Wi-Fi modal ──────*/
   const [wifiModalVisible, setWifiModalVisible] = useState(false);
@@ -109,11 +110,42 @@ export default function ConnectivitySettings() {
 
   useEffect(() => {
     const sub = getManager().onStateChange(
-      (s) => { if (s === 'PoweredOn') scanForDevices(); else {
-        getManager().stopDeviceScan(); setBleDevices([]); setIsScanning(false);
-      } }, true,
+      (state) => {
+        if (state === 'PoweredOn') {
+          hasShownBtOffAlertRef.current = false;   // reset so future off → on → off still shows
+          scanForDevices();
+        } else {
+          getManager().stopDeviceScan();
+          setBleDevices([]);
+          setIsScanning(false);
+
+          // ─── iOS-only helper popup ────────────────────────────────
+          if (
+            Platform.OS === 'ios' &&
+            state === 'PoweredOff' &&
+            !hasShownBtOffAlertRef.current
+          ) {
+            hasShownBtOffAlertRef.current = true;
+            Alert.alert(
+              'Bluetooth is Off',
+              'LiquorBot needs Bluetooth to pair. Please enable Bluetooth in Control Center or Settings.',
+              [
+                { text: 'OK', style: 'default' },
+                {
+                  text: 'Open Settings',
+                  onPress: () => Linking.openURL('App-Prefs:root=Bluetooth'),
+                },
+              ],
+            );
+          }
+        }
+      },
+      true,
     );
-    return () => { sub.remove(); getManager().stopDeviceScan(); };
+    return () => {
+      sub.remove();
+      getManager().stopDeviceScan();
+    };
   }, [scanForDevices]);
 
   /*──────── Quick hand-shake (device already on Wi-Fi) ─────*/
