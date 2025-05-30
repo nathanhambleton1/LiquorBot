@@ -74,7 +74,7 @@ export default function SignIn() {
     >
       <ImageBackground
         source={require('@/assets/images/dark-gradient.png')}
-        style={styles.background}
+        style={[styles.background, { backgroundColor: '#141414' }]}
         resizeMode="cover"
         blurRadius={5}
       >
