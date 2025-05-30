@@ -148,7 +148,7 @@ export default function HelpPopup() {
         Need more help? Check our&nbsp;
         <Text style={styles.link}>full documentation</Text>
         &nbsp;or email&nbsp;
-        <Text style={styles.link}>support@liquorbot.io</Text>.
+        <Text style={styles.link}>nhambleton03@gmail.com</Text>.
       </Text>
     </ScrollView>
   );

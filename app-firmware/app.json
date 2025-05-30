@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "app-firmware",
-    "slug": "app-firmware",
+    "name": "LiquorBot",
+    "slug": "liquorbot",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.appfirmware",
+      "bundleIdentifier": "com.nathanhambleton.liquorbot",
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "LiquorBot needs Bluetooth to discover and connect to your LiquorBot dispenser.",
         "NSBluetoothPeripheralUsageDescription": "LiquorBot uses Bluetooth to communicate with your LiquorBot dispenser."
