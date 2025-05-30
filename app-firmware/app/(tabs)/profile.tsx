@@ -12,6 +12,7 @@ import {
   Dimensions,
   Image,
   PanResponder,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -277,7 +278,13 @@ export default function ProfileScreen() {
     }
   };
 
-  if (!profileLoaded) return null;
+  if (!profileLoaded) {
+    return (
+      <View style={[styles.container, {justifyContent: 'center', alignItems: 'center'}]}>
+        <ActivityIndicator size="large" color="#CE975E" />
+      </View>
+    );
+  }
 
   // ────────────────────────── RENDER ───────────────────────────────────────
   return (

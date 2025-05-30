@@ -24,8 +24,6 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient }   from 'expo-linear-gradient';
-import Ionicons             from '@expo/vector-icons/Ionicons';
-
 import { Amplify }           from 'aws-amplify';
 import { fetchAuthSession }  from '@aws-amplify/auth';
 import { getUrl }            from 'aws-amplify/storage';
@@ -200,7 +198,7 @@ export default function SessionLoading(): ReactElement {
 
 /* ───────────────  Styles  ─────────────── */
 const styles = StyleSheet.create({
-  flex:         { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  flex:         { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: BG_BTM, },
   glass:        { width: GLASS_W, height: GLASS_H, borderWidth: 4, borderColor: '#DFDCD9', borderRadius: 14, overflow: 'hidden', position: 'relative', backgroundColor: '#111', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 8, elevation: 8 },
   fill:         { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: FILL_CLR },
   percentText:  { position: 'absolute', top: GLASS_H / 2 - 16, width: '100%', textAlign: 'center', fontSize: 30, fontWeight: 'bold', color: '#DFDCD9' },

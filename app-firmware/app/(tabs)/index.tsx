@@ -174,6 +174,12 @@ export default function Index() {
     }
   }, []); // run once
 
+  if (eventsLoading) {
+    return (
+      <View style={[styles.background, { backgroundColor: '#1F1F1F' }]} />
+    );
+  }
+
   /* ───────────────────────── UI ───────────────────────── */
   return (
     <ImageBackground
