@@ -35,9 +35,7 @@ import config        from '../../src/amplifyconfiguration.json';
 
 // GraphQL & Auth
 import { generateClient } from 'aws-amplify/api';
-import {
-  createLikedDrink, deleteLikedDrink, createPouredDrink,
-} from '../../src/graphql/mutations';
+import { createLikedDrink, deleteLikedDrink, createPouredDrink, } from '../../src/graphql/mutations';
 import { listLikedDrinks } from '../../src/graphql/queries';
 import { getCurrentUser }  from 'aws-amplify/auth';
 import { getUrl }          from 'aws-amplify/storage';
@@ -613,6 +611,10 @@ export default function MenuScreen() {
   }, []);
 
   useEffect(() => {
+    if (!isAdmin) setOnlyMakeable(true);   // force ON once we know the role
+  }, [isAdmin]);
+
+  useEffect(() => {
     const subscription = pubsub.subscribe({
       topics: [`liquorbot/liquorbot${liquorbotId}/publish`],
     }).subscribe({
@@ -628,6 +630,7 @@ export default function MenuScreen() {
   // Load saved filter options on mount
   useEffect(() => {
     (async () => {
+      if (!isAdmin) return;
       try {
         const savedFilters = await AsyncStorage.getItem('filterOptions');
         if (savedFilters) {
@@ -645,6 +648,7 @@ export default function MenuScreen() {
   // Save filter options whenever they change
   useEffect(() => {
     (async () => {
+      if (!isAdmin) return;
       try {
         const filterOptions = JSON.stringify({ onlyMakeable, alphabetical, onlyCustom });
         await AsyncStorage.setItem('filterOptions', filterOptions);
@@ -957,16 +961,18 @@ export default function MenuScreen() {
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
-        <TouchableOpacity
-          onPress={() => setFilterModalVisible(true)}
-          style={styles.filterIcon}
-        >
-          <Ionicons
-            name="funnel-outline"
-            size={20}
-            color={onlyMakeable ? '#CE975E' : '#4F4F4F'}
-          />
-        </TouchableOpacity>
+        {isAdmin && (                               // ⬅️ wrap the icon
+          <TouchableOpacity
+            onPress={() => setFilterModalVisible(true)}
+            style={styles.filterIcon}
+          >
+            <Ionicons
+              name="funnel-outline"
+              size={20}
+              color={onlyMakeable ? '#CE975E' : '#4F4F4F'}
+            />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* ------------ DRINK GRID ------------ */}
@@ -980,7 +986,7 @@ export default function MenuScreen() {
         {renderedDrinks.length === 0 ? (
           <View style={styles.noDrinksContainer}>
             <Text style={styles.noDrinksText}>
-              Oops, no drinks here! Check your filters and connection.
+              Oops, no drinks here! Check your filters, internet connection, or wait for an event to start.
             </Text>
           </View>
         ) : (
@@ -1003,58 +1009,59 @@ export default function MenuScreen() {
         )}
       </ScrollView>
 
-      {/* ------------ FILTER POPUP ------------ */}
-      <Modal
-        visible={filterModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setFilterModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.filterModal}>
-            <TouchableOpacity
-              style={styles.modalCloseButton}
-              onPress={() => setFilterModalVisible(false)}
-            >
-              <Ionicons name="close" size={24} color="#DFDCD9" />
-            </TouchableOpacity>
-            <Text style={styles.filterModalTitle}>Filter Options</Text>
-            <View style={styles.filterRow}>
-              <Text style={styles.filterLabel}>
-                Show only makeable drinks
-              </Text>
-              <Switch
-                value={onlyMakeable}
-                onValueChange={setOnlyMakeable}
-                trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
-                thumbColor="#DFDCD9"
-              />
-            </View>
-            <View style={styles.filterRow}>
-              <Text style={styles.filterLabel}>Sort drinks alphabetically</Text>
-              <Switch
-                value={alphabetical}
-                onValueChange={setAlphabetical}
-                trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
-                thumbColor="#DFDCD9"
-              />
-            </View>
-            <View style={styles.filterRow}>
-              <Text style={styles.filterLabel}>Show only my custom drinks</Text>
-              <Switch
-                value={onlyCustom}
-                onValueChange={setOnlyCustom}
-                trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
-                thumbColor="#DFDCD9"
-              />
+  {/* ------------ FILTER POPUP ------------ */}
+  {isAdmin && (
+        <Modal
+          visible={filterModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setFilterModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.filterModal}>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setFilterModalVisible(false)}
+              >
+                <Ionicons name="close" size={24} color="#DFDCD9" />
+              </TouchableOpacity>
+
+              <Text style={styles.filterModalTitle}>Filter Options</Text>
+
+              <View style={styles.filterRow}>
+                <Text style={styles.filterLabel}>Show only makeable drinks</Text>
+                <Switch
+                  value={onlyMakeable}
+                  onValueChange={setOnlyMakeable}
+                  trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
+                  thumbColor="#DFDCD9"
+                />
+              </View>
+              <View style={styles.filterRow}>
+                <Text style={styles.filterLabel}>Sort drinks alphabetically</Text>
+                <Switch
+                  value={alphabetical}
+                  onValueChange={setAlphabetical}
+                  trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
+                  thumbColor="#DFDCD9"
+                />
+              </View>
+              <View style={styles.filterRow}>
+                <Text style={styles.filterLabel}>Show only my custom drinks</Text>
+                <Switch
+                  value={onlyCustom}
+                  onValueChange={setOnlyCustom}
+                  trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
+                  thumbColor="#DFDCD9"
+                />
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
-    </View>
-  );
-}
-
+        </Modal>
+      )}
+    </View> 
+  ); 
+}     
 // -------------------------------- STYLES --------------------------------
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -1118,15 +1125,6 @@ const styles = StyleSheet.create({
   buttonArea: { width: '100%', alignItems: 'center', position: 'relative' },
   statusMessageOverlay: { position: 'absolute', top: '100%', marginTop: -12, fontSize: 10, textAlign: 'center' },
   editButton: { position: 'absolute', top: 10, left: 45, zIndex: 2 },
-  noDrinksContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  noDrinksText: {
-    color: '#4f4f4f',
-    fontSize: 12,
-    textAlign: 'center',
-  },
+  noDrinksContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30, },
+  noDrinksText: { color: '#4f4f4f', fontSize: 12, textAlign: 'center', },
 });

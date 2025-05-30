@@ -326,7 +326,6 @@ export default function Index() {
       </View>
     </ImageBackground>
   );
-
 }
 
 /* ───────────────────────── styles ───────────────────────── */
