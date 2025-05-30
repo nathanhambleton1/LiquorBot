@@ -1,4 +1,4 @@
-package com.anonymous.appfirmware
+package com.nathanhambleton.liquorbot
 
 import android.app.Application
 import android.content.res.Configuration

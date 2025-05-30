@@ -20,19 +20,29 @@
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "LiquorBot needs Bluetooth to discover and connect to your LiquorBot dispenser.",
         "NSBluetoothPeripheralUsageDescription": "LiquorBot uses Bluetooth to communicate with your LiquorBot dispenser."
+      },
+      "splash": {
+        "image": "./assets/images/home-background.jpg",
+        "resizeMode": "contain",
+        "backgroundColor": "#141414"
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#141414"
       },
       "package": "com.nathanhambleton.liquorbot",
       "permissions": [
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_CONNECT"
-      ]
+      ],
+      "splash": {
+        "image": "./assets/images/home-background.jpg",
+        "resizeMode": "contain",
+        "backgroundColor": "#141414"
+      }
     },
     "web": {
       "bundler": "metro",
@@ -50,7 +60,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#141414"
         }
       ],
       "expo-asset"

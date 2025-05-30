@@ -1,4 +1,4 @@
-package com.anonymous.appfirmware
+package com.nathanhambleton.liquorbot
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
