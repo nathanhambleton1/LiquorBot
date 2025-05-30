@@ -415,7 +415,7 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = com.nathanhambleton.liquorbot;
-				PRODUCT_NAME = appfirmware;
+				PRODUCT_NAME = "LiquorBot";
 				SWIFT_OBJC_BRIDGING_HEADER = "appfirmware/appfirmware-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -450,7 +450,7 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = com.nathanhambleton.liquorbot;
-				PRODUCT_NAME = appfirmware;
+				PRODUCT_NAME = "LiquorBot";
 				SWIFT_OBJC_BRIDGING_HEADER = "appfirmware/appfirmware-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
