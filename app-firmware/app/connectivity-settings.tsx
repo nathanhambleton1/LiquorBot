@@ -132,7 +132,7 @@ export default function ConnectivitySettings() {
               [
                 { text: 'OK', style: 'default' },
                 {
-                  text: 'Open Settings',
+                  text: 'Settings',
                   onPress: () => Linking.openURL('App-Prefs:root=Bluetooth'),
                 },
               ],
