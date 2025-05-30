@@ -8,6 +8,12 @@
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "primaryColor": "#CE975E",
+    "splash": {
+      "image": "./assets/images/home-background.jpg",
+      "resizeMode": "contain",
+      "backgroundColor": "#141414"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nathanhambleton.liquorbot",
@@ -21,7 +27,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.anonymous.appfirmware",
+      "package": "com.nathanhambleton.liquorbot",
       "permissions": [
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
