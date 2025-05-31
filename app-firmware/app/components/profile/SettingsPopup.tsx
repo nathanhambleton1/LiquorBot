@@ -1,8 +1,12 @@
 // ---------------------------------------------------------------------------
-// SettingsPopup – user‑tweakable preferences (kept locally with AsyncStorage)
+// SettingsPopup – user-tweakable preferences (kept locally with AsyncStorage)
 // ---------------------------------------------------------------------------
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView, Platform, PermissionsAndroid, Alert } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView,
+  Platform, PermissionsAndroid, Alert, Animated,
+} from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PushNotificationIOS from '@react-native-community/push-notification-ios';
 import { deleteUser } from '@aws-amplify/auth';
@@ -14,12 +18,29 @@ const KEYS = {
 };
 
 export default function SettingsPopup({ signOut }: { signOut: () => void }) {
-  // ------------- state -------------
+  // ───────────────────────────── state ─────────────────────────────
   const [notifications, setNotifications] = useState(false);
   const [useWifi,       setUseWifi]       = useState(false);
   const [units,         setUnits]         = useState<'oz' | 'ml'>('oz');
 
-  // ------------- permission helpers -------------
+  // ─────────── Animated values for the Danger-Zone dropdown ───────────
+  const [isDangerCollapsed, setIsDangerCollapsed] = useState(true);
+  const arrowAnim   = useRef(new Animated.Value(0)).current;      // rotates chevron
+
+  const toggleDanger = () => {
+    const toVal = isDangerCollapsed ? 1 : 0;
+    Animated.parallel([
+      Animated.timing(arrowAnim,   { toValue: toVal, duration: 200, useNativeDriver: true }),
+    ]).start();
+    setIsDangerCollapsed(!isDangerCollapsed);
+  };
+
+  const rotateInterpolate = arrowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+
+  // ───────────────── permission helpers ─────────────────
   const checkNotificationPermission = async (): Promise<boolean> => {
     if (Platform.OS === 'ios') {
       const status = await new Promise<Record<string, boolean>>((resolve) => {
@@ -28,51 +49,49 @@ export default function SettingsPopup({ signOut }: { signOut: () => void }) {
         });
       });
       return status.alert === true;
-    } else if (Platform.OS === 'android') {
-      const apiLevel = Platform.Version;
-      if (typeof apiLevel === 'number' && apiLevel >= 33) {
-        const granted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
-        return granted;
+    }
+    if (Platform.OS === 'android') {
+      const api = Platform.Version as number;
+      if (api >= 33) {
+        return PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
       }
-      return true; // Android <13 doesn't require permission
+      return true; // Android <13
     }
     return false;
   };
 
   const requestNotificationPermission = async (): Promise<boolean> => {
     if (Platform.OS === 'ios') {
-      const result = await PushNotificationIOS.requestPermissions();
-      return result.alert === true;
-    } else if (Platform.OS === 'android') {
-      const apiLevel = Platform.Version;
-      if (typeof apiLevel === 'number' && apiLevel >= 33) {
-        const granted = await PermissionsAndroid.request(
+      const res = await PushNotificationIOS.requestPermissions();
+      return res.alert === true;
+    }
+    if (Platform.OS === 'android') {
+      const api = Platform.Version as number;
+      if (api >= 33) {
+        const res = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
         );
-        return granted === PermissionsAndroid.RESULTS.GRANTED;
+        return res === PermissionsAndroid.RESULTS.GRANTED;
       }
-      return true; // Android <13 doesn't require permission
+      return true;
     }
     return false;
   };
 
-  // ------------- persistence -------------
+  // ───────────────────── persistence helpers ─────────────────────
+  const save = (k: string, v: string) => AsyncStorage.setItem(k, v).catch(()=>{});
   const loadPrefs = async () => {
     try {
       const vals = await AsyncStorage.multiGet(Object.values(KEYS));
       const prefs = {
         notifications: vals.find(([k]) => k === KEYS.notifications)?.[1] === '1',
-        useWifi: vals.find(([k]) => k === KEYS.useWifi)?.[1] === '1',
-        units: vals.find(([k]) => k === KEYS.units)?.[1] === 'ml' ? 'ml' : 'oz',
+        useWifi:       vals.find(([k]) => k === KEYS.useWifi)?.[1] === '1',
+        units:         vals.find(([k]) => k === KEYS.units)?.[1] === 'ml' ? 'ml' : 'oz',
       };
 
-      // Sync notifications with actual permission
-      if (prefs.notifications) {
-        const hasPermission = await checkNotificationPermission();
-        if (!hasPermission) {
-          prefs.notifications = false;
-          await save(KEYS.notifications, '0');
-        }
+      if (prefs.notifications && !(await checkNotificationPermission())) {
+        prefs.notifications = false;
+        await save(KEYS.notifications, '0');
       }
 
       setNotifications(prefs.notifications);
@@ -80,38 +99,32 @@ export default function SettingsPopup({ signOut }: { signOut: () => void }) {
       setUnits(prefs.units as 'oz' | 'ml');
     } catch {}
   };
+  useEffect(() => { loadPrefs(); }, []);
 
-  const save = (k: string, v: string) => AsyncStorage.setItem(k, v).catch(()=>{});
-
-  // ------------- notifications toggle handler -------------
+  // ────────── push-notifications toggle handler ──────────
   const handleNotificationsToggle = async (v: boolean) => {
-    setNotifications(v); // Optimistic UI update
+    setNotifications(v);  // optimistic
     try {
       if (v) {
-        const hasPermission = await checkNotificationPermission();
-        if (!hasPermission) {
-          const granted = await requestNotificationPermission();
-          if (!granted) {
-            setNotifications(false);
-            await save(KEYS.notifications, '0');
-            return;
-          }
+        if (!(await checkNotificationPermission()) &&
+            !(await requestNotificationPermission())) {
+          setNotifications(false);
+          await save(KEYS.notifications, '0');
+          return;
         }
         await save(KEYS.notifications, '1');
       } else {
         await save(KEYS.notifications, '0');
       }
-    } catch (error) {
-      setNotifications(!v); // Revert on error
+    } catch {
+      setNotifications(!v);
       await save(KEYS.notifications, v ? '0' : '1');
     }
   };
 
-  // ------------- initial load -------------
-  useEffect(() => { loadPrefs(); }, []);
-
-  // ------------- UI components -------------
-  const PrefRow = ({ label, value, onValueChange }: { label: string; value: boolean; onValueChange: (v:boolean)=>void }) => (
+  // ───────────────────── UI helpers ─────────────────────
+  const PrefRow = ({ label, value, onValueChange }:
+    { label: string; value: boolean; onValueChange: (v:boolean)=>void }) => (
     <View style={styles.row}>
       <Text style={styles.label}>{label}</Text>
       <Switch
@@ -127,7 +140,7 @@ export default function SettingsPopup({ signOut }: { signOut: () => void }) {
   const handleDeleteAccount = async () => {
     Alert.alert(
       'Delete Account?',
-      'This action is permanent and will erase all of your data. Are you sure?',
+      'This is permanent and will erase all of your data.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -135,8 +148,8 @@ export default function SettingsPopup({ signOut }: { signOut: () => void }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteUser();   // ⬅️ Cognito account & user data gone
-              signOut();            // force the local session to clear
+              await deleteUser();
+              signOut();
             } catch (e) {
               Alert.alert('Error', 'Account deletion failed. Please try again.');
               console.error(e);
@@ -147,6 +160,7 @@ export default function SettingsPopup({ signOut }: { signOut: () => void }) {
     );
   };
 
+  // ─────────────────────────── render ───────────────────────────
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
       <PrefRow
@@ -155,13 +169,15 @@ export default function SettingsPopup({ signOut }: { signOut: () => void }) {
         onValueChange={handleNotificationsToggle}
       />
       <PrefRow
-        label="Use Wi‑Fi Instead of Bluetooth"
+        label="Use Wi-Fi Instead of Bluetooth"
         value={useWifi}
         onValueChange={(v)=>{ setUseWifi(v); save(KEYS.useWifi, v?'1':'0'); }}
       />
 
       {/* units picker */}
-      <Text style={[styles.label, { marginTop: 25, marginBottom: 10 }]}>Default Measurement Units</Text>
+      <Text style={[styles.label, { marginTop: 25, marginBottom: 10 }]}>
+        Default Measurement Units
+      </Text>
       <View style={styles.unitRow}>
         {['oz', 'ml'].map((u) => (
           <TouchableOpacity
@@ -173,26 +189,67 @@ export default function SettingsPopup({ signOut }: { signOut: () => void }) {
           </TouchableOpacity>
         ))}
       </View>
-      {/* danger zone */}
-      <Text style={styles.dangerHeader}>Danger Zone</Text>
-      <TouchableOpacity style={styles.deleteBtn} onPress={handleDeleteAccount}>
-        <Text style={styles.deleteTxt}>Delete Account</Text>
-      </TouchableOpacity>
+
+      {/* ────────────── Danger Zone ────────────── */}
+      <View style={styles.dangerZoneContainer}>
+        {/* header / toggle */}
+        <TouchableOpacity
+          style={styles.dangerHeaderRow}
+          activeOpacity={0.8}
+          onPress={toggleDanger}
+        >
+          <Ionicons name="warning-outline" size={18} color="#ff7a7a" />
+          <Text style={styles.dangerZoneHeader}>Danger Zone</Text>
+          <Animated.View style={{ transform: [{ rotate: rotateInterpolate }] }}>
+            <Ionicons name="chevron-down" size={20} color="#ff7a7a" />
+          </Animated.View>
+        </TouchableOpacity>
+
+        {!isDangerCollapsed && (
+          <View style={styles.dangerContent}>
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={handleDeleteAccount}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="trash-outline" size={18} color="#DFDCD9" />
+              <Text style={styles.deleteButtonText}>Delete Account</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
     </ScrollView>
   );
 }
 
-// ---------------- styles ----------------
+// ─────────────────────────── styles ───────────────────────────
 const styles = StyleSheet.create({
+  // preference rows
   row:        { flexDirection:'row', justifyContent:'space-between', alignItems:'center',
                 backgroundColor:'#1F1F1F', padding:15, borderRadius:10, marginBottom:15 },
   label:      { color:'#DFDCD9', fontSize:16 },
-  unitRow:    { flexDirection:'row', justifyContent:'space-between' },
-  unitBtn:    { flex:1, paddingVertical:12, borderRadius:10, backgroundColor:'#1F1F1F', marginHorizontal:5,
-                alignItems:'center' },
-  unitBtnActive:{ backgroundColor:'#CE975E' },
-  unitText:   { color:'#DFDCD9', fontSize:16, fontWeight:'600' },
-  dangerHeader: { color:'#E57373', fontSize:14, marginTop:30, marginBottom:10, fontWeight:'600' },
-  deleteBtn:    { backgroundColor:'#420D0D', padding:15, borderRadius:10, alignItems:'center' },
-  deleteTxt:    { color:'#FF6B6B', fontSize:16, fontWeight:'700' },
+
+  // units picker
+  unitRow:          { flexDirection:'row', justifyContent:'space-between' },
+  unitBtn:          { flex:1, paddingVertical:12, borderRadius:10, backgroundColor:'#1F1F1F',
+                      marginHorizontal:5, alignItems:'center' },
+  unitBtnActive:    { backgroundColor:'#CE975E' },
+  unitText:         { color:'#DFDCD9', fontSize:16, fontWeight:'600' },
+
+  // danger zone container
+  dangerZoneContainer:{ marginTop:30, borderRadius:12, overflow:'hidden',
+                        borderWidth:1, borderColor:'#ff4a4a' },
+
+  // header
+  dangerHeaderRow:   { flexDirection:'row', alignItems:'center',
+                       justifyContent:'space-between', paddingVertical:14,
+                       paddingHorizontal:18, backgroundColor:'#2B1111' },
+  dangerZoneHeader:  { color:'#ff7a7a', fontSize:16, fontWeight:'bold', letterSpacing:0.5 },
+
+  // animated drop-down content
+  dangerContent:     { backgroundColor:'#190909', padding:18 },
+
+  deleteButton:      { flexDirection:'row', alignItems:'center', justifyContent:'center',
+                       backgroundColor:'#d44a4a', borderRadius:10, paddingVertical:14 },
+  deleteButtonText:  { color:'#DFDCD9', fontSize:16, fontWeight:'bold', marginLeft:6 },
 });
