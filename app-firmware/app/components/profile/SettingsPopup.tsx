@@ -2,9 +2,10 @@
 // SettingsPopup – user‑tweakable preferences (kept locally with AsyncStorage)
 // ---------------------------------------------------------------------------
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView, Platform, PermissionsAndroid } from 'react-native';
+import { View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView, Platform, PermissionsAndroid, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PushNotificationIOS from '@react-native-community/push-notification-ios';
+import { deleteUser } from '@aws-amplify/auth';
 
 const KEYS = {
   notifications: 'pref_notifications',
@@ -12,7 +13,7 @@ const KEYS = {
   units:         'pref_units',           // 'oz' | 'ml'
 };
 
-export default function SettingsPopup() {
+export default function SettingsPopup({ signOut }: { signOut: () => void }) {
   // ------------- state -------------
   const [notifications, setNotifications] = useState(false);
   const [useWifi,       setUseWifi]       = useState(false);
@@ -123,6 +124,29 @@ export default function SettingsPopup() {
     </View>
   );
 
+  const handleDeleteAccount = async () => {
+    Alert.alert(
+      'Delete Account?',
+      'This action is permanent and will erase all of your data. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteUser();   // ⬅️ Cognito account & user data gone
+              signOut();            // force the local session to clear
+            } catch (e) {
+              Alert.alert('Error', 'Account deletion failed. Please try again.');
+              console.error(e);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
       <PrefRow
@@ -149,6 +173,11 @@ export default function SettingsPopup() {
           </TouchableOpacity>
         ))}
       </View>
+      {/* danger zone */}
+      <Text style={styles.dangerHeader}>Danger Zone</Text>
+      <TouchableOpacity style={styles.deleteBtn} onPress={handleDeleteAccount}>
+        <Text style={styles.deleteTxt}>Delete Account</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -163,4 +192,7 @@ const styles = StyleSheet.create({
                 alignItems:'center' },
   unitBtnActive:{ backgroundColor:'#CE975E' },
   unitText:   { color:'#DFDCD9', fontSize:16, fontWeight:'600' },
+  dangerHeader: { color:'#E57373', fontSize:14, marginTop:30, marginBottom:10, fontWeight:'600' },
+  deleteBtn:    { backgroundColor:'#420D0D', padding:15, borderRadius:10, alignItems:'center' },
+  deleteTxt:    { color:'#FF6B6B', fontSize:16, fontWeight:'700' },
 });

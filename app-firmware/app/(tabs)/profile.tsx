@@ -238,7 +238,7 @@ export default function ProfileScreen() {
     { title: 'Liked Drinks', icon: 'heart-outline' as const },
      ...(isAdmin ? [{ title: 'My Drinks', icon: 'wine-outline' as const }] : []),
     { title: 'Pour History', icon: 'time-outline'  as const },
-    { title: 'Settings',      icon: 'settings-outline' as const },   // placeholders
+    { title: 'Settings',      icon: 'settings-outline' as const, extra: { signOut } },
     { title: 'Help',          icon: 'help-circle-outline' as const },
     { title: 'Sign Out',      icon: 'log-out-outline' as const },
   ];
@@ -270,7 +270,7 @@ export default function ProfileScreen() {
       case 'Pour History':
         return <PourHistoryPopup />;
       case 'Settings':
-        return <SettingsPopup />;
+        return <SettingsPopup signOut={signOut} />;
       case 'Help':
         return <HelpPopup />;
       default:
