@@ -32,8 +32,6 @@
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="myapp"/>
-        <data android:scheme="com.anonymous.appfirmware"/>
-        <data android:scheme="exp+app-firmware"/>
         <data android:scheme="com.nathanhambleton.liquorbot"/>
         <data android:scheme="exp+liquorbot"/>
       </intent-filter>
