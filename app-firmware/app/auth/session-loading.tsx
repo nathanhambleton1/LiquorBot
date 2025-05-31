@@ -1,10 +1,11 @@
 // -----------------------------------------------------------------------------
-// File: session-loading.tsx            (REPLACEMENT – 27 May 2025)
+// File: session-loading.tsx            (REPLACEMENT – 31 May 2025)
 // Purpose:  First-run splash that…
 //   • refreshes the Cognito token & caches group claims
 //   • pulls drinks/ingredients JSON from S3
 //   • pre-caches every drink image
-//   • shows a classy “glass-filling” animation with bubbles + shine
+//   • shows a horizontal loading bar with %
+//   • rotates feature cards (icon + fact) above the bar
 //   • drops you into /(tabs) when finished
 // -----------------------------------------------------------------------------
 import React, {
@@ -22,72 +23,71 @@ import {
   Easing,
   Image as RNImage,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { LinearGradient }   from 'expo-linear-gradient';
+import { LinearGradient } from 'expo-linear-gradient';
+import Ionicons           from '@expo/vector-icons/Ionicons';
+import { useRouter }      from 'expo-router';
+
 import { Amplify }           from 'aws-amplify';
 import { fetchAuthSession }  from '@aws-amplify/auth';
 import { getUrl }            from 'aws-amplify/storage';
 import AsyncStorage          from '@react-native-async-storage/async-storage';
-
-import config from '../../src/amplifyconfiguration.json';
+import config                from '../../src/amplifyconfiguration.json';
 Amplify.configure(config);
 
-/* ───────  S3 KEYS WE CARE ABOUT  ─────── */
+/* ───────  S3 KEYS  ─────── */
 const DRINKS_KEY      = 'drinkMenu/drinks.json';
 const INGREDIENTS_KEY = 'drinkMenu/ingredients.json';
 
-/* ────────────────  dims / colours  ──────────────── */
-const GLASS_W   = 140;
-const GLASS_H   = 260;
-const FILL_CLR  = '#CE975E';
+/* ─────────────── dims / colours ─────────────── */
+const BAR_W     = 280;
+const BAR_H     = 12;
+const BAR_BG    = '#2B2B2B';
+const BAR_FILL  = '#CE975E';
 const BG_TOP    = '#0e0e0e';
 const BG_BTM    = '#000';
+
+/* fun feature cards shown while we load */
+const FEATURES = [
+  { icon: 'beer-outline',    text: '50+ curated cocktails' },
+  { icon: 'timer-outline',   text: 'Under 15 s pour-time' },
+  { icon: 'people-outline',  text: 'Multi-user tab system' },
+  { icon: 'sparkles-outline',text: 'Self-cleaning cycles' },
+  { icon: 'add-circle-outline', text: 'Build your own recipes' },
+];
 
 export default function SessionLoading(): ReactElement {
   const router              = useRouter();
   const [pct, setPct]       = useState(0);          // 0 → 1
   const [status, setStatus] = useState('Starting…');
 
-  /* glass-fill animation */
-  const fillAnim = useRef(new Animated.Value(0)).current;
+  /* ────────── animated progress bar ────────── */
+  const progAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(fillAnim, {
+    Animated.timing(progAnim, {
       toValue: pct,
       duration: 350,
       easing: Easing.linear,
-      useNativeDriver: false,            // height animates
+      useNativeDriver: false,
     }).start();
-  }, [pct]);
+  }, [pct, progAnim]);
 
-  /* helper to bump % smoothly */
+  /* helper to bump % */
   const upd = (f: number) => setPct(prev => Math.min(prev + f, 1));
 
-  /* ────────────  bubble setup ──────────── */
-  type Bubble = { x: number; size: number; anim: Animated.Value };
-  const bubbles = useMemo<Bubble[]>(() =>
-    Array.from({ length: 10 }, () => ({
-      x: Math.random() * (GLASS_W - 24) + 12,
-      size: 4 + Math.random() * 8,
-      anim: new Animated.Value(0),
-    })),
-  []); // create once
-
-  /* kick off infinite bubble loops */
+  /* ────────── rotating feature cards ────────── */
+  const [cardIdx, setCardIdx]      = useState(0);
+  const fadeAnim                   = useRef(new Animated.Value(1)).current;
+  const cycleCard = () => {
+    Animated.sequence([
+      Animated.timing(fadeAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+    ]).start();
+    setCardIdx(i => (i + 1) % FEATURES.length);
+  };
   useEffect(() => {
-    bubbles.forEach((b, i) => {
-      const loop = () => {
-        b.anim.setValue(0);
-        Animated.timing(b.anim, {
-          toValue: 1,
-          duration: 3500 + Math.random() * 1500,
-          delay: i * 300,
-          useNativeDriver: false,
-          easing: Easing.linear,
-        }).start(loop);
-      };
-      loop();
-    });
-  }, [bubbles]);
+    const id = setInterval(cycleCard, 3000);
+    return () => clearInterval(id);
+  }, []);
 
   /* ----------------  MAIN BOOTSTRAP  ---------------- */
   useEffect(() => {
@@ -97,9 +97,7 @@ export default function SessionLoading(): ReactElement {
         setStatus('Refreshing session…');
         const session = await fetchAuthSession({ forceRefresh: true });
         const raw     = session.tokens?.idToken?.payload?.['cognito:groups'] ?? [];
-        const groups  = Array.isArray(raw)
-          ? raw.filter((g): g is string => typeof g === 'string')
-          : [];
+        const groups  = Array.isArray(raw) ? raw.filter((g): g is string => typeof g === 'string') : [];
         await AsyncStorage.setItem('userGroups', JSON.stringify(groups));
         upd(0.10);
 
@@ -109,15 +107,12 @@ export default function SessionLoading(): ReactElement {
           getUrl({ key: DRINKS_KEY }),
           getUrl({ key: INGREDIENTS_KEY }),
         ]);
-        const [drinksRes, ingRes] = await Promise.all([
-          fetch(drinksUrl.url),
-          fetch(ingUrl.url),
-        ]);
+        const [drinksRes, ingRes] = await Promise.all([ fetch(drinksUrl.url), fetch(ingUrl.url) ]);
         const drinksJson = await drinksRes.text();
         const ingJson    = await ingRes.text();
         await AsyncStorage.multiSet([
-          ['drinksJson',       drinksJson],
-          ['ingredientsJson',  ingJson   ],
+          ['drinksJson',      drinksJson],
+          ['ingredientsJson', ingJson   ],
         ]);
         upd(0.25);                           // cumulative = 0.35
 
@@ -137,7 +132,7 @@ export default function SessionLoading(): ReactElement {
         console.warn('session-loading:', err);
       } finally {
         setPct(1);
-        setTimeout(() => router.replace('/(tabs)'), 350); // tiny pause for eye-candy
+        setTimeout(() => router.replace('/(tabs)'), 350);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -148,49 +143,34 @@ export default function SessionLoading(): ReactElement {
 
   return (
     <LinearGradient colors={[BG_TOP, BG_BTM]} style={styles.flex}>
-      {/* stylised glass */}
-      <View style={styles.glass}>
-        {/* liquid */}
+      {/* feature card */}
+      <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
+        <Ionicons
+          name={FEATURES[cardIdx].icon as any}
+          size={28}
+          color={BAR_FILL}
+          style={{ marginRight: 10 }}
+        />
+        <Text style={styles.cardText}>{FEATURES[cardIdx].text}</Text>
+      </Animated.View>
+
+      {/* progress bar */}
+      <View style={styles.barWrap}>
         <Animated.View
           style={[
-            styles.fill,
+            styles.barFill,
             {
-              height: fillAnim.interpolate({
+              width: progAnim.interpolate({
                 inputRange : [0, 1],
                 outputRange: ['0%', '100%'],
               }),
             },
           ]}
-        >
-          {/* bubbles */}
-          {bubbles.map((b, idx) => (
-            <Animated.View
-              key={idx}
-              style={{
-                position     : 'absolute',
-                left         : b.x,
-                bottom       : b.anim.interpolate({
-                  inputRange : [0, 1],
-                  outputRange: [0, GLASS_H - 24],
-                }),
-                opacity      : b.anim.interpolate({
-                  inputRange : [0, 0.1, 0.9, 1],
-                  outputRange: [0, 0.85, 0.85, 0],
-                }),
-                width        : b.size,
-                height       : b.size,
-                borderRadius : b.size / 2,
-                backgroundColor: 'rgba(255,255,255,0.7)',
-              }}
-            />
-          ))}
-        </Animated.View>
-
-        {/* % text */}
-        <Text style={styles.percentText}>{percent}%</Text>
+        />
       </View>
 
-      {/* status */}
+      {/* percentage + status */}
+      <Text style={styles.percentText}>{percent}%</Text>
       <Text style={styles.statusText}>{status}</Text>
     </LinearGradient>
   );
@@ -198,9 +178,26 @@ export default function SessionLoading(): ReactElement {
 
 /* ───────────────  Styles  ─────────────── */
 const styles = StyleSheet.create({
-  flex:         { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: BG_BTM, },
-  glass:        { width: GLASS_W, height: GLASS_H, borderWidth: 4, borderColor: '#DFDCD9', borderRadius: 14, overflow: 'hidden', position: 'relative', backgroundColor: '#111', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 8, elevation: 8 },
-  fill:         { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: FILL_CLR },
-  percentText:  { position: 'absolute', top: GLASS_H / 2 - 16, width: '100%', textAlign: 'center', fontSize: 30, fontWeight: 'bold', color: '#DFDCD9' },
-  statusText:   { marginTop: 28, fontSize: 15, color: '#757575' },
+  flex:      { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
+  /* feature card */
+  card:      {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1B1B1B',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    marginBottom: 28,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+  },
+  cardText:  { color: '#DFDCD9', fontSize: 16, fontWeight: '600' },
+  /* progress bar */
+  barWrap:   { width: BAR_W, height: BAR_H, backgroundColor: BAR_BG, borderRadius: BAR_H / 2, overflow: 'hidden' },
+  barFill:   { height: '100%', backgroundColor: BAR_FILL },
+  percentText:{ marginTop: 12, fontSize: 18, color: '#DFDCD9', fontWeight: '700' },
+  statusText:{ marginTop: 4,  fontSize: 14, color: '#757575' },
 });

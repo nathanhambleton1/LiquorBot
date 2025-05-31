@@ -27,13 +27,9 @@ import { useLiquorBot } from '../components/liquorbot-provider';
 
 export default function TabLayout() {
   const { authStatus } = useAuthenticator((ctx) => [ctx.authStatus]);
+  const signedIn       = authStatus === 'authenticated';
   const { isAdmin }    = useLiquorBot();
   const insets         = useSafeAreaInsets();
-
-  // redirect to sign-in if not authenticated
-  if (authStatus !== 'authenticated') {
-    return <Redirect href="/auth/sign-in" />;
-  }
 
   return (
     <SAView edges={['left', 'right']} style={{ flex: 1, backgroundColor: 'transparent' }}>

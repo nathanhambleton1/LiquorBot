@@ -1,6 +1,7 @@
 // -----------------------------------------------------------------------------
-// File: events.tsx  (REPLACEMENT – 18 May 2025)
-// Shows only the user’s own / joined events and fixes invite-code joining.
+// File: events.tsx  (FIXED – 31 May 2025)
+// Shows only the user’s own / joined events and displays a guest prompt
+// without breaking the Rules of Hooks.
 // -----------------------------------------------------------------------------
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -8,22 +9,21 @@ import {
   ActivityIndicator, Alert, Platform, TextInput, ScrollView,
   Modal, Switch, Dimensions, LayoutAnimation,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import Ionicons                     from '@expo/vector-icons/Ionicons';
-import { generateClient }           from 'aws-amplify/api';
-import { fetchAuthSession }         from '@aws-amplify/auth';
-import * as Clipboard               from 'expo-clipboard'; // Import Clipboard API
-import { listEvents, eventsByCode, } from '../../src/graphql/queries';
-import { deleteEvent, joinEvent, leaveEvent,} from '../../src/graphql/mutations';
-import { useLiquorBot }             from '../components/liquorbot-provider';
-import { getUrl } from 'aws-amplify/storage';
-import { getCustomRecipe } from '../../src/graphql/queries';
-import { useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import Ionicons                       from '@expo/vector-icons/Ionicons';
+import { generateClient }             from 'aws-amplify/api';
+import { fetchAuthSession }           from '@aws-amplify/auth';
+import * as Clipboard                 from 'expo-clipboard';
+import { listEvents, eventsByCode, getCustomRecipe } from '../../src/graphql/queries';
+import { deleteEvent, joinEvent, leaveEvent } from '../../src/graphql/mutations';
+import { useLiquorBot }               from '../components/liquorbot-provider';
+import { getUrl }                     from 'aws-amplify/storage';
+import { Hub } from 'aws-amplify/utils';
 
 const client = generateClient();
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-/* ---------- local helpers ---------- */
+/* ---------- helpers ---------- */
 const eventFilter = (user: string) => ({
   or: [
     { owner:       { eq: user } },
@@ -48,64 +48,79 @@ interface Event {
 }
 
 export default function EventManager() {
-  /* navigation & device context */
-  const router                 = useRouter();
+  const router  = useRouter();
+  const params  = useLocalSearchParams<{ join?: string }>();
   const { liquorbotId, temporaryOverrideId, restorePreviousId } = useLiquorBot();
-  const params = useLocalSearchParams<{ join?: string }>();
 
-  /* UI state */
-  const [events, setEvents]                 = useState<Event[]>([]);
-  const [loading, setLoading]               = useState(true);
-  const [filter, setFilter]                 = useState<'all'|'upcoming'|'current'|'past'>('all');
-  const [searchQuery, setSearchQuery]       = useState('');
-  const [alphabetical, setAlphabetical]     = useState(false);
-  const [filterModalVisible, setFilterModalVisible] = useState(false);
+  /* ---------------- AUTH ---------------- */
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [isAdmin,      setIsAdmin]    = useState(false);
 
-  /* join-modal */
-  const [joinModalVisible, setJoinModalVisible] = useState(false);
-  const [inviteCodeInput, setInviteCodeInput]   = useState('');
-  const [joinLoading, setJoinLoading]           = useState(false);
-  const [joinError, setJoinError]               = useState<string|null>(null);
-
-  // Existing state
-  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
-  const [standardDrinks, setStandardDrinks] = useState<Array<{ id: number; name: string }>>([]);
-  const [customRecipes, setCustomRecipes] = useState<Array<{ id: string; name: string }>>([]);
-  const [processingEvents, setProcessingEvents] = useState<string[]>([]);
-
-  /* who am I? */
-  const [currentUser, setCurrentUser] = useState<string|null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  // keep currentUser live – runs on mount AND on every auth change
   useEffect(() => {
-    (async () => {
+    const readUser = async () => {
       try {
         const ses = await fetchAuthSession();
         const u   = ses.tokens?.idToken?.payload['cognito:username'];
         setCurrentUser(typeof u === 'string' ? u : null);
+
         const groups = ses.tokens?.idToken?.payload['cognito:groups'] as string[] | undefined;
         setIsAdmin(groups?.includes('ADMIN') ?? false);
       } catch { setCurrentUser(null); }
-    })();
+    };
+
+    readUser();                // initial
+
+    const unsubscribe = Hub.listen('auth', ({ payload }) => {
+      if (['signedIn', 'signedOut', 'tokenRefresh'].includes(payload.event)) {
+        readUser();            // refresh user / groups
+        setEvents([]);         // clear stale list instantly
+      }
+  });
+    return () => unsubscribe();
   }, []);
 
-  /* check for query params */
+  /* ---------------- STATE ---------------- */
+  const [events, setEvents]                       = useState<Event[]>([]);
+  const [loading, setLoading]                     = useState(true);
+  const [filter, setFilter]                       = useState<'all'|'upcoming'|'current'|'past'>('all');
+  const [searchQuery, setSearchQuery]             = useState('');
+  const [alphabetical, setAlphabetical]           = useState(false);
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
+
+  /* join-modal */
+  const [joinModalVisible, setJoinModalVisible] = useState(false);
+  const [inviteCodeInput,  setInviteCodeInput]  = useState('');
+  const [joinLoading,      setJoinLoading]      = useState(false);
+  const [joinError,        setJoinError]        = useState<string|null>(null);
+
+  const [expandedEventId, setExpandedEventId]   = useState<string | null>(null);
+  const [standardDrinks,  setStandardDrinks]    = useState<Array<{ id:number; name:string }>>([]);
+  const [customRecipes,   setCustomRecipes]     = useState<Array<{ id:string; name:string }>>([]);
+  const [processingEvents,setProcessingEvents]  = useState<string[]>([]);
+  const [copiedEventId,   setCopiedEventId]     = useState<string | null>(null);
+
+  /* ---------------- GUEST JOIN PARAM ---------------- */
   useEffect(() => {
     if (params.join === 'true') {
       setJoinModalVisible(true);
-      // Clear the query param after opening modal
       router.setParams({ join: undefined });
     }
   }, [params.join]);
 
-  /* fetch events that belong to me */
+  /* ---------------- FETCH EVENTS ---------------- */
   useEffect(() => {
-    if (!currentUser) return;
+    // don’t fetch if not signed in
+    if (!currentUser) { 
+      setLoading(false); 
+      return; 
+    }
 
     (async () => {
       try {
         const { data } = await client.graphql({
           query: listEvents,
-          variables: { filter: eventFilter(currentUser) }, // Removed liquorbotId
+          variables: { filter: eventFilter(currentUser) },
           authMode:  'userPool',
         }) as { data: any };
 
@@ -125,7 +140,7 @@ export default function EventManager() {
             guestOwners: i.guestOwners ?? [],
           })),
         );
-      } catch (err) {
+      } catch {
         Alert.alert('Error', 'Could not load events');
       } finally {
         setLoading(false);
@@ -133,61 +148,48 @@ export default function EventManager() {
     })();
   }, [currentUser, liquorbotId]);
 
-  // Fetch standard drinks from S3
+  /* ---------------- STANDARD DRINKS JSON ---------------- */
   useEffect(() => {
-    const fetchStandardDrinks = async () => {
+    (async () => {
       try {
         const dUrl = await getUrl({ key: 'drinkMenu/drinks.json' });
         const response = await fetch(dUrl.url);
         const data = await response.json();
         setStandardDrinks(data);
-      } catch (error) {
-        console.error('Error fetching standard drinks:', error);
+      } catch (err) {
+        console.error('Error fetching standard drinks:', err);
       }
-    };
-    fetchStandardDrinks();
+    })();
   }, []);
 
-  // Fetch custom recipes via GraphQL
+  /* ---------------- CUSTOM RECIPES ---------------- */
   useEffect(() => {
-    const fetchCustomRecipesForEvents = async () => {
-      const allCustomRecipeIDs = events.flatMap(event => event.customRecipeIDs || []);
-      const uniqueIDs = Array.from(new Set(allCustomRecipeIDs));
+    if (!events.length) return;
 
-      const fetchedRecipes = [];
-      for (const id of uniqueIDs) {
+    (async () => {
+      const allIds   = events.flatMap(ev => ev.customRecipeIDs || []);
+      const unique   = Array.from(new Set(allIds));
+      const fetched: any[] = [];
+
+      for (const id of unique) {
         try {
-          try {
-            const { data } = await client.graphql({
-              query: getCustomRecipe,
-              variables: { id },
-              authMode: 'apiKey',
-            });
-            if(data?.getCustomRecipe) {
-              fetchedRecipes.push(data.getCustomRecipe);
-            }
-          } catch (error) {
-            console.error(`Error fetching recipe ${id}:`, error);
-            // Add fallback
-            fetchedRecipes.push({ 
-              id, 
-              name: `Custom Drink (${id.slice(0,6)})` 
-            });
-          }
-        } catch (error) {
-          console.error(`Error fetching custom recipe ${id}:`, error);
+          const { data } = await client.graphql({
+            query: getCustomRecipe,
+            variables: { id },
+            authMode: 'apiKey',
+          });
+          if (data?.getCustomRecipe) fetched.push(data.getCustomRecipe);
+        } catch {
+          fetched.push({ id, name: `Custom Drink (${id.slice(0,6)})` });
         }
       }
-      setCustomRecipes(fetchedRecipes);
-    };
-
-    if (events.length > 0) {
-      fetchCustomRecipesForEvents();
-    }
+      setCustomRecipes(fetched);
+    })();
   }, [events]);
 
+  /* ---------------- LIQUORBOT OVERRIDE TIMERS ---------------- */
   useEffect(() => {
-    if (events.length === 0) return;
+    if (!events.length) return;
 
     const timers: NodeJS.Timeout[] = [];
     const now = Date.now();
@@ -210,53 +212,38 @@ export default function EventManager() {
       }
     });
 
-    // Cleanup on event list change / unmount
     return () => timers.forEach(clearTimeout);
   }, [events, temporaryOverrideId]);
 
-  /* ---------- filtering / searching ---------- */
+  /* ---------------- FILTER / SEARCH MEMO ---------------- */
   const filteredEvents = useMemo(() => {
     const now = new Date();
-    
-    // Create groups for each event type
-    const currentEvents = events.filter(e => {
-      const start = new Date(e.startTime);
-      const end = new Date(e.endTime);
-      return start <= now && end >= now;
+
+    const currentEvents  = events.filter(e => {
+      const s = new Date(e.startTime);
+      const e2= new Date(e.endTime);
+      return s <= now && e2 >= now;
     });
 
-    const upcomingEvents = events.filter(e => {
-      const start = new Date(e.startTime);
-      return start > now;
-    }).sort((a, b) => 
-      new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-    );
+    const upcomingEvents = events.filter(e => new Date(e.startTime) >  now)
+                                 .sort((a,b)=>+new Date(a.startTime)-+new Date(b.startTime));
 
-    const pastEvents = events.filter(e => {
-      const end = new Date(e.endTime);
-      return end < now;
-    }).sort((a, b) => 
-      new Date(b.endTime).getTime() - new Date(a.endTime).getTime()
-    );
+    const pastEvents     = events.filter(e => new Date(e.endTime)   <  now)
+                                 .sort((a,b)=>+new Date(b.endTime) -+new Date(a.endTime));
 
-    // Combine groups in the desired order
     let list = [...currentEvents, ...upcomingEvents, ...pastEvents];
 
-    // Apply search filter if needed
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       list = list.filter(e => e.name.toLowerCase().includes(q));
     }
-
-    // Apply alphabetical sorting if enabled
     if (alphabetical) {
       list.sort((a, b) => a.name.localeCompare(b.name));
     }
-
     return list;
   }, [events, searchQuery, alphabetical]);
 
-  /* ---------- delete ---------- */
+  /* ------------------- HANDLERS (delete / leave / join) ------------------- */
   const confirmDelete = (ev: Event) =>
     Alert.alert('Delete Event', `Delete “${ev.name}”?`, [
       { text: 'Cancel',  style: 'cancel' },
@@ -265,158 +252,101 @@ export default function EventManager() {
 
   const doDelete = async (id: string) => {
     try {
-      setProcessingEvents(prev => [...prev, id]);
+      setProcessingEvents(p => [...p, id]);
       await client.graphql({
         query: deleteEvent,
         variables: { input: { id } },
         authMode: 'userPool',
       });
-      setEvents((p) => p.filter((e) => e.id !== id));
+      setEvents(p => p.filter(e => e.id !== id));
     } catch {
-      Alert.alert('Error', 'Delete failed'); 
+      Alert.alert('Error', 'Delete failed');
     } finally {
-      setProcessingEvents(prev => prev.filter(eId => eId !== id));
+      setProcessingEvents(p => p.filter(eId => eId !== id));
     }
   };
 
   const checkForOverlappingEvents = (newEvent: Event, existingEvents: Event[]): Event[] => {
-    // Parse times as UTC
     const newStart = new Date(newEvent.startTime);
-    const newEnd = new Date(newEvent.endTime);
-    const newUTCDate = Date.UTC(
-      newStart.getUTCFullYear(), 
-      newStart.getUTCMonth(), 
-      newStart.getUTCDate()
-    );
+    const newEnd   = new Date(newEvent.endTime);
+    const newUTC   = Date.UTC(newStart.getUTCFullYear(), newStart.getUTCMonth(), newStart.getUTCDate());
 
     return existingEvents.filter(existing => {
-      const existingStart = new Date(existing.startTime);
-      const existingEnd = new Date(existing.endTime);
-      
-      // Compare UTC dates (same calendar day)
-      const existingUTCDate = Date.UTC(
-        existingStart.getUTCFullYear(),
-        existingStart.getUTCMonth(),
-        existingStart.getUTCDate()
-      );
-      
-      if (newUTCDate !== existingUTCDate) return false;
-      
-      // Compare precise timestamps (UTC milliseconds)
-      return (
-        newStart.getTime() < existingEnd.getTime() &&
-        newEnd.getTime() > existingStart.getTime()
-      );
+      const exStart = new Date(existing.startTime);
+      const exEnd   = new Date(existing.endTime);
+      const exUTC   = Date.UTC(exStart.getUTCFullYear(), exStart.getUTCMonth(), exStart.getUTCDate());
+      if (newUTC !== exUTC) return false;
+      return newStart < exEnd && newEnd > exStart;
     });
   };
 
-  /* ---------- join by invite code ---------- */
   const handleJoin = async () => {
     const code = inviteCodeInput.trim().toUpperCase();
     if (!code) { setJoinError('Please enter a code'); return; }
 
-    setJoinLoading(true); 
+    setJoinLoading(true);
     setJoinError(null);
 
     try {
-      // First fetch event details
       const { data: eventData } = await client.graphql({
         query: eventsByCode,
         variables: { inviteCode: code },
         authMode: 'userPool',
       }) as { data: { eventsByCode: { items: Event[] } } };
 
-      if (!eventData.eventsByCode.items.length) {
-        throw new Error('Event not found. Please check the invite code.');
-      }
+      if (!eventData.eventsByCode.items.length) throw new Error('Event not found');
 
       const newEvent = eventData.eventsByCode.items[0];
-
-      // Check for overlaps
       const conflicts = checkForOverlappingEvents(newEvent, events);
-      if (conflicts.length > 0) {
-        const conflictList = conflicts.map(c => 
-          `• ${c.name} (${formatRange(c.startTime, c.endTime)})`
-        ).join('\n');
-        
-        setJoinError(
-          `Cannot join "${newEvent.name}" (${formatRange(newEvent.startTime, newEvent.endTime)})\n\nConflicts with:\n${conflictList}\n\nResolve conflicts first.`
-        );
+
+      if (conflicts.length) {
+        const conflictList = conflicts
+          .map(c => `• ${c.name}`)
+          .join('\n');
+        setJoinError(`Time conflict:\n${conflictList}`);
         return;
       }
-      
-      // Check if event has already ended
       if (new Date(newEvent.endTime) < new Date()) {
         setJoinError('This event has already ended.');
         return;
       }
 
-      // Proceed with joining
       const { data } = await client.graphql({
         query: joinEvent,
         variables: { inviteCode: code },
         authMode: 'userPool',
       }) as { data: { joinEvent: Event } };
 
-      // Update local state
-      setEvents(prev => {
-        const exists = prev.some(e => e.inviteCode === code);
-        return exists ? prev : [...prev, data.joinEvent];
-      });
-      
+      setEvents(prev => prev.some(e => e.inviteCode === code) ? prev : [...prev, data.joinEvent]);
       setJoinModalVisible(false);
       setInviteCodeInput('');
     } catch (err: any) {
-      setJoinError(err.errors?.[0]?.message ?? 'Join failed. Check code or try later.');
+      setJoinError(err.errors?.[0]?.message ?? 'Join failed.');
     } finally {
       setJoinLoading(false);
     }
   };
 
-  /* ---------- render ---------- */
-  const formatRange = (s: string, e: string) => {
-    const a = new Date(s); 
-    const b = new Date(e);
-    const sameDay = a.toDateString() === b.toDateString();
-    
-    const formatDate = (d: Date) => d.toLocaleDateString();
-    const formatTime = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
-    if (sameDay) {
-      return `${formatDate(a)}  ${formatTime(a)} – ${formatTime(b)}`;
-    } else {
-      return `${formatDate(a)} ${formatTime(a)} – ${formatDate(b)} ${formatTime(b)}`;
-    }
-  };
-
-  const [copiedEventId, setCopiedEventId] = useState<string | null>(null);
-  const copyToClipboard = (code: string, eventId: string) => {
-    Clipboard.setStringAsync(code); // Copy the code to the clipboard
-    setCopiedEventId(eventId); // Set the copied event ID
-    setTimeout(() => setCopiedEventId(null), 2000); // Clear after 2 seconds
-  };
-
-  const handleLeaveEvent = (ev: Event) => {
+  const handleLeaveEvent = (ev: Event) =>
     Alert.alert('Leave Event', `Leave "${ev.name}"?`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Leave', style: 'destructive', onPress: () => doLeaveEvent(ev.id) },
+      { text: 'Leave',  style: 'destructive', onPress: () => doLeaveEvent(ev.id) },
     ]);
-  };
 
   const doLeaveEvent = async (eventId: string) => {
     try {
-      setProcessingEvents(prev => [...prev, eventId]);
+      setProcessingEvents(p => [...p, eventId]);
       await client.graphql({
         query: leaveEvent,
         variables: { eventId },
-        authMode: 'userPool'
+        authMode: 'userPool',
       });
       setEvents(prev => prev.filter(e => e.id !== eventId));
       restorePreviousId();
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to leave event');
     } finally {
-      setProcessingEvents(prev => prev.filter(eId => eId !== eventId));
+      setProcessingEvents(p => p.filter(eId => eId !== eventId));
     }
   };
 
@@ -425,87 +355,87 @@ export default function EventManager() {
     setExpandedEventId(expandedEventId === eventId ? null : eventId);
   };
 
+  const copyToClipboard = (code: string, eventId: string) => {
+    Clipboard.setStringAsync(code);
+    setCopiedEventId(eventId);
+    setTimeout(() => setCopiedEventId(null), 2000);
+  };
+
+  const formatRange = (s: string, e: string) => {
+    const a = new Date(s); 
+    const b = new Date(e);
+    const sameDay = a.toDateString() === b.toDateString();
+    const fd = (d: Date) => d.toLocaleDateString();
+    const ft = (d: Date) => d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+    return sameDay
+      ? `${fd(a)}  ${ft(a)} – ${ft(b)}`
+      : `${fd(a)} ${ft(a)} – ${fd(b)} ${ft(b)}`;
+  };
+
+  /* ------------------- RENDER ITEM ------------------- */
   const renderItem = ({ item }: { item: Event }) => {
-    const isOwner = item.owner === currentUser;
-    const isGuest = item.guestOwners?.includes?.(currentUser ?? '') ?? false;
-    const isPast = new Date(item.endTime) < new Date();
+    const isOwner  = item.owner === currentUser;
+    const isGuest  = item.guestOwners?.includes?.(currentUser ?? '') ?? false;
+    const isPast   = new Date(item.endTime) < new Date();
     const isExpanded = expandedEventId === item.id;
 
     return (
-      <TouchableOpacity 
-        style={styles.card} 
+      <TouchableOpacity
+        style={styles.card}
         onPress={() => toggleExpand(item.id)}
         activeOpacity={0.9}
       >
+        {/* header */}
         <View style={styles.head}>
           <Text style={styles.name}>{item.name}</Text>
           <View style={styles.actions}>
             {isOwner ? (
-                <>
-                  {!isPast && (
-                    <TouchableOpacity onPress={() => router.push(`/create-event?edit=${item.id}`)}>
-                      <Ionicons name="create-outline" size={22} color="#CE975E" />
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity
-                    onPress={() => confirmDelete(item)}
-                    disabled={processingEvents.includes(item.id)}
-                  >
-                    {processingEvents.includes(item.id) ? (
-                      <ActivityIndicator size="small" color="#D9534F" />
-                    ) : (
-                      <Ionicons name="trash-outline" size={22} color="#D9534F" />
-                    )}
+              <>
+                {!isPast && (
+                  <TouchableOpacity onPress={() => router.push(`/create-event?edit=${item.id}`)}>
+                    <Ionicons name="create-outline" size={22} color="#CE975E" />
                   </TouchableOpacity>
-                </>
-              ) : isGuest && (
-              <TouchableOpacity 
-                onPress={() => handleLeaveEvent(item)} 
-                disabled={processingEvents.includes(item.id)}
-              >
-                {processingEvents.includes(item.id) ? (
-                  <ActivityIndicator size="small" color="#D9534F" />
-                ) : (
-                  <Ionicons name="exit-outline" size={22} color="#D9534F" />
                 )}
+                <TouchableOpacity onPress={() => confirmDelete(item)} disabled={processingEvents.includes(item.id)}>
+                  {processingEvents.includes(item.id)
+                    ? <ActivityIndicator size="small" color="#D9534F"/>
+                    : <Ionicons name="trash-outline" size={22} color="#D9534F"/>}
+                </TouchableOpacity>
+              </>
+            ) : isGuest && (
+              <TouchableOpacity onPress={() => handleLeaveEvent(item)} disabled={processingEvents.includes(item.id)}>
+                {processingEvents.includes(item.id)
+                  ? <ActivityIndicator size="small" color="#D9534F"/>
+                  : <Ionicons name="exit-outline" size={22} color="#D9534F"/>}
               </TouchableOpacity>
             )}
           </View>
         </View>
 
+        {/* basic info */}
         <Text style={styles.detail}>{item.location || 'No location'}</Text>
         <Text style={styles.detail}>{formatRange(item.startTime, item.endTime)}</Text>
-        {isExpanded && item.description ? (
-          <Text style={styles.detail}>{item.description}</Text>
-        ) : null}
+        {isExpanded && item.description && <Text style={styles.detail}>{item.description}</Text>}
 
-        {/* Expanded content */}
+        {/* expanded section */}
         {isExpanded && (
           <View style={styles.expandedContent}>
-            {/* Drink Menu */}
+            {/* drink list */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Drink Menu</Text>
-              {item.drinkIDs.map((id) => {
+              {item.drinkIDs.map(id => {
                 const drink = standardDrinks.find(d => d.id === id);
-                return (
-                  <Text key={id} style={styles.drinkName}>
-                    {drink ? drink.name : `Drink #${id}`}
-                  </Text>
-                );
+                return <Text key={id} style={styles.drinkName}>{drink ? drink.name : `Drink #${id}`}</Text>;
               })}
-              {item.customRecipeIDs?.map((id) => {
+              {item.customRecipeIDs?.map(id => {
                 const recipe = customRecipes.find(r => r.id === id);
-                return (
-                  <Text key={id} style={styles.drinkName}>
-                    {recipe ? recipe.name : `Custom Recipe #${id}`}
-                  </Text>
-                );
+                return <Text key={id} style={styles.drinkName}>{recipe ? recipe.name : `Custom Recipe #${id}`}</Text>;
               })}
             </View>
 
-            {/* Invite Link */}
+            {/* invite link */}
             <View style={styles.section}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}>
                 <Text style={styles.sectionTitle}>Event Link</Text>
                 {isExpanded && isAdmin && (
                   <Text style={styles.deviceId}>Device ID: {item.liquorbotId}</Text>
@@ -513,39 +443,30 @@ export default function EventManager() {
               </View>
               <View style={styles.inviteRow}>
                 <Text style={styles.inviteLink}>https://yourapp.com/join/{item.inviteCode}</Text>
-                <TouchableOpacity
-                  onPress={() => copyToClipboard(`https://yourapp.com/join/${item.inviteCode}`, item.id)}
-                  style={styles.copyButton}
-                >
-                  <Ionicons name="copy-outline" size={16} color="#CE975E" />
+                <TouchableOpacity onPress={() => copyToClipboard(`https://yourapp.com/join/${item.inviteCode}`, item.id)}>
+                  <Ionicons name="copy-outline" size={16} color="#CE975E"/>
                 </TouchableOpacity>
               </View>
             </View>
           </View>
         )}
 
-        {/* Always visible footer */}
+        {/* footer */}
         <View style={styles.foot}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{flexDirection:'row',alignItems:'center'}}>
             <Text style={styles.code}>Code: {item.inviteCode}</Text>
-            <TouchableOpacity
-              onPress={() => copyToClipboard(item.inviteCode, item.id)}
-              style={{ marginLeft: 8 }}
-            >
-              <Ionicons name="copy-outline" size={14} color="#CE975E" />
+            <TouchableOpacity onPress={() => copyToClipboard(item.inviteCode, item.id)} style={{marginLeft:8}}>
+              <Ionicons name="copy-outline" size={14} color="#CE975E"/>
             </TouchableOpacity>
-            {copiedEventId === item.id && (
-              <Text style={styles.copiedText}>Code Copied</Text>
-            )}
+            {copiedEventId === item.id && <Text style={styles.copiedText}>Code Copied</Text>}
           </View>
-          <Text style={styles.drinks}>
-            {item.drinkIDs.length + (item.customRecipeIDs?.length ?? 0)} drinks
-          </Text>
+          <Text style={styles.drinks}>{item.drinkIDs.length + (item.customRecipeIDs?.length ?? 0)} drinks</Text>
         </View>
       </TouchableOpacity>
     );
   };
 
+  /* ------------------- EARLY LOADING ------------------- */
   if (loading) {
     return (
       <View style={styles.loading}>
@@ -554,7 +475,25 @@ export default function EventManager() {
     );
   }
 
-  /* ---------- UI ---------- */
+  /* ------------------- GUEST VIEW ------------------- */
+  if (!currentUser) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={28} color="#DFDCD9" />
+        </TouchableOpacity>
+
+        <Ionicons name="calendar-outline" size={96} color="#CE975E" />
+        <Text style={styles.guestTitle}>Sign in to view your events</Text>
+
+        <TouchableOpacity style={styles.signInBtn} onPress={() => router.push('/auth/sign-in')}>
+          <Text style={styles.signInTxt}>Sign In</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  /* ------------------- MAIN UI ------------------- */
   return (
     <View style={styles.container}>
       {/* title */}
@@ -563,15 +502,15 @@ export default function EventManager() {
         <Ionicons name="close" size={28} color="#DFDCD9"/>
       </TouchableOpacity>
 
-      {/* cat picker */}
+      {/* category picker */}
       <View style={styles.catWrap}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catRow}>
-          {['All','Upcoming','Current','Past'].map((c) => {
+          {['All','Upcoming','Current','Past'].map(c=>{
             const k = c.toLowerCase() as typeof filter;
             return (
-              <TouchableOpacity key={c} onPress={() => setFilter(k)} style={styles.catBtn}>
-                <Text style={[styles.catTxt, filter === k && styles.catSel]}>{c}</Text>
-                {filter === k && <View style={styles.under}/>}
+              <TouchableOpacity key={c} onPress={()=>setFilter(k)} style={styles.catBtn}>
+                <Text style={[styles.catTxt, filter===k&&styles.catSel]}>{c}</Text>
+                {filter===k&&<View style={styles.under}/>}
               </TouchableOpacity>
             );
           })}
@@ -588,7 +527,7 @@ export default function EventManager() {
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
-        <TouchableOpacity onPress={() => setFilterModalVisible(true)}>
+        <TouchableOpacity onPress={()=>setFilterModalVisible(true)}>
           <Ionicons name="funnel-outline" size={20} color={alphabetical? '#CE975E':'#4F4F4F'}/>
         </TouchableOpacity>
       </View>
@@ -596,7 +535,7 @@ export default function EventManager() {
       {/* list */}
       <FlatList
         data={filteredEvents}
-        keyExtractor={(i) => `${i.id}-${i.inviteCode}`}
+        keyExtractor={i=>`${i.id}-${i.inviteCode}`}
         renderItem={renderItem}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
@@ -609,15 +548,11 @@ export default function EventManager() {
 
       {/* bottom buttons */}
       <View style={styles.bottom}>
-        <TouchableOpacity 
-          style={styles.joinBtn} 
-          onPress={() => setJoinModalVisible(true)}
-          testID="join-event-button"
-        >
+        <TouchableOpacity style={styles.joinBtn} onPress={()=>setJoinModalVisible(true)}>
           <Ionicons name="log-in-outline" size={24} color="#141414"/>
           <Text style={styles.joinTxt}>Join Event</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.newBtn} onPress={() => router.push('/create-event')}>
+        <TouchableOpacity style={styles.newBtn} onPress={()=>router.push('/create-event')}>
           <Ionicons name="add" size={28} color="#141414"/>
         </TouchableOpacity>
       </View>
@@ -626,11 +561,11 @@ export default function EventManager() {
       <Modal
         visible={filterModalVisible}
         transparent animationType="fade"
-        onRequestClose={() => setFilterModalVisible(false)}
+        onRequestClose={()=>setFilterModalVisible(false)}
       >
         <View style={styles.overlay}>
           <View style={styles.filtCard}>
-            <TouchableOpacity style={styles.filtClose} onPress={() => setFilterModalVisible(false)}>
+            <TouchableOpacity style={styles.filtClose} onPress={()=>setFilterModalVisible(false)}>
               <Ionicons name="close" size={24} color="#DFDCD9"/>
             </TouchableOpacity>
             <Text style={styles.filtTitle}>Filter Options</Text>
@@ -651,11 +586,11 @@ export default function EventManager() {
       <Modal
         visible={joinModalVisible}
         transparent animationType="fade"
-        onRequestClose={() => setJoinModalVisible(false)}
+        onRequestClose={()=>setJoinModalVisible(false)}
       >
         <View style={styles.overlay}>
           <View style={styles.joinCard}>
-            <TouchableOpacity style={styles.filtClose} onPress={() => setJoinModalVisible(false)}>
+            <TouchableOpacity style={styles.filtClose} onPress={()=>setJoinModalVisible(false)}>
               <Ionicons name="close" size={24} color="#DFDCD9"/>
             </TouchableOpacity>
             <Text style={styles.filtTitle}>Enter Invite Code</Text>
@@ -665,11 +600,13 @@ export default function EventManager() {
               placeholderTextColor="#4F4F4F"
               autoCapitalize="characters"
               value={inviteCodeInput}
-              onChangeText={(t) => setInviteCodeInput(t.toUpperCase())}
+              onChangeText={t=>setInviteCodeInput(t.toUpperCase())}
             />
             {joinError && <Text style={styles.err}>{joinError}</Text>}
             <TouchableOpacity style={styles.joinGo} onPress={handleJoin} disabled={joinLoading}>
-              {joinLoading ? <ActivityIndicator color="#141414"/> : <Text style={styles.joinGoTxt}>Join Event</Text>}
+              {joinLoading
+                ? <ActivityIndicator color="#141414"/>
+                : <Text style={styles.joinGoTxt}>Join Event</Text>}
             </TouchableOpacity>
           </View>
         </View>
@@ -680,60 +617,65 @@ export default function EventManager() {
 
 /* ---------- styles ---------- */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#141414', paddingTop: 70 },
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#141414' },
-  title: { color: '#DFDCD9', fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 30 },
-  close: { position: 'absolute', top: 62, left: 24, padding: 10, zIndex: 10 },
+  container:{flex:1,backgroundColor:'#141414',paddingTop:70},
+  loading:{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'#141414'},
+  title:{color:'#DFDCD9',fontSize:24,fontWeight:'bold',textAlign:'center',marginBottom:30},
+  close:{position:'absolute',top:62,left:24,padding:10,zIndex:10},
 
-  catWrap: { alignItems: 'center', marginBottom: 20 },
-  catRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10 },
-  catBtn: { paddingHorizontal: 15, marginHorizontal: 5 },
-  catTxt: { color: '#4F4F4F' },
-  catSel: { color: '#CE975E' },
-  under: { height: 2, backgroundColor: '#CE975E', marginTop: 2, width: '100%' },
+  catWrap:{alignItems:'center',marginBottom:20},
+  catRow:{flexDirection:'row',alignItems:'center',paddingHorizontal:10},
+  catBtn:{paddingHorizontal:15,marginHorizontal:5},
+  catTxt:{color:'#4F4F4F'},
+  catSel:{color:'#CE975E'},
+  under:{height:2,backgroundColor:'#CE975E',marginTop:2,width:'100%'},
 
-  searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, paddingHorizontal: 15, marginHorizontal: 20, marginBottom: 20 },
-  search: { flex: 1, color: '#DFDCD9', fontSize: 16, paddingVertical: 10 },
+  searchRow:{flexDirection:'row',alignItems:'center',backgroundColor:'#1F1F1F',borderRadius:10,paddingHorizontal:15,marginHorizontal:20,marginBottom:20},
+  search:{flex:1,color:'#DFDCD9',fontSize:16,paddingVertical:10},
 
-  list: { paddingHorizontal: 20, paddingBottom: 140 },
-  card: { backgroundColor: '#1F1F1F', borderRadius: 12, padding: 16, marginBottom: 12 },
-  head: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  name: { color: '#DFDCD9', fontSize: 18, fontWeight: '600', flexShrink: 1 },
-  actions: { flexDirection: 'row', gap: 12, marginLeft: 10 },
-  detail: { color: '#8F8F8F', fontSize: 14, marginBottom: 2 },
-  foot: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
-  code: { color: '#CE975E', fontSize: 12 },
-  drinks: { color: '#8F8F8F', fontSize: 12 },
+  list:{paddingHorizontal:20,paddingBottom:140},
+  card:{backgroundColor:'#1F1F1F',borderRadius:12,padding:16,marginBottom:12},
+  head:{flexDirection:'row',justifyContent:'space-between',marginBottom:6},
+  name:{color:'#DFDCD9',fontSize:18,fontWeight:'600',flexShrink:1},
+  actions:{flexDirection:'row',gap:12,marginLeft:10},
+  detail:{color:'#8F8F8F',fontSize:14,marginBottom:2},
+  foot:{flexDirection:'row',justifyContent:'space-between',marginTop:10},
+  code:{color:'#CE975E',fontSize:12},
+  drinks:{color:'#8F8F8F',fontSize:12},
 
-  empty: { alignItems: 'center', marginTop: 150, paddingHorizontal: 40 },
-  emptyTxt: { color: '#4F4F4F', textAlign: 'center', marginTop: 20, fontSize: 14 },
+  empty:{alignItems:'center',marginTop:150,paddingHorizontal:40},
+  emptyTxt:{color:'#4F4F4F',textAlign:'center',marginTop:20,fontSize:14},
 
-  bottom: { position: 'absolute', bottom: 120, left: 0, right: 0, flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20 },
-  joinBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#CE975E', borderRadius: 25, paddingVertical: 12, paddingHorizontal: 20, marginRight: 12 },
-  joinTxt: { color: '#141414', fontSize: 16, fontWeight: '600', marginLeft: 8 },
-  newBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#CE975E', borderRadius: 25, paddingVertical: 12, paddingHorizontal: 12, gap: 8, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 }, android: { elevation: 4 } }) },
-  newTxt: { color: '#141414', fontSize: 16, fontWeight: '600' },
+  bottom:{position:'absolute',bottom:120,left:0,right:0,flexDirection:'row',justifyContent:'flex-end',paddingHorizontal:20},
+  joinBtn:{flexDirection:'row',alignItems:'center',backgroundColor:'#CE975E',borderRadius:25,paddingVertical:12,paddingHorizontal:20,marginRight:12},
+  joinTxt:{color:'#141414',fontSize:16,fontWeight:'600',marginLeft:8},
+  newBtn:{flexDirection:'row',alignItems:'center',backgroundColor:'#CE975E',borderRadius:25,paddingVertical:12,paddingHorizontal:12,...Platform.select({ios:{shadowColor:'#000',shadowOffset:{width:0,height:2},shadowOpacity:0.2,shadowRadius:4},android:{elevation:4}})},
 
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  filtCard: { width: SCREEN_WIDTH * 0.8, backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20 },
-  filtClose: { position: 'absolute', top: 15, right: 15, padding: 4 },
-  filtTitle: { color: '#DFDCD9', fontSize: 20, fontWeight: 'bold', alignSelf: 'center', marginBottom: 20 },
-  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  switchLbl: { color: '#DFDCD9', fontSize: 16 },
+  overlay:{flex:1,backgroundColor:'rgba(0,0,0,0.6)',justifyContent:'center',alignItems:'center'},
+  filtCard:{width:SCREEN_WIDTH*0.8,backgroundColor:'#1F1F1F',borderRadius:10,padding:20},
+  filtClose:{position:'absolute',top:15,right:15,padding:4},
+  filtTitle:{color:'#DFDCD9',fontSize:20,fontWeight:'bold',alignSelf:'center',marginBottom:20},
+  switchRow:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},
+  switchLbl:{color:'#DFDCD9',fontSize:16},
 
-  joinCard: { width: SCREEN_WIDTH * 0.8, backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20, alignItems: 'center' },
-  codeInput: { width: '100%', borderWidth: 1, borderColor: '#4F4F4F', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 15, color: '#DFDCD9', fontSize: 16, textAlign: 'center', marginBottom: 10 },
-  err: { color: '#D9534F', marginBottom: 8 },
-  joinGo: { backgroundColor: '#CE975E', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 30, alignSelf: 'stretch', alignItems: 'center' },
-  joinGoTxt: { color: '#141414', fontSize: 16, fontWeight: '600' },
-  copiedText: { color: '#8F8F8F', fontSize: 8, marginLeft: 8 },
+  joinCard:{width:SCREEN_WIDTH*0.8,backgroundColor:'#1F1F1F',borderRadius:10,padding:20,alignItems:'center'},
+  codeInput:{width:'100%',borderWidth:1,borderColor:'#4F4F4F',borderRadius:8,paddingVertical:10,paddingHorizontal:15,color:'#DFDCD9',fontSize:16,textAlign:'center',marginBottom:10},
+  err:{color:'#D9534F',marginBottom:8},
+  joinGo:{backgroundColor:'#CE975E',borderRadius:8,paddingVertical:12,paddingHorizontal:30,alignSelf:'stretch',alignItems:'center'},
+  joinGoTxt:{color:'#141414',fontSize:16,fontWeight:'600'},
+  copiedText:{color:'#8F8F8F',fontSize:8,marginLeft:8},
 
-  expandedContent: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#2F2F2F', paddingTop: 12 },
-  section: { marginBottom: 16 },
-  sectionTitle: { color: '#CE975E', fontSize: 14, fontWeight: '600', marginBottom: 8 },
-  drinkName: { color: '#8F8F8F', fontSize: 14, marginBottom: 4 },
-  inviteRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#2F2F2F', borderRadius: 8, padding: 12 },
-  inviteLink: { color: '#8F8F8F', fontSize: 12, flex: 1, marginRight: 8 },
-  copyButton: { padding: 4 },
-  deviceId: { color:'#4F4F4F', fontSize:10, marginRight: 4, textAlign: 'right' },
+  expandedContent:{marginTop:12,borderTopWidth:1,borderTopColor:'#2F2F2F',paddingTop:12},
+  section:{marginBottom:16},
+  sectionTitle:{color:'#CE975E',fontSize:14,fontWeight:'600',marginBottom:8},
+  drinkName:{color:'#8F8F8F',fontSize:14,marginBottom:4},
+  inviteRow:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',backgroundColor:'#2F2F2F',borderRadius:8,padding:12},
+  inviteLink:{color:'#8F8F8F',fontSize:12,flex:1,marginRight:8},
+  deviceId:{color:'#4F4F4F',fontSize:10,textAlign:'right'},
+
+  /* guest view */
+  centered:{justifyContent:'center',alignItems:'center'},
+  backBtn:{position:'absolute',top:62,left:24,padding:10},
+  guestTitle:{color:'#DFDCD9',fontSize:20,marginTop:16,marginBottom:24},
+  signInBtn:{backgroundColor:'#CE975E',paddingVertical:10,paddingHorizontal:32,borderRadius:25},
+  signInTxt:{color:'#141414',fontWeight:'bold',fontSize:16},
 });

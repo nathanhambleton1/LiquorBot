@@ -21,7 +21,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Text, View, StyleSheet, ScrollView, Image, TouchableOpacity,
   Dimensions, LayoutAnimation, Platform, UIManager, Animated,
-  TextInput, Modal, Switch, ActivityIndicator,
+  TextInput, Modal, Switch, ActivityIndicator, Alert,
 } from 'react-native';
 import Ionicons      from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
@@ -35,7 +35,7 @@ import config        from '../../src/amplifyconfiguration.json';
 
 // GraphQL & Auth
 import { generateClient } from 'aws-amplify/api';
-import { createLikedDrink, deleteLikedDrink, createPouredDrink, } from '../../src/graphql/mutations';
+import { createLikedDrink, deleteLikedDrink, createPouredDrink } from '../../src/graphql/mutations';
 import { listLikedDrinks } from '../../src/graphql/queries';
 import { getCurrentUser }  from 'aws-amplify/auth';
 import { getUrl }          from 'aws-amplify/storage';
@@ -83,10 +83,10 @@ type Drink = {
   category: string;
   description?: string;
   image: string;
-  ingredients?: string; // “id:amount:priority,id:amount:priority,…”
-  isCustom?: boolean;      // flag that this came from CustomRecipe
-  recipeId?: string;       // real GraphQL id (needed for update)
-  imageKey?: string | null // S3 key for the saved drink image
+  ingredients?: string;
+  isCustom?: boolean;
+  recipeId?: string;
+  imageKey?: string | null;
 };
 
 type BaseIngredient = { id: number; name: string; type: string };
@@ -528,17 +528,17 @@ export default function MenuScreen() {
   const { isConnected, slots, liquorbotId, isAdmin } = useLiquorBot();
   const isFocused = useIsFocused();
 
-  /* ------------------------- STATE ------------------------- */
+  /* ------------------------- STATE ------------------------- */
   const [drinks, setDrinks] = useState<Drink[]>([]);
   const [allIngredients, setAllIngredients] = useState<BaseIngredient[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // category & search
+  // category & search
   const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey'];
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // make‑able filter
+  // make-able filter
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [onlyMakeable, setOnlyMakeable] = useState(false);
   const [alphabetical, setAlphabetical] = useState(false);
@@ -551,7 +551,33 @@ export default function MenuScreen() {
   const [customFetched, setCustomFetched] = useState(false);
 
   /* ------------------------------------------------------------------ */
-  /*                       NEW: Slot‑config redundancy                   */
+  /*                       NEW: sign-in prompt helper                    */
+  /* ------------------------------------------------------------------ */
+  const promptSignIn = useCallback(() => {
+    Alert.alert(
+      'Sign in required',
+      'Please sign in to view details and use this feature.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign In', onPress: () => router.push('/(auth)/sign-in') },
+      ],
+    );
+  }, [router]);
+
+  /* ------------------------------------------------------------------ */
+  /*                       NEW: guarded expand handler                  */
+  /* ------------------------------------------------------------------ */
+  const handleExpand = (id: number) => {
+    if (!userID) {
+      promptSignIn();
+      return;
+    }
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedDrink(id);
+  };                                                                         // ★ NEW ★
+
+  /* ------------------------------------------------------------------ */
+  /*                       NEW: Slot-config redundancy                   */
   /* ------------------------------------------------------------------ */
   const requestSlotConfig = useCallback(async () => {
     if (!liquorbotId || !isConnected) return;
@@ -566,22 +592,14 @@ export default function MenuScreen() {
     }
   }, [liquorbotId, isConnected]);
 
-  // Automatically re‑request config whenever the screen is focused
+  // Automatically re-request config whenever the screen is focused
   useEffect(() => {
     if (!isFocused) return;
-
-    // 1️⃣ immediate request on focus
     requestSlotConfig();
-
-    // 2️⃣ retry once after 2 s if slots are still all zero (i.e. not received)
     const retryTimer = setTimeout(() => {
       const anyLoaded = slots.some((id) => id > 0);
-      if (!anyLoaded) {
-        console.log('[Menu] No slot data after first request – retrying…');
-        requestSlotConfig();
-      }
+      if (!anyLoaded) requestSlotConfig();
     }, 2000);
-
     return () => clearTimeout(retryTimer);
   }, [isFocused, slots, requestSlotConfig]);
 
@@ -722,8 +740,8 @@ export default function MenuScreen() {
       try {
         const user = await getCurrentUser();
         user?.username && setUserID(user.username);
-      } catch (e) {
-        console.error(e);
+      } catch {
+        setUserID(null);   // not signed in
       }
     })();
   }, []);
@@ -815,12 +833,16 @@ export default function MenuScreen() {
 
   /* -------------------- favourite toggle -------------------- */
   async function toggleFavorite(drinkId: number) {
-    if (!userID) return;
+    if (!userID) {                                                               // ★ NEW ★
+      promptSignIn();
+      return;
+    }
     if (likedDrinks.includes(drinkId)) {
       try {
         const res = await client.graphql({
           query: listLikedDrinks,
-        variables: { filter: { userID: { eq: userID }, drinkID: { eq: drinkId } } },
+          variables: { filter: { userID: { eq: userID }, drinkID: { eq: drinkId } } },
+          authMode: 'userPool',
         });
         const existing = res.data?.listLikedDrinks?.items?.[0];
         existing &&
@@ -975,7 +997,7 @@ export default function MenuScreen() {
         )}
       </View>
 
-      {/* ------------ DRINK GRID ------------ */}
+      {/* ------------ DRINK GRID ------------ */}
       <ScrollView
         ref={scrollViewRef}
         contentContainerStyle={[
@@ -983,13 +1005,30 @@ export default function MenuScreen() {
           { paddingBottom: expandedDrink ? 100 : 80 },
         ]}
       >
-        {renderedDrinks.length === 0 ? (
+        {!userID ? (
+          /* ---------- guest view ---------- */
+          <View style={styles.noDrinksContainer}>
+            <Text style={styles.noDrinksText}>
+              Please sign in before you can view drinks.
+            </Text>
+
+            <TouchableOpacity
+              onPress={() => router.push('/(auth)/sign-in')}
+              activeOpacity={0.8}
+              style={styles.signInButton}
+            >
+              <Text style={styles.signInButtonText}>Sign In</Text>
+            </TouchableOpacity>
+          </View>
+        ) : renderedDrinks.length === 0 ? (
+          /* ---------- no drinks ---------- */
           <View style={styles.noDrinksContainer}>
             <Text style={styles.noDrinksText}>
               Oops, no drinks here! Check your filters, internet connection, or wait for an event to start.
             </Text>
           </View>
         ) : (
+          /* ---------- drink grid ---------- */
           <View style={styles.grid}>
             {renderedDrinks.map((drink) => (
               <DrinkItem
@@ -998,10 +1037,12 @@ export default function MenuScreen() {
                 isExpanded={expandedDrink === drink.id}
                 isLiked={likedDrinks.includes(drink.id)}
                 toggleFavorite={toggleFavorite}
-                onExpand={(id) => setExpandedDrink(id)}
+                onExpand={handleExpand}
                 onCollapse={() => setExpandedDrink(null)}
                 allIngredients={allIngredients}
-                onExpandedLayout={handleExpandedLayout}
+                onExpandedLayout={(layout) =>
+                  scrollViewRef.current?.scrollTo({ y: layout.y, animated: true })
+                }
                 isMakeable={isDrinkMakeable(drink)}
               />
             ))}
@@ -1125,6 +1166,20 @@ const styles = StyleSheet.create({
   buttonArea: { width: '100%', alignItems: 'center', position: 'relative' },
   statusMessageOverlay: { position: 'absolute', top: '100%', marginTop: -12, fontSize: 10, textAlign: 'center' },
   editButton: { position: 'absolute', top: 10, left: 45, zIndex: 2 },
-  noDrinksContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30, },
-  noDrinksText: { color: '#4f4f4f', fontSize: 12, textAlign: 'center', },
+  signInButton: {
+    marginTop: 15,
+    backgroundColor: '#CE975E',
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+  },
+  signInButtonText: { color: '#FFFFFF', fontSize: 16 },
+  noDrinksContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 30,
+  },
+  noDrinksText: { color: '#4f4f4f', fontSize: 12, textAlign: 'center' },
+
 });

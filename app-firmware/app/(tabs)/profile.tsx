@@ -92,10 +92,15 @@ export default function ProfileScreen() {
   const [likedDrinks, setLikedDrinks] = useState<Drink[]>([]);
   const [pourHistory, setPourHistory]   = useState<PourEvent[]>([]);
 
+  const { authStatus, signOut } = useAuthenticator((ctx) => [
+    ctx.authStatus,
+    ctx.user,
+  ]);
+  const signedIn = authStatus === 'authenticated';
+
   // Popup control
   const [popup, setPopup] = useState<PopupMeta | null>(null);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
-  const { signOut } = useAuthenticator((ctx: any) => [ctx.user]);
   const router = useRouter();
 
   // Reset popup state when navigating to the profile tab
@@ -107,6 +112,7 @@ export default function ProfileScreen() {
 
   // ─────────────────────── INITIAL LOAD ────────────────────────────────────
   useEffect(() => {
+    if (!signedIn) return;
     (async () => {
       try {
         const cognitoUser = await getCurrentUser();
@@ -146,6 +152,7 @@ export default function ProfileScreen() {
 
   // drinks JSON from S3
   useEffect(() => {
+    if (!signedIn) return;
     (async () => {
       try {
         const { url } = await getUrl({ key: 'drinkMenu/drinks.json' });
@@ -278,9 +285,26 @@ export default function ProfileScreen() {
     }
   };
 
+  /* ───────────────  GUEST VIEW  ─────────────── */
+  if (!signedIn) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <Ionicons name="person-circle-outline" size={96} color="#CE975E" />
+        <Text style={styles.guestTitle}>Sign in to view your profile</Text>
+        <TouchableOpacity
+          style={styles.signInBtn}
+          onPress={() => router.push('/auth/sign-in')}
+        >
+          <Text style={styles.signInText}>Sign In</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  /* ───────────────  LOADING VIEW  ─────────────── */
   if (!profileLoaded) {
     return (
-      <View style={[styles.container, {justifyContent: 'center', alignItems: 'center'}]}>
+      <View style={[styles.container, styles.centered]}>
         <ActivityIndicator size="large" color="#CE975E" />
       </View>
     );
@@ -367,4 +391,9 @@ const styles = StyleSheet.create({
                             backgroundColor: '#141414', elevation: 10, zIndex: 10 },
   popupHeader:           { flexDirection: 'row', alignItems: 'center', padding: 15, paddingTop: 70 },
   popupTitle:            { flex: 1, textAlign: 'center', color: '#DFDCD9', fontSize: 18 },
+  centered:              { justifyContent: 'center', alignItems: 'center' },
+  guestTitle:            { color: '#DFDCD9', fontSize: 20, marginTop: 16, marginBottom: 24 },
+  signInBtn:             { backgroundColor: '#CE975E', paddingVertical: 10,
+                           paddingHorizontal: 32, borderRadius: 25 },
+  signInText:            { color: '#141414', fontWeight: 'bold', fontSize: 16 },
 });

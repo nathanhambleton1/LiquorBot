@@ -1,10 +1,10 @@
 // -----------------------------------------------------------------------------
 // File: index.tsx
 // Description: Main home screen for the LiquorBot app. Displays connection
-//              status, navigation options, and auto‑attaches the IoT policy
-//              after the user’s Cognito Identity‑ID is created.
+//              status, navigation options, and auto-attaches the IoT policy
+//              after the user’s Cognito Identity-ID is created.
 // Author: Nathan Hambleton
-// Updated: 15 May 2025  (static SDK import – no tsconfig tweaks needed)
+// Updated: 31 May 2025 – fixed currentUser TDZ errors
 // -----------------------------------------------------------------------------
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import {
@@ -21,9 +21,10 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLiquorBot }     from '../components/liquorbot-provider';
 import { fetchAuthSession } from '@aws-amplify/auth';
-import { generateClient } from 'aws-amplify/api';
-import { listEvents } from '../../src/graphql/queries';
-import { Asset } from 'expo-asset';
+import { generateClient }   from 'aws-amplify/api';
+import { listEvents }       from '../../src/graphql/queries';
+import { Asset }            from 'expo-asset';
+import { Hub }              from 'aws-amplify/utils';
 
 /* ---------- AWS IoT SDK (static import) ---------- */
 import {
@@ -43,12 +44,15 @@ export default function Index() {
   /* LiquorBot connectivity (UI only) */
   const { isConnected, liquorbotId, reconnect, isAdmin } = useLiquorBot();
 
-  /* Ensure we attempt the attach only once per app‑launch */
+  /* Ensure we attempt the attach only once per app-launch */
   const attemptedAttach = useRef(false);
 
+  /* -------------------- state -------------------- */
+  const [currentUser,    setCurrentUser]    = useState<string | null>(null);
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
-  const [eventsLoading, setEventsLoading] = useState(true);
+  const [eventsLoading,  setEventsLoading]  = useState(true);
 
+  /* -------------------- types -------------------- */
   interface Event {
     id: string;
     name: string;
@@ -56,40 +60,48 @@ export default function Index() {
     endTime: string;
   }
 
-  const [currentUser, setCurrentUser] = useState<string | null>(null);
-
-  /* ──────────────────────── fetch events ──────────────────────── */
+  // ------------------------------------------------------------------
+  // 1.  Keep currentUser in sync with auth state, and clear UI on log-out
+  // ------------------------------------------------------------------
   useEffect(() => {
-  /* grab the Cognito username first */
-    (async () => {
+    const readUser = async () => {
       try {
         const ses = await fetchAuthSession();
         const u   = ses.tokens?.idToken?.payload['cognito:username'];
         setCurrentUser(typeof u === 'string' ? u : null);
-      } catch { setCurrentUser(null); }
-    })();
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        await Asset.loadAsync(require('@/assets/images/home-background.jpg'));
-      } catch (error) {
-        console.warn('Error preloading image:', error);
+      } catch {
+        setCurrentUser(null);
       }
-    })();
+    };
+
+    // initial read
+    readUser();
+
+    // react to auth hub events
+    const unsubscribe = Hub.listen('auth', ({ payload }) => {
+      if (['signedIn', 'signedOut', 'tokenRefresh'].includes(payload.event)) {
+        readUser();
+        setUpcomingEvents([]);   // wipe old user’s events instantly
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
+  // If currentUser becomes null for any reason, be sure list is empty
+  useEffect(() => {
+    if (!currentUser) setUpcomingEvents([]);
+  }, [currentUser]);
 
+  /* ──────────────────────── fetch events ──────────────────────── */
   const fetchEvents = useCallback(async () => {
-    if (!currentUser) return; // Removed liquorbotId check
+    if (!currentUser) return; // guests skip
 
     try {
       const { data } = await generateClient().graphql({
         query: listEvents,
         variables: {
           filter: {
-            or: [ // Removed liquorbotId filter
+            or: [
               { owner:       { eq: currentUser } },
               { guestOwners: { contains: currentUser } },
             ],
@@ -107,8 +119,9 @@ export default function Index() {
           endTime: item.endTime,
         }))
         .filter((event: Event) => new Date(event.endTime) > now)
-        .sort((a: Event, b: Event) =>
-          new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+        .sort(
+          (a: Event, b: Event) =>
+            new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
         );
 
       setUpcomingEvents(filtered);
@@ -122,12 +135,27 @@ export default function Index() {
   // Run once currentUser is available
   useEffect(() => {
     if (currentUser && liquorbotId) {
+      setEventsLoading(true);          // start loader only when we actually fetch
       fetchEvents();
+    } else {
+      setEventsLoading(false);         // ensure guests don't get stuck
     }
   }, [currentUser, liquorbotId]);
 
+  /* ---------- preload background ---------- */
   useEffect(() => {
-    /* ---------- glow animation ---------- */
+    (async () => {
+      try {
+        await Asset.loadAsync(require('@/assets/images/home-background.jpg'));
+      } catch (error) {
+        console.warn('Error preloading image:', error);
+      }
+    })();
+  }, []);
+
+  /* ---------- glow animation & IoT-policy auto-attach ---------- */
+  useEffect(() => {
+    /* glow */
     Animated.loop(
       Animated.sequence([
         Animated.timing(glowAnimation, { toValue: 1.2, duration: 800, useNativeDriver: true }),
@@ -135,27 +163,25 @@ export default function Index() {
       ]),
     ).start();
 
-    /* ---------- IoT‑policy auto‑attach ---------- */
+    /* IoT attach (run once) */
     if (!attemptedAttach.current) {
       attemptedAttach.current = true;
-
       (async () => {
         try {
-          /* 1 · get Identity‑ID + temporary AWS creds */
+          /* 1 · get Identity-ID + temporary AWS creds */
           const { identityId, credentials } = await fetchAuthSession();
           console.log('Cognito Identity ID:', identityId);
 
-          /* 2 · create IoT client signed with these creds */
+          /* 2 · create IoT client signed with these creds */
           const iot = new IoTClient({ region: REGION, credentials });
 
-          /* 3 · skip if policy already attached */
+          /* 3 · skip if policy already attached */
           const { policies = [] } = await iot.send(
             new ListAttachedPoliciesCommand({ target: identityId }),
           );
-          const already = policies.some(p => p.policyName === POLICY_NAME);
-          if (already) return;
+          if (policies.some(p => p.policyName === POLICY_NAME)) return;
 
-          /* 4 · attach the policy */
+          /* 4 · attach the policy */
           await iot.send(
             new AttachPolicyCommand({ policyName: POLICY_NAME, target: identityId }),
           );
@@ -163,9 +189,8 @@ export default function Index() {
 
           // Force credentials refresh and reconnect
           await fetchAuthSession({ forceRefresh: true });
-          reconnect(); // Trigger reconnection
+          reconnect();
         } catch (err: any) {
-          /* Ignore “already exists”, warn on anything else */
           if (err?.name !== 'ResourceAlreadyExistsException') {
             console.warn('⚠ IoT policy attach failed:', err);
           }
@@ -174,17 +199,11 @@ export default function Index() {
     }
   }, []); // run once
 
-  if (eventsLoading) {
-    return (
-      <View style={[styles.background, { backgroundColor: '#1F1F1F' }]} />
-    );
-  }
-
   /* ───────────────────────── UI ───────────────────────── */
   return (
     <ImageBackground
       source={require('@/assets/images/home-background.jpg')}
-      style={[styles.background, { backgroundColor: '#1F1F1F' }, ]}
+      style={[styles.background, { backgroundColor: '#1F1F1F' }]}
       resizeMode="cover"
     >
       {/* Device-Settings button — ADMIN only */}
@@ -221,10 +240,10 @@ export default function Index() {
         </View>
       </View>
 
-      {/* Updated Button Grid Container */}
+      {/* Button Grid Container */}
       <View style={styles.buttonGrid}>
         {/* Main Event Tile */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.mainTile}
           onPress={() => router.push('./events')}
         >
@@ -244,10 +263,10 @@ export default function Index() {
             ) : upcomingEvents.length === 0 ? (
               <Text style={styles.noEventsText}>No upcoming events</Text>
             ) : (
-                <ScrollView 
+              <ScrollView
                 contentContainerStyle={styles.eventsContainer}
                 showsVerticalScrollIndicator={false}
-                >
+              >
                 {upcomingEvents.slice(0, 3).map((event: Event) => (
                   <View key={event.id} style={styles.eventItem}>
                     <View style={styles.eventRow}>
@@ -257,9 +276,9 @@ export default function Index() {
                           day: 'numeric',
                         })}
                       </Text>
-                      <Text 
-                        numberOfLines={1} 
-                        ellipsizeMode="tail" 
+                      <Text
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
                         style={styles.eventTitle}
                       >
                         {event.name}
@@ -267,12 +286,11 @@ export default function Index() {
                     </View>
                   </View>
                 ))}
-                </ScrollView>
+              </ScrollView>
             )}
           </View>
           <View style={styles.glowOverlay} />
         </TouchableOpacity>
-
 
         {/* Right Column Tiles */}
         <View style={styles.rightColumn}>
@@ -293,41 +311,60 @@ export default function Index() {
           </TouchableOpacity>
 
           {/* Conditional Button */}
-        {isAdmin ? (
-          // Admin - New Event Button
-          <TouchableOpacity
-            style={styles.smallTile}
-            onPress={() => router.push('/create-event')}
-          >
-            <View style={styles.iconTextContainer}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="add-circle" size={28} color="#DFDCD9" />
+          {currentUser ? (
+            isAdmin ? (
+              // Admin - New Event Button
+              <TouchableOpacity
+                style={styles.smallTile}
+                onPress={() => router.push('/create-event')}
+              >
+                <View style={styles.iconTextContainer}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="add-circle" size={28} color="#DFDCD9" />
+                  </View>
+                  <View style={styles.textContainer}>
+                    <Text style={styles.tileTitle}>New Event</Text>
+                    <Text style={styles.tileSubtext}>Start Planning</Text>
+                  </View>
+                </View>
+                <View style={styles.glowOverlay} />
+              </TouchableOpacity>
+            ) : (
+              // Non-Admin - Join Event Button
+              <TouchableOpacity
+                style={styles.smallTile}
+                onPress={() => router.push('/events?join=true')}
+              >
+                <View style={styles.iconTextContainer}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="add-circle" size={28} color="#DFDCD9" />
+                  </View>
+                  <View style={styles.textContainer}>
+                    <Text style={styles.tileTitle}>Join Event</Text>
+                    <Text style={styles.tileSubtext}>Enter Invite Code</Text>
+                  </View>
+                </View>
+                <View style={styles.glowOverlay} />
+              </TouchableOpacity>
+            )
+          ) : (
+            // Guest - Sign In Button
+            <TouchableOpacity
+              style={styles.smallTile}
+              onPress={() => router.push('/auth/sign-in')}
+            >
+              <View style={styles.iconTextContainer}>
+                <View style={styles.iconContainer}>
+                  <Ionicons name="log-in" size={28} color="#DFDCD9" />
+                </View>
+                <View style={styles.textContainer}>
+                  <Text style={styles.tileTitle}>Sign In</Text>
+                  <Text style={styles.tileSubtext}>Access Your Account</Text>
+                </View>
               </View>
-              <View style={styles.textContainer}>
-                <Text style={styles.tileTitle}>New Event</Text>
-                <Text style={styles.tileSubtext}>Start Planning</Text>
-              </View>
-            </View>
-            <View style={styles.glowOverlay} />
-          </TouchableOpacity>
-        ) : (
-          // Non-Admin - Join Event Button
-          <TouchableOpacity
-            style={styles.smallTile}
-            onPress={() => router.push('/events?join=true')}
-          >
-            <View style={styles.iconTextContainer}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="add-circle" size={28} color="#DFDCD9" />
-              </View>
-              <View style={styles.textContainer}>
-                <Text style={styles.tileTitle}>Join Event</Text>
-                <Text style={styles.tileSubtext}>Enter Invite Code</Text>
-              </View>
-            </View>
-            <View style={styles.glowOverlay} />
-          </TouchableOpacity>
-        )}
+              <View style={styles.glowOverlay} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </ImageBackground>
@@ -365,11 +402,5 @@ const styles = StyleSheet.create({
   connectionRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
   dot: { width: 8, height: 8, borderRadius: 5, marginRight: 8, shadowOffset: { width: 0, height: 0 }, shadowRadius: 5, shadowOpacity: 0.6, elevation: 5 },
   connectionText: { fontSize: 18, color: '#4F4F4F' },
-  menuButton: { position: 'absolute', bottom: 130, alignSelf: 'center', backgroundColor: '#CE975E', paddingVertical: 16, paddingHorizontal: 26, borderRadius: 10, flexDirection: 'row', alignItems: 'center' },
-  menuButtonText: { color: '#141414', fontSize: 20, fontWeight: 'bold', marginRight: 8 },
-  arrowIcon: { marginLeft: 5 },
   wifiIconContainer: { position: 'absolute', top: 115, right: 40, zIndex: 10 },
-  eventsButton: { position: 'absolute', bottom: 200, alignSelf: 'center', backgroundColor: '#CE975E', paddingVertical: 16, paddingHorizontal: 26, borderRadius: 10, flexDirection: 'row', alignItems: 'center' },
-  eventsButtonText: { color: '#141414', fontSize: 20, fontWeight: 'bold', marginRight: 8 },
 });
-
