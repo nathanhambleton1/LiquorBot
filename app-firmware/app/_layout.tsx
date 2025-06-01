@@ -10,7 +10,7 @@ import React from 'react';
 import { Stack } from 'expo-router';
 import { Amplify } from 'aws-amplify';
 import config from '../src/amplifyconfiguration.json';
-
+import { StatusBar } from 'expo-status-bar';
 // Auth wrapper
 import { Authenticator } from '@aws-amplify/ui-react-native';
 
@@ -32,6 +32,8 @@ export default function RootLayout() {
     <Authenticator.Provider>
       {/* 👇 WRAP everything inside LiquorBotProvider */}
       <LiquorBotProvider>
+        {/* Force white (light-content) status-bar icons everywhere */}
+        <StatusBar style="light" translucent />
         <Stack
           screenOptions={{
             headerShown: false,

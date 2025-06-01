@@ -19,7 +19,9 @@
       "bundleIdentifier": "com.nathanhambleton.liquorbot",
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "LiquorBot needs Bluetooth to discover and connect to your LiquorBot dispenser.",
-        "NSBluetoothPeripheralUsageDescription": "LiquorBot uses Bluetooth to communicate with your LiquorBot dispenser."
+        "NSBluetoothPeripheralUsageDescription": "LiquorBot uses Bluetooth to communicate with your LiquorBot dispenser.",
+        "UIViewControllerBasedStatusBarAppearance": false,
+        "UIStatusBarStyle": "UIStatusBarStyleLightContent"
       },
       "splash": {
         "image": "./assets/images/home-background.jpg",
