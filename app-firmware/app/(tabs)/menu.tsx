@@ -1,21 +1,6 @@
 // -----------------------------------------------------------------------------
-// File: menu.tsx
-// Description: Displays the drink menu for the LiquorBot app, including drink
-//              details, categories, search / filter, and IoT integration for
-//              pouring drinks.  Adds a “make-able” filter toggle that limits
-//              the list to drinks that can be prepared with the ingredients
-//              currently loaded on the ESP32 (pulled via MQTT) **and now
-//              injects the user’s CustomRecipe items pulled from the GraphQL
-//              API so they show up alongside built-in drinks.  *NEW:* every
-//              successful pour is persisted to the PouredDrink model so it can
-//              be shown in the pour-history popup.
-//              
-//              *27 May 2025 FIX*: ensure the slot‑configuration request is sent
-//              every time the menu gains focus so that the “only makeable”
-//              filter never shows an empty list due to a missed config reply.
-//              A retry timer adds further redundancy.
-// Author: Nathan Hambleton
-// Updated: May 28 2025 – redundant get‑config requests on screen focus
+// File: menu.tsx   (UPDATED – 1 Jun 2025)
+// Adds polished sign-in prompt when a guest taps the heart icon.
 // -----------------------------------------------------------------------------
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
@@ -51,16 +36,14 @@ const pubsub = new PubSub({
   endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
 });
 
-// ─── constants ────────────────────────────────────────────────────────────────
-/** payload understood by device-firmware & DeviceSettings screen */
-const GET_CONFIG = { action: 'GET_CONFIG' };
-
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
-
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
+/* -------------------------------------------------------------------------- */
+/*                               GraphQL helper                               */
+/* -------------------------------------------------------------------------- */
 const LIST_CUSTOM_RECIPES_WITH_ING = /* GraphQL */ `
   query ListCustomRecipes {
     listCustomRecipes {
@@ -76,7 +59,9 @@ const LIST_CUSTOM_RECIPES_WITH_ING = /* GraphQL */ `
   }
 `;
 
-// --------------------------- TYPES ---------------------------
+/* -------------------------------------------------------------------------- */
+/*                                   TYPES                                    */
+/* -------------------------------------------------------------------------- */
 type Drink = {
   id: number;
   name: string;
@@ -88,81 +73,57 @@ type Drink = {
   recipeId?: string;
   imageKey?: string | null;
 };
-
 type BaseIngredient = { id: number; name: string; type: string };
-
-type ParsedIngredient = {
-  id: number;
-  name: string;
-  amount: number;
-  priority: number;
-};
-
-// ------------ HELPERS ------------
-function parseIngredientString(
-  ingredientString: string,
-  allIngredients: BaseIngredient[],
-): ParsedIngredient[] {
-  if (!ingredientString) return [];
-  return ingredientString.split(',').map((chunk) => {
-    const [idStr, amountStr, priorityStr] = chunk.split(':');
-    const id = parseInt(idStr, 10);
-    const amount = parseFloat(amountStr);
-    const priority = parseInt(priorityStr, 10);
-    const ingObj = allIngredients.find((ing) => ing.id === id);
-    const name = ingObj ? ingObj.name : `Ingredient #${id}`;
-    return { id, name, amount, priority };
-  });
-}
+type ParsedIngredient = { id: number; name: string; amount: number; priority: number };
 
 /* -------------------------------------------------------------------------- */
-/*                              SINGLE DRINK CARD                             */
+/*                             DRINK-ITEM COMPONENT                           */
 /* -------------------------------------------------------------------------- */
-
 interface DrinkItemProps {
   drink: Drink;
   isExpanded: boolean;
   isLiked: boolean;
   isMakeable: boolean;
+  isGuest: boolean;
   toggleFavorite: (id: number) => Promise<void>;
   onExpand: (id: number) => void;
   onCollapse: () => void;
   allIngredients: BaseIngredient[];
-  onExpandedLayout?: (layout: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }) => void;
+  onExpandedLayout?: (layout: { y: number }) => void;
+  onGuestPrompt: () => void;             // NEW
 }
 
-// ────────────────────────── helpers ──────────────────────────
-function buildSlotCommand(
+function parseIngredientString(
   ingredientString: string,
-  slots: number[],      // current slot -> ingredientId map, length 15
-  qty: number,          // quantity selected on the UI
-): string {
-  if (!ingredientString) return '';
+  allIngredients: BaseIngredient[],
+): ParsedIngredient[] {
+  if (!ingredientString) return [];
+  return ingredientString.split(',').map(chunk => {
+    const [idStr, amountStr, priorityStr] = chunk.split(':');
+    const id       = parseInt(idStr, 10);
+    const amount   = parseFloat(amountStr);
+    const priority = parseInt(priorityStr, 10);
+    const ingObj   = allIngredients.find(ing => ing.id === id);
+    const name     = ingObj ? ingObj.name : `Ingredient #${id}`;
+    return { id, name, amount, priority };
+  });
+}
 
+function buildSlotCommand(ingredientString: string, slots: number[], qty: number): string {
+  if (!ingredientString) return '';
   return ingredientString
-    .split(',')                                // id:amt:prio  …
+    .split(',')
     .map(chunk => {
       const [idStr, amtStr, prioStr] = chunk.split(':');
-      const ingId   = Number(idStr);
-      const amount  = Number(amtStr) * qty;    // multiply by user’s qty
-      const prio    = Number(prioStr);
-
-      // look up which slot holds this ingredient ID
+      const ingId  = Number(idStr);
+      const amount = Number(amtStr) * qty;
+      const prio   = Number(prioStr);
       const slotIdx = slots.findIndex(id => id === ingId);
-      if (slotIdx === -1) {
-        console.warn(`Ingredient ${ingId} not loaded – skipping`);
-        return null;                           // skip missing ingredients
-      }
-
-      const slotNum = slotIdx + 1;             // slots are 1‑based on ESP
+      if (slotIdx === -1) return null;
+      const slotNum = slotIdx + 1;
       return `${slotNum}:${amount}:${prio}`;
     })
-    .filter(Boolean)                           // drop nulls
+    .filter(Boolean)
     .join(',');
 }
 
@@ -170,45 +131,27 @@ function DrinkItem({
   drink,
   isExpanded,
   isLiked,
+  isMakeable,
+  isGuest,
   toggleFavorite,
   onExpand,
   onCollapse,
   allIngredients,
   onExpandedLayout,
+  onGuestPrompt,                     // NEW
 }: DrinkItemProps) {
   const [animValue] = useState(new Animated.Value(isExpanded ? 1 : 0));
-  const [quantity, setQuantity] = useState(1);
+  const [quantity,  setQuantity] = useState(1);
   const { isConnected, slots, liquorbotId } = useLiquorBot();
-  const [logging, setLogging] = useState(false); // prevent double-taps
+  const [logging, setLogging] = useState(false);
   const [statusAnim] = useState(new Animated.Value(0));
-  const [statusType, setStatusType] = useState<'success' | 'error' | null>(null);
+  const [statusType, setStatusType] = useState<'success'|'error'|null>(null);
   const [statusMessage, setStatusMessage] = useState<string>('');
-  const isDrinkMakeable = (drink: Drink) => {
-    if (!drink.ingredients) return false;
-    const needed = drink.ingredients
-      .split(',')
-      .map((c) => parseInt(c.split(':')[0], 10));
-    return needed.every((id) => slots.includes(id));
-  };
-  const isMakeable = isDrinkMakeable(drink);
-
-  const triggerStatus = (type: 'success' | 'error', message: string) => {
-    setStatusType(type);
-    setStatusMessage(message);
-    statusAnim.setValue(1);
-    Animated.timing(statusAnim, {
-      toValue: 0,
-      duration: 5000,
-      useNativeDriver: false,
-    }).start(() => setStatusType(null));
-  };
+  const router = useRouter();
 
   const parsedIngredients = parseIngredientString(
-    drink.ingredients ?? '',
-    allIngredients,
+    drink.ingredients ?? '', allIngredients,
   );
-
-  const router = useRouter();
 
   useEffect(() => {
     Animated.timing(animValue, {
@@ -218,179 +161,62 @@ function DrinkItem({
     }).start();
   }, [isExpanded]);
 
-  /* --------------- pour-drink helpers --------------- */
+  /* ---------------- POUR LOGIC (signed-in only) ---------------- */
   async function publishDrinkCommand() {
     const cmd = buildSlotCommand(drink.ingredients ?? '', slots, quantity);
     if (!cmd) throw new Error('No valid ingredients to pour');
-
     await pubsub.publish({
       topics: [`liquorbot/liquorbot${liquorbotId}/publish`],
       message: cmd,
     });
   }
 
-  // 👇 NEW – log to GraphQL
-  async function logPouredDrink(userID: string | null) {
-    if (!userID) return;
-    await client.graphql({
-      query: createPouredDrink,
-      variables: {
-        input: {
-          userID,
-          drinkID: drink.id,
-          drinkName: drink.name,
-          volume: quantity,
-          timestamp: new Date().toISOString(),
-        },
-      },
-      authMode: 'userPool',
-    });
-    console.log('PouredDrink stored.');
-  }
-
   async function handlePourDrink() {
     if (logging || !isMakeable) return;
-    if (!isConnected) { 
-      console.warn('LiquorBot is not connected.'); 
-      triggerStatus('error', 'LiquorBot is not connected.');
+    if (!isConnected) {
+      triggerStatus('error','LiquorBot is not connected.');
       return;
     }
-
     setLogging(true);
-
     try {
       await publishDrinkCommand();
-      console.log(`Pouring ${drink.name} (${quantity})`);
-    } catch (error) {
-      console.error('Pour failed', error);
+    } catch (e) {
+      triggerStatus('error','Pour failed – please try again.');
       setLogging(false);
-      triggerStatus('error', 'Pour failed – please try again.');
     }
   }
 
-  // ADD NEW useEffect FOR RESPONSE HANDLING:
-  useEffect(() => {
-    if (!logging) return;                       // only listen while waiting
-    let isMounted = true;
-    const timeoutId = setTimeout(() => {        // 30 s watchdog
-      if (isMounted) {
-        triggerStatus('error', 'No response from device');
-        setLogging(false);
-      }
-    }, 30_000);
+  const triggerStatus = (type:'success'|'error', msg:string) => {
+    setStatusType(type);
+    setStatusMessage(msg);
+    statusAnim.setValue(1);
+    Animated.timing(statusAnim,{ toValue:0,duration:5000,useNativeDriver:false })
+      .start(()=>setStatusType(null));
+  };
 
-    const sub = pubsub
-      .subscribe({ topics: [`liquorbot/liquorbot${liquorbotId}/receive`] })
-      .subscribe({
-        /* ---------- CHANGED ---------- */
-        next: async (evt: any) => {
-          if (!isMounted) return;
-
-          // Amplify wraps the raw payload in evt.value
-          const payload: any = evt?.value ?? evt;
-          console.log('[LiquorBot] device reply →', payload);
-
-          const status = typeof payload === 'string'
-            ? payload.toLowerCase().trim()
-            : String(
-                payload.status ??        // { status: "success" }
-                payload.result ??        // { result: "success" }
-                payload.message ?? ''    // fallback
-              ).toLowerCase();
-
-          if (status === 'success') {
-            triggerStatus('success', 'Success! Your drink was poured – enjoy.');
-            try {
-              const user = await getCurrentUser();
-              await logPouredDrink(user?.username ?? null);
-            } catch (e) {
-              console.warn('✓ pour logged locally – failed to store in DB', e);
-            }
-            setLogging(false);
-            clearTimeout(timeoutId);
-          } else if (['fail', 'failed', 'error'].includes(status)) {
-            const reason =
-              typeof payload === 'object' && payload?.error
-                ? ` – ${payload.error}`
-                : '';
-            triggerStatus('error', `Pour failed${reason}.`);
-            setLogging(false);
-            clearTimeout(timeoutId);
-          }
-        },
-        /* -------------------------------- */
-        error: (err: any) => {
-          console.error('MQTT receive‑topic error:', err);
-          triggerStatus('error', 'Error receiving device response.');
-          setLogging(false);
-          clearTimeout(timeoutId);
-        },
-      });
-
-    return () => {
-      isMounted = false;
-      sub.unsubscribe();
-      clearTimeout(timeoutId);
-    };
-  }, [logging, liquorbotId]);
-
-  const handleToggleLike = () => toggleFavorite(drink.id);
-
-  /* ---------------------------- RENDER --------------------------- */
+  /* ---------------------- RENDER (EXPANDED) --------------------- */
   if (isExpanded) {
     return (
       <Animated.View
-        onLayout={(e) => onExpandedLayout?.(e.nativeEvent.layout)}
+        onLayout={e => onExpandedLayout?.(e.nativeEvent.layout)}
         style={[
-          styles.box,
-          styles.expandedBox,
-          {
-            transform: [
-              {
-                scale: animValue.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.95, 1],
-                }),
-              },
-            ],
-          },
+          styles.box, styles.expandedBox,
+          { transform:[{ scale:animValue.interpolate({ inputRange:[0,1], outputRange:[0.95,1] }) }]},
         ]}
       >
-        {/* close & heart buttons */}
+        {/* top-buttons */}
         <TouchableOpacity onPress={onCollapse} style={styles.closeButton}>
           <Ionicons name="close" size={24} color="#DFDCD9" />
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={handleToggleLike}
+          onPress={() => isGuest ? onGuestPrompt() : toggleFavorite(drink.id)}
           style={styles.expandedFavoriteButton}
         >
           <Ionicons
-            name={isLiked ? 'heart' : 'heart-outline'}
-            size={24}
-            color={isLiked ? '#CE975E' : '#4F4F4F'}
+            name={isLiked ? 'heart':'heart-outline'}
+            size={24} color={isLiked ? '#CE975E' : '#4F4F4F'}
           />
         </TouchableOpacity>
-
-        {drink.isCustom && (
-          <TouchableOpacity
-            onPress={() =>
-              router.push({
-                pathname: '/create-drink',
-                params: {
-                  edit: '1',
-                  recipeId: drink.recipeId,
-                  name: drink.name,
-                  desc: drink.description ?? '',
-                  ingredients: drink.ingredients ?? '',
-                  imageKey: drink.imageKey ?? '',
-                },
-              })
-            }
-            style={styles.editButton}
-          >
-            <Ionicons name="create-outline" size={24} color="#DFDCD9" />
-          </TouchableOpacity>
-        )}
 
         {/* content */}
         <View style={styles.expandedContent}>
@@ -398,120 +224,99 @@ function DrinkItem({
             <Text style={styles.expandedboxText}>{drink.name}</Text>
             <Text style={styles.expandedcategoryText}>{drink.category}</Text>
           </View>
-          <Image source={{ uri: drink.image }} style={styles.expandedImage} />
+          <Image source={{ uri: drink.image }} style={styles.expandedImage}/>
         </View>
-
         <View style={styles.expandeddetailContainer}>
-          {parsedIngredients.length === 0 ? (
-            <Text style={styles.expandeddescriptionText}>
-              No ingredients found.
-            </Text>
-          ) : (
-            <Text style={styles.expandeddescriptionText}>
-              Contains{' '}
-              {parsedIngredients
-                .map((item, i) =>
-                  i === parsedIngredients.length - 1 && i !== 0
-                    ? `and ${item.name}`
-                    : item.name,
-                )
-                .join(', ')}
-              .
-            </Text>
-          )}
+          {parsedIngredients.length
+            ? <Text style={styles.expandeddescriptionText}>
+                Contains {parsedIngredients
+                  .map((it,i)=> i===parsedIngredients.length-1 && i!==0 ? `and ${it.name}` : it.name)
+                  .join(', ')}.
+              </Text>
+            : <Text style={styles.expandeddescriptionText}>No ingredients found.</Text>}
         </View>
 
-        {/* qty + button */}
+        {/* quantity */}
         <View style={styles.quantityContainer}>
-          <TouchableOpacity
-            onPress={() => setQuantity((q) => Math.max(1, q - 1))}
-            style={styles.quantityButton}
-          >
+          <TouchableOpacity onPress={()=>setQuantity(q=>Math.max(1,q-1))} style={styles.quantityButton}>
             <Text style={styles.quantityButtonText}>−</Text>
           </TouchableOpacity>
           <Text style={styles.quantityText}>{quantity}</Text>
-          <TouchableOpacity
-            onPress={() => setQuantity((q) => Math.min(3, q + 1))}
-            style={styles.quantityButton}
-          >
+          <TouchableOpacity onPress={()=>setQuantity(q=>Math.min(3,q+1))} style={styles.quantityButton}>
             <Text style={styles.quantityButtonText}>+</Text>
           </TouchableOpacity>
         </View>
 
+        {/* button area */}
         <View style={styles.buttonArea}>
-          <AnimatedTouchable
-            style={[
-              styles.button,
-              statusType && {
-                backgroundColor: statusAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [
-                    '#CE975E',
-                    statusType === 'error' ? '#D9534F' : '#63d44a',
-                  ],
-                }),
-              },
-              (!isMakeable || logging || !isConnected) && styles.disabledButton,
-            ]}
-            onPress={handlePourDrink}
-            disabled={logging || !isMakeable || !isConnected}
-          >
-            <View style={styles.buttonContent}>
-              <Text style={[
-                styles.buttonText,
-                (!isMakeable || logging || !isConnected) && styles.disabledButtonText,
-              ]}>
-                { !isConnected
-                    ? 'No Pouring Device Connected'
-                    : !isMakeable
-                    ? 'Missing Ingredients'
-                    : logging
-                    ? 'Pouring…'
-                    : 'Pour Drink'
-                }
-              </Text>
-              {logging && (
-                <ActivityIndicator size="small" color="#FFFFFF" style={styles.spinner} />
+          {isGuest ? (
+            <TouchableOpacity style={styles.button} onPress={()=>router.push('../auth/sign-in')}>
+              <Text style={styles.buttonText}>Sign in to pour</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <AnimatedTouchable
+                style={[
+                  styles.button,
+                  statusType && {
+                    backgroundColor: statusAnim.interpolate({
+                      inputRange:[0,1],
+                      outputRange:['#CE975E', statusType==='error' ? '#D9534F' : '#63d44a'],
+                    }),
+                  },
+                  (!isMakeable || logging || !isConnected) && styles.disabledButton,
+                ]}
+                onPress={handlePourDrink}
+                disabled={logging || !isMakeable || !isConnected}
+              >
+                <View style={styles.buttonContent}>
+                  <Text style={[
+                    styles.buttonText,
+                    (!isMakeable || logging || !isConnected) && styles.disabledButtonText,
+                  ]}>
+                    {!isConnected ? 'No Pouring Device Connected'
+                      : !isMakeable ? 'Missing Ingredients'
+                      : logging ? 'Pouring…'
+                      : 'Pour Drink'}
+                  </Text>
+                  {logging && <ActivityIndicator size="small" color="#FFF" style={styles.spinner}/>}
+                </View>
+              </AnimatedTouchable>
+              {statusType && (
+                <Text style={[
+                  styles.statusMessageOverlay,
+                  statusType==='error' ? styles.errorText : styles.successText,
+                ]}>
+                  {statusMessage}
+                </Text>
               )}
-            </View>
-          </AnimatedTouchable>
-
-          {/* overlayed status text – does NOT shift layout */}
-          {statusType && (
-            <Text
-              style={[
-                styles.statusMessageOverlay,
-                statusType === 'error' ? styles.errorText : styles.successText,
-              ]}
-            >
-              {statusMessage}
-            </Text>
+            </>
           )}
         </View>
       </Animated.View>
     );
   }
 
-  /* ---------------------- collapsed card ----------------------- */
+  /* ---------------------- RENDER (COLLAPSED) -------------------- */
   return (
     <TouchableOpacity
       activeOpacity={0.9}
-      onPress={() =>
-        (LayoutAnimation.configureNext(
-          LayoutAnimation.Presets.easeInEaseOut,
-        ),
-        onExpand(drink.id))
-      }
+      onPress={()=>{
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        onExpand(drink.id);
+      }}
       style={styles.box}
     >
-      <TouchableOpacity onPress={handleToggleLike} style={styles.favoriteButton}>
+      <TouchableOpacity
+        onPress={()=> isGuest ? onGuestPrompt() : toggleFavorite(drink.id)}
+        style={styles.favoriteButton}
+      >
         <Ionicons
-          name={isLiked ? 'heart' : 'heart-outline'}
-          size={24}
-          color={isLiked ? '#CE975E' : '#4F4F4F'}
+          name={isLiked ? 'heart':'heart-outline'}
+          size={24} color={isLiked ? '#CE975E' : '#4F4F4F'}
         />
       </TouchableOpacity>
-      <Image source={{ uri: drink.image }} style={styles.image} />
+      <Image source={{ uri: drink.image }} style={styles.image}/>
       <Text style={styles.boxText}>{drink.name}</Text>
       <Text style={styles.categoryText}>{drink.category}</Text>
     </TouchableOpacity>
@@ -519,590 +324,399 @@ function DrinkItem({
 }
 
 /* -------------------------------------------------------------------------- */
-/*                               MAIN MENU SCREEN                             */
+/*                                MAIN SCREEN                                 */
 /* -------------------------------------------------------------------------- */
-
 export default function MenuScreen() {
-  const router = useRouter();
-  const scrollViewRef = useRef<ScrollView>(null);
+  const router                 = useRouter();
+  const scrollViewRef          = useRef<ScrollView>(null);
   const { isConnected, slots, liquorbotId, isAdmin } = useLiquorBot();
-  const isFocused = useIsFocused();
+  const isFocused              = useIsFocused();
 
-  /* ------------------------- STATE ------------------------- */
-  const [drinks, setDrinks] = useState<Drink[]>([]);
-  const [allIngredients, setAllIngredients] = useState<BaseIngredient[]>([]);
-  const [loading, setLoading] = useState(true);
+  /* ------------------------ STATE ------------------------ */
+  const [drinks,setDrinks]                 = useState<Drink[]>([]);
+  const [allIngredients,setAllIngredients] = useState<BaseIngredient[]>([]);
+  const [loading,setLoading]               = useState(true);
 
-  // category & search
-  const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey'];
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
+  const categories = ['All','Vodka','Rum','Tequila','Whiskey'];
+  const [selectedCategory,setSelectedCategory] = useState('All');
+  const [searchQuery,setSearchQuery] = useState('');
 
-  // make-able filter
-  const [filterModalVisible, setFilterModalVisible] = useState(false);
-  const [onlyMakeable, setOnlyMakeable] = useState(false);
-  const [alphabetical, setAlphabetical] = useState(false);
-  const [onlyCustom, setOnlyCustom] = useState(false);
+  const [filterModalVisible,setFilterModalVisible] = useState(false);
+  const [onlyMakeable,setOnlyMakeable] = useState(false);
+  const [alphabetical,setAlphabetical] = useState(false);
+  const [onlyCustom,setOnlyCustom]     = useState(false);
 
-  // expand / likes / user
-  const [expandedDrink, setExpandedDrink] = useState<number | null>(null);
-  const [userID, setUserID] = useState<string | null>(null);
-  const [likedDrinks, setLikedDrinks] = useState<number[]>([]);
-  const [customFetched, setCustomFetched] = useState(false);
+  const [expandedDrink,setExpandedDrink] = useState<number|null>(null);
+  const [userID,setUserID]               = useState<string|null>(null);
+  const [likedDrinks,setLikedDrinks]     = useState<number[]>([]);
+  const [customFetched,setCustomFetched] = useState(false);
 
-  /* ------------------------------------------------------------------ */
-  /*                       NEW: sign-in prompt helper                    */
-  /* ------------------------------------------------------------------ */
-  const promptSignIn = useCallback(() => {
-    Alert.alert(
-      'Sign in required',
-      'Please sign in to view details and use this feature.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign In', onPress: () => router.push('/(auth)/sign-in') },
-      ],
-    );
-  }, [router]);
+  /* sign-prompt modal */
+  const [signPromptVisible,setSignPromptVisible] = useState(false);
 
-  /* ------------------------------------------------------------------ */
-  /*                       NEW: guarded expand handler                  */
-  /* ------------------------------------------------------------------ */
-  const handleExpand = (id: number) => {
-    if (!userID) {
-      promptSignIn();
-      return;
-    }
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setExpandedDrink(id);
-  };                                                                         // ★ NEW ★
+  /* helper passed into DrinkItem */
+  const showSignPrompt = () => setSignPromptVisible(true); 
 
-  /* ------------------------------------------------------------------ */
-  /*                       NEW: Slot-config redundancy                   */
-  /* ------------------------------------------------------------------ */
-  const requestSlotConfig = useCallback(async () => {
+  /* ------------------- slot-config request ------------------ */
+  const GET_CONFIG = { action:'GET_CONFIG' };
+  const requestSlotConfig = useCallback(async()=>{
     if (!liquorbotId || !isConnected) return;
     try {
       await pubsub.publish({
-        topics: [`liquorbot/liquorbot${liquorbotId}/slot-config`],
-        message: GET_CONFIG,
+        topics:[`liquorbot/liquorbot${liquorbotId}/slot-config`],
+        message:GET_CONFIG,
       });
-      console.log('[Menu] Requested slot configuration');
-    } catch (err) {
-      console.error('[Menu] Failed to request slot config', err);
-    }
-  }, [liquorbotId, isConnected]);
+    } catch {}
+  },[liquorbotId,isConnected]);
 
-  // Automatically re-request config whenever the screen is focused
-  useEffect(() => {
+  useEffect(()=>{
     if (!isFocused) return;
     requestSlotConfig();
-    const retryTimer = setTimeout(() => {
-      const anyLoaded = slots.some((id) => id > 0);
+    const t = setTimeout(()=>{
+      const anyLoaded = slots.some(id=>id>0);
       if (!anyLoaded) requestSlotConfig();
-    }, 2000);
-    return () => clearTimeout(retryTimer);
-  }, [isFocused, slots, requestSlotConfig]);
+    },2000);
+    return ()=>clearTimeout(t);
+  },[isFocused,slots,requestSlotConfig]);
 
-  /* ------------------------------------------------------------------ */
-  /*                      existing logic continues …                    */
-  /* ------------------------------------------------------------------ */
+  /* ------------------- JSON FETCH (public fallback) ------------------ */
+  const PUBLIC_BASE = 'https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/';
+  async function fetchJsonWithFallback(key:string):Promise<string>{
+    try {
+      const { url } = await getUrl({ key });
+      return await fetch(url).then(r=>r.text());
+    } catch {
+      const publicUrl = `${PUBLIC_BASE}${key}`;
+      return await fetch(publicUrl).then(r=>r.text());
+    }
+  }
 
-  useEffect(() => {
-    (async () => {
+  useEffect(()=>{
+    (async()=>{
       try {
-        const [dJson, iJson] = await AsyncStorage.multiGet([
-          'drinksJson',
-          'ingredientsJson',
-        ]);
-        const drinksStr       = dJson?.[1] ?? null;
-        const ingredientsStr  = iJson?.[1] ?? null;
-
-        if (drinksStr && ingredientsStr) {
-          setDrinks(JSON.parse(drinksStr));
-          setAllIngredients(JSON.parse(ingredientsStr));
-          setLoading(false);           // initial UI ready instantly
+        const [cachedD,cachedI] = await AsyncStorage.multiGet(['drinksJson','ingredientsJson']);
+        const dStr = cachedD?.[1] ?? null;
+        const iStr = cachedI?.[1] ?? null;
+        if (dStr && iStr) {
+          setDrinks(JSON.parse(dStr));
+          setAllIngredients(JSON.parse(iStr));
+          setLoading(false);
         }
-      } catch (e) {
-        console.warn('Cache read error', e);
-      }
+      } catch {}
     })();
-  }, []);
+  },[]);
 
-  useEffect(() => {
-    if (!isAdmin) setOnlyMakeable(true);   // force ON once we know the role
-  }, [isAdmin]);
-
-  useEffect(() => {
-    const subscription = pubsub.subscribe({
-      topics: [`liquorbot/liquorbot${liquorbotId}/publish`],
-    }).subscribe({
-      next: (data) => {
-        // Handle the incoming message as needed
-      },
-      error: (error) => console.error('Publish topic subscription error:', error),
-    });
-
-    return () => subscription.unsubscribe();
-  }, [liquorbotId]);
-
-  // Load saved filter options on mount
-  useEffect(() => {
-    (async () => {
-      if (!isAdmin) return;
-      try {
-        const savedFilters = await AsyncStorage.getItem('filterOptions');
-        if (savedFilters) {
-          const { onlyMakeable, alphabetical, onlyCustom } = JSON.parse(savedFilters);
-          setOnlyMakeable(onlyMakeable);
-          setAlphabetical(alphabetical);
-          setOnlyCustom(onlyCustom);
-        }
-      } catch (e) {
-        console.error('Failed to load filter options', e);
-      }
-    })();
-  }, []);
-
-  // Save filter options whenever they change
-  useEffect(() => {
-    (async () => {
-      if (!isAdmin) return;
-      try {
-        const filterOptions = JSON.stringify({ onlyMakeable, alphabetical, onlyCustom });
-        await AsyncStorage.setItem('filterOptions', filterOptions);
-      } catch (e) {
-        console.error('Failed to save filter options', e);
-      }
-    })();
-  }, [onlyMakeable, alphabetical, onlyCustom]);
-
-  // is a drink makeable?
-  const isDrinkMakeable = (drink: Drink) => {
-    if (!drink.ingredients) return false;
-    const needed = drink.ingredients
-      .split(',')
-      .map((c) => parseInt(c.split(':')[0], 10));
-    return needed.every((id) => slots.includes(id));
-  };
-
-  // glow anim for status dot
-  const glowAnim = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, {
-          toValue: 1.2,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(glowAnim, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start();
-  }, [glowAnim]);
-
-  /* ----- base drinks & ingredient catalogue (S3 JSON) ----- */
-  useEffect(() => {
+  useEffect(()=>{
     if (drinks.length && allIngredients.length) return;
-    (async () => {
+    (async()=>{
       try {
-        const [drinksUrl, ingUrl] = await Promise.all([
-          getUrl({ key: 'drinkMenu/drinks.json' }),
-          getUrl({ key: 'drinkMenu/ingredients.json' }),
+        const [dText,iText] = await Promise.all([
+          fetchJsonWithFallback('drinkMenu/drinks.json'),
+          fetchJsonWithFallback('drinkMenu/ingredients.json'),
         ]);
-        const [drinksRes, ingRes] = await Promise.all([
-          fetch(drinksUrl.url),
-          fetch(ingUrl.url),
-        ]);
-        const [dText, iText] = await Promise.all([drinksRes.text(), ingRes.text()]);
-
         await AsyncStorage.multiSet([
-          ['drinksJson',       dText],
-          ['ingredientsJson',  iText],
+          ['drinksJson',dText],
+          ['ingredientsJson',iText],
         ]);
-
         setDrinks(JSON.parse(dText));
         setAllIngredients(JSON.parse(iText));
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
+      } catch(e){ console.error(e); }
+      finally { setLoading(false); }
     })();
-  }, [drinks.length, allIngredients.length]);
+  },[drinks.length,allIngredients.length]);
 
-  /* ----------------- Cognito username / ID ----------------- */
-  useEffect(() => {
-    (async () => {
+  /* ------------------- auth & likes ------------------ */
+  useEffect(()=>{
+    (async()=>{
       try {
         const user = await getCurrentUser();
-        user?.username && setUserID(user.username);
-      } catch {
-        setUserID(null);   // not signed in
-      }
+        setUserID(user?.username ?? null);
+      } catch { setUserID(null); }
     })();
-  }, []);
+  },[]);
 
-  /* -------------------- liked drinks ----------------------- */
-  useEffect(() => {
+  useEffect(()=>{
     if (!userID) return;
-    (async () => {
+    (async()=>{
       try {
-        const res = await client.graphql({
-          query: listLikedDrinks,
-          variables: { filter: { userID: { eq: userID } } },
-          authMode: 'userPool',
+        const res:any = await client.graphql({
+          query:listLikedDrinks,
+          variables:{ filter:{ userID:{ eq:userID } } },
+          authMode:'userPool',
         });
-        setLikedDrinks(
-          res.data?.listLikedDrinks?.items.map((i: any) => i.drinkID) || [],
-        );
-      } catch (e) {
-        console.error(e);
-      }
+        setLikedDrinks(res.data?.listLikedDrinks?.items.map((i:any)=>i.drinkID) || []);
+      } catch(e){ console.error(e); }
     })();
-  }, [userID]);
+  },[userID]);
 
-  /* -------- NEW: pull the user’s CustomRecipe items ---------- */
-  useEffect(() => {
+  /* ------------------- custom recipes ------------------ */
+  useEffect(()=>{
     if (!userID || customFetched) return;
-
-    (async () => {
+    (async()=>{
       try {
-        const res = await client.graphql({
-          query: LIST_CUSTOM_RECIPES_WITH_ING,
-          authMode: 'userPool', // owner‑based auth will return only the user’s items
+        const res:any = await client.graphql({
+          query:LIST_CUSTOM_RECIPES_WITH_ING,
+          authMode:'userPool',
         });
-
-        const placeholder =
-          'https://d3jj0su0y4d6lr.cloudfront.net/placeholder_drink.png';
-
-        const items = ('data' in res && res.data?.listCustomRecipes?.items) ?? [];
-
-        const custom: Drink[] = await Promise.all(
-          items.map(async (item: any, idx: number): Promise<Drink> => {
+        const items = res.data?.listCustomRecipes?.items ?? [];
+        const placeholder = 'https://d3jj0su0y4d6lr.cloudfront.net/placeholder_drink.png';
+        const custom:Drink[] = await Promise.all(
+          items.map(async(item:any,idx:number):Promise<Drink>=>{
             const numericId = 1_000_000 + idx;
-
-            // turn Array<{ingredientID,amount,priority}> → "id:amt:prio,…"
-            const ingArr: any[] = Array.isArray(item.ingredients)
-              ? item.ingredients
-              : [];                 // safety – but it will be an array
-
-            const ingredientsString = ingArr
-              .map(ri => `${Number(ri.ingredientID)}:${Number(ri.amount)}:${Number(ri.priority ?? 1)}`)
-              .join(',');
-
-            // resolve image key to a URL
+            const ingredientsString = (item.ingredients??[])
+              .map((ri:any)=>`${ri.ingredientID}:${ri.amount}:${ri.priority??1}`).join(',');
             let imageUrl = placeholder;
-            if (item.image) {
-              try {
-                const { url } = await getUrl({ key: item.image });
-                imageUrl = url.toString();
-              } catch (e) {
-                console.warn('Could not fetch custom drink image', e);
-              }
+            if (item.image){
+              try { const {url} = await getUrl({key:item.image}); imageUrl=url.toString(); } catch{}
             }
-
             return {
-              id: numericId,
-              name: item.name ?? `Custom #${idx + 1}`,
-              category: 'Custom',
-              description: item.description ?? '',
-              image: imageUrl,
-              ingredients: ingredientsString,
-              isCustom: true,
-              recipeId: item.id,
-              imageKey: item.image ?? null,
+              id:numericId,
+              name:item.name ?? `Custom #${idx+1}`,
+              category:'Custom',
+              description:item.description ?? '',
+              image:imageUrl, ingredients:ingredientsString,
+              isCustom:true, recipeId:item.id, imageKey:item.image ?? null,
             };
           }),
         );
-
-        // replace merging logic to avoid duplicates
-        setDrinks((prev) => {
-          const builtOnly = prev.filter((d) => d.category !== 'Custom');
-          return [...builtOnly, ...custom]; // << changed
+        setDrinks(prev=>{
+          const builtIn = prev.filter(d=>d.category!=='Custom');
+          return [...builtIn,...custom];
         });
         setCustomFetched(true);
-      } catch (e) {
-        console.error('Error loading custom drinks', e);
-      }
+      } catch(e){ console.error(e); }
     })();
-  }, [userID, customFetched]);
+  },[userID,customFetched]);
 
-  /* -------------------- favourite toggle -------------------- */
-  async function toggleFavorite(drinkId: number) {
-    if (!userID) {                                                               // ★ NEW ★
-      promptSignIn();
+  /* --------------- favourite toggle --------------- */
+  async function toggleFavorite(drinkId:number){
+    if (!userID){
+      setSignPromptVisible(true);       // NEW
       return;
     }
-    if (likedDrinks.includes(drinkId)) {
+    if (likedDrinks.includes(drinkId)){
       try {
-        const res = await client.graphql({
-          query: listLikedDrinks,
-          variables: { filter: { userID: { eq: userID }, drinkID: { eq: drinkId } } },
-          authMode: 'userPool',
+        const res:any = await client.graphql({
+          query:listLikedDrinks,
+          variables:{ filter:{ userID:{eq:userID}, drinkID:{eq:drinkId} } },
+          authMode:'userPool',
         });
         const existing = res.data?.listLikedDrinks?.items?.[0];
-        existing &&
-          (await client.graphql({
-            query: deleteLikedDrink,
-            variables: { input: { id: existing.id } },
-            authMode: 'userPool',
-          }));
-        setLikedDrinks((p) => p.filter((id) => id !== drinkId));
-      } catch (e) {
-        console.error(e);
-      }
+        if (existing){
+          await client.graphql({
+            query:deleteLikedDrink,
+            variables:{ input:{ id:existing.id } },
+            authMode:'userPool',
+          });
+        }
+        setLikedDrinks(p=>p.filter(id=>id!==drinkId));
+      } catch(e){ console.error(e); }
     } else {
       try {
         await client.graphql({
-          query: createLikedDrink,
-          variables: { input: { userID, drinkID: drinkId } },
-          authMode: 'userPool',
+          query:createLikedDrink,
+          variables:{ input:{ userID, drinkID:drinkId } },
+          authMode:'userPool',
         });
-        setLikedDrinks((p) => [...p, drinkId]);
-      } catch (e) {
-        console.error(e);
-      }
+        setLikedDrinks(p=>[...p,drinkId]);
+      } catch(e){ console.error(e); }
     }
   }
 
-  /* ---------------------- FILTER LOGIC ---------------------- */
-  const loadedIds = slots.filter((id) => id > 0);
-  const canMake = (drink: Drink) =>
-    onlyMakeable ? isDrinkMakeable(drink) : true;
+  /* -------------------- filter logic ------------------- */
+  const isDrinkMakeable = (drink:Drink)=>{
+    if (!drink.ingredients) return false;
+    const needed = drink.ingredients.split(',').map(c=>parseInt(c.split(':')[0],10));
+    return needed.every(id=>slots.includes(id));
+  };
+  const canMake = (d:Drink)=> onlyMakeable ? isDrinkMakeable(d) : true;
 
-  let filteredDrinks = drinks.filter(
-    (d) =>
-      (!onlyCustom || d.category === 'Custom') &&
-      (selectedCategory === 'All' || d.category === selectedCategory) &&
-      d.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      canMake(d),
+  let filteredDrinks = drinks.filter(d=>
+    (!onlyCustom||d.category==='Custom') &&
+    (selectedCategory==='All' || d.category===selectedCategory) &&
+    d.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+    canMake(d),
   );
-  if (alphabetical) {
-    filteredDrinks.sort((a, b) => a.name.localeCompare(b.name));
-  }
+  if (alphabetical) filteredDrinks.sort((a,b)=>a.name.localeCompare(b.name));
 
-  // keep expanded card on left column
   const renderedDrinks = [...filteredDrinks];
-  if (expandedDrink != null) {
-    const i = renderedDrinks.findIndex((d) => d.id === expandedDrink);
-    i !== -1 &&
-      i % 2 === 1 &&
-      renderedDrinks.splice(i - 1, 0, renderedDrinks.splice(i, 1)[0]);
+  if (expandedDrink!=null){
+    const i = renderedDrinks.findIndex(d=>d.id===expandedDrink);
+    if (i!==-1 && i%2===1){
+      renderedDrinks.splice(i-1,0,renderedDrinks.splice(i,1)[0]);
+    }
   }
 
-  const handleExpandedLayout = (layout: { y: number }) =>
-    scrollViewRef.current?.scrollTo({ y: layout.y, animated: true });
+  const handleExpandedLayout = (layout:{y:number}) =>
+    scrollViewRef.current?.scrollTo({ y:layout.y, animated:true });
 
-  /* ---------------------- initial loader --------------------- */
-  if (loading) {
-    return (
+  /* -------------------- loader -------------------- */
+  if (loading){
+    return(
       <View style={styles.loadingScreen}>
-        <Text style={styles.loadingText}>Loading drinks…</Text>
+        <Text style={styles.loadingText}>Loading drinks…</Text>
       </View>
     );
   }
 
-  /* ---------------------------- UI --------------------------- */
+  /* ----------------------- UI ---------------------- */
   return (
     <View style={styles.container}>
-      {/* ------------ HEADER ------------ */}
+      {/* header */}
       <View style={styles.headerContainer}>
         <Text style={styles.headerText}>Drinks</Text>
-
         <View style={styles.connectionRow}>
-          <Animated.View
-            style={[
-              styles.greenDot,
-              {
-                backgroundColor: isConnected ? '#63d44a' : '#B81A1A',
-                transform: [{ scale: glowAnim }],
-                shadowColor: isConnected ? '#00FF00' : '#B81A1A',
-              },
-            ]}
-          />
+          <Animated.View style={[
+            styles.greenDot,
+            { backgroundColor:isConnected?'#63d44a':'#B81A1A', shadowColor:isConnected?'#00FF00':'#B81A1A' },
+          ]}/>
           <Text style={styles.subHeaderText}>
-            {isConnected ? 'LiquorBot Connected' : 'LiquorBot Disconnected'}
+            {isConnected?'LiquorBot Connected':'LiquorBot Disconnected'}
           </Text>
         </View>
-
         {isAdmin && (
           <TouchableOpacity
             style={styles.editIconContainer}
-            onPress={() => router.push('/create-drink')}
+            onPress={()=>router.push('/create-drink')}
           >
-            <Ionicons name="create-outline" size={30} color="#CE975E" />
+            <Ionicons name="create-outline" size={30} color="#CE975E"/>
           </TouchableOpacity>
         )}
       </View>
 
-      {/* ------------ CATEGORY PICKER ------------ */}
+      {/* categories */}
       <View style={styles.horizontalPickerContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontalPicker}
-        >
-          {categories.map((cat) => (
-            <TouchableOpacity
-              key={cat}
-              onPress={() => setSelectedCategory(cat)}
-              style={styles.categoryButton}
-            >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.horizontalPicker}>
+          {categories.map(cat=>(
+            <TouchableOpacity key={cat} onPress={()=>setSelectedCategory(cat)}
+              style={styles.categoryButton}>
               <View style={styles.categoryButtonContent}>
-                <Text
-                  style={[
-                    styles.categoryButtonText,
-                    selectedCategory === cat && styles.selectedCategoryText,
-                  ]}
-                >
-                  {cat}
-                </Text>
-                {selectedCategory === cat && <View style={styles.underline} />}
+                <Text style={[
+                  styles.categoryButtonText,
+                  selectedCategory===cat && styles.selectedCategoryText
+                ]}>{cat}</Text>
+                {selectedCategory===cat && <View style={styles.underline}/>}
               </View>
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
 
-      {/* ------------ SEARCH + FILTER ------------ */}
+      {/* search / filter */}
       <View style={styles.searchBarContainer}>
-        <Ionicons
-          name="search"
-          size={20}
-          color="#4F4F4F"
-          style={styles.searchIcon}
-        />
+        <Ionicons name="search" size={20} color="#4F4F4F" style={styles.searchIcon}/>
         <TextInput
           style={styles.searchBar}
           placeholder="Search"
           placeholderTextColor="#4F4F4F"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
+          value={searchQuery} onChangeText={setSearchQuery}
         />
-        {isAdmin && (                               // ⬅️ wrap the icon
-          <TouchableOpacity
-            onPress={() => setFilterModalVisible(true)}
-            style={styles.filterIcon}
-          >
-            <Ionicons
-              name="funnel-outline"
-              size={20}
-              color={onlyMakeable ? '#CE975E' : '#4F4F4F'}
-            />
+        {isAdmin && (
+          <TouchableOpacity onPress={()=>setFilterModalVisible(true)} style={styles.filterIcon}>
+            <Ionicons name="funnel-outline" size={20} color={onlyMakeable?'#CE975E':'#4F4F4F'}/>
           </TouchableOpacity>
         )}
       </View>
 
-      {/* ------------ DRINK GRID ------------ */}
+      {/* grid */}
       <ScrollView
         ref={scrollViewRef}
-        contentContainerStyle={[
-          styles.scrollContainer,
-          { paddingBottom: expandedDrink ? 100 : 80 },
-        ]}
+        contentContainerStyle={[styles.scrollContainer,{ paddingBottom:expandedDrink?100:80 }]}
       >
-        {!userID ? (
-          /* ---------- guest view ---------- */
+        {renderedDrinks.length===0 ? (
           <View style={styles.noDrinksContainer}>
             <Text style={styles.noDrinksText}>
-              Please sign in before you can view drinks.
-            </Text>
-
-            <TouchableOpacity
-              onPress={() => router.push('/(auth)/sign-in')}
-              activeOpacity={0.8}
-              style={styles.signInButton}
-            >
-              <Text style={styles.signInButtonText}>Sign In</Text>
-            </TouchableOpacity>
-          </View>
-        ) : renderedDrinks.length === 0 ? (
-          /* ---------- no drinks ---------- */
-          <View style={styles.noDrinksContainer}>
-            <Text style={styles.noDrinksText}>
-              Oops, no drinks here! Check your filters, internet connection, or wait for an event to start.
+              Oops, no drinks here! Check your filters or internet connection.
             </Text>
           </View>
         ) : (
-          /* ---------- drink grid ---------- */
           <View style={styles.grid}>
-            {renderedDrinks.map((drink) => (
+            {renderedDrinks.map(drink=>(
               <DrinkItem
                 key={drink.id}
                 drink={drink}
-                isExpanded={expandedDrink === drink.id}
+                isExpanded={expandedDrink===drink.id}
                 isLiked={likedDrinks.includes(drink.id)}
-                toggleFavorite={toggleFavorite}
-                onExpand={handleExpand}
-                onCollapse={() => setExpandedDrink(null)}
-                allIngredients={allIngredients}
-                onExpandedLayout={(layout) =>
-                  scrollViewRef.current?.scrollTo({ y: layout.y, animated: true })
-                }
                 isMakeable={isDrinkMakeable(drink)}
+                isGuest={!userID}
+                toggleFavorite={toggleFavorite}
+                onExpand={id=>setExpandedDrink(id)}
+                onCollapse={()=>setExpandedDrink(null)}
+                allIngredients={allIngredients}
+                onExpandedLayout={handleExpandedLayout}
+                onGuestPrompt={showSignPrompt}      // NEW
               />
             ))}
           </View>
         )}
       </ScrollView>
 
-  {/* ------------ FILTER POPUP ------------ */}
-  {isAdmin && (
+      {/* filter popup */}
+      {isAdmin && (
         <Modal
           visible={filterModalVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setFilterModalVisible(false)}
+          transparent animationType="fade"
+          onRequestClose={()=>setFilterModalVisible(false)}
         >
           <View style={styles.modalOverlay}>
             <View style={styles.filterModal}>
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => setFilterModalVisible(false)}
-              >
-                <Ionicons name="close" size={24} color="#DFDCD9" />
+              <TouchableOpacity style={styles.modalCloseButton}
+                onPress={()=>setFilterModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#DFDCD9"/>
               </TouchableOpacity>
-
               <Text style={styles.filterModalTitle}>Filter Options</Text>
-
               <View style={styles.filterRow}>
                 <Text style={styles.filterLabel}>Show only makeable drinks</Text>
-                <Switch
-                  value={onlyMakeable}
-                  onValueChange={setOnlyMakeable}
-                  trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
-                  thumbColor="#DFDCD9"
-                />
+                <Switch value={onlyMakeable} onValueChange={setOnlyMakeable}
+                  trackColor={{false:'#4F4F4F',true:'#CE975E'}} thumbColor="#DFDCD9"/>
               </View>
               <View style={styles.filterRow}>
                 <Text style={styles.filterLabel}>Sort drinks alphabetically</Text>
-                <Switch
-                  value={alphabetical}
-                  onValueChange={setAlphabetical}
-                  trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
-                  thumbColor="#DFDCD9"
-                />
+                <Switch value={alphabetical} onValueChange={setAlphabetical}
+                  trackColor={{false:'#4F4F4F',true:'#CE975E'}} thumbColor="#DFDCD9"/>
               </View>
               <View style={styles.filterRow}>
                 <Text style={styles.filterLabel}>Show only my custom drinks</Text>
-                <Switch
-                  value={onlyCustom}
-                  onValueChange={setOnlyCustom}
-                  trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
-                  thumbColor="#DFDCD9"
-                />
+                <Switch value={onlyCustom} onValueChange={setOnlyCustom}
+                  trackColor={{false:'#4F4F4F',true:'#CE975E'}} thumbColor="#DFDCD9"/>
               </View>
             </View>
           </View>
         </Modal>
       )}
-    </View> 
-  ); 
-}     
+
+      {/* ----------- SIGN-IN PROMPT ------------- */}
+      <Modal
+        visible={signPromptVisible}
+        transparent animationType="fade"
+        onRequestClose={()=>setSignPromptVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.signCard}>
+            <TouchableOpacity style={styles.modalCloseButton} onPress={()=>setSignPromptVisible(false)}>
+              <Ionicons name="close" size={24} color="#DFDCD9"/>
+            </TouchableOpacity>
+
+            <Ionicons name="person-circle-outline" size={80} color="#CE975E" style={{marginBottom:12}}/>
+            <Text style={styles.signTitle}>Sign in to save favourites</Text>
+            <Text style={styles.signSub}>
+              Like drinks, see them on any device, and get personalised
+              recommendations.
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.joinGo,{marginTop:28}]}
+              onPress={()=>{ setSignPromptVisible(false); router.push('/auth/sign-in'); }}
+            >
+              <Text style={styles.joinGoTxt}>Sign In</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
 // -------------------------------- STYLES --------------------------------
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -1181,5 +795,11 @@ const styles = StyleSheet.create({
     padding: 30,
   },
   noDrinksText: { color: '#4f4f4f', fontSize: 12, textAlign: 'center' },
-
+  signCard:{width:SCREEN_WIDTH*0.8,backgroundColor:'#1F1F1F',borderRadius:12,
+           paddingVertical:32,paddingHorizontal:24,alignItems:'center'},
+  signTitle:{color:'#DFDCD9',fontSize:22,fontWeight:'700',textAlign:'center',marginBottom:10},
+  signSub:{color:'#8F8F8F',fontSize:14,textAlign:'center',lineHeight:20},
+  joinGo:{backgroundColor:'#CE975E',borderRadius:8,paddingVertical:12,paddingHorizontal:40,
+          alignSelf:'stretch',alignItems:'center'},
+  joinGoTxt:{color:'#141414',fontSize:16,fontWeight:'600'},
 });

@@ -359,7 +359,7 @@ export default function Index() {
                 </View>
                 <View style={styles.textContainer}>
                   <Text style={styles.tileTitle}>Sign In</Text>
-                  <Text style={styles.tileSubtext}>Access Your Account</Text>
+                  <Text style={styles.tileSubtext}>Access Account</Text>
                 </View>
               </View>
               <View style={styles.glowOverlay} />
