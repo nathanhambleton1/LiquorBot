@@ -532,6 +532,8 @@ export default function MenuScreen() {
   const [drinks, setDrinks] = useState<Drink[]>([]);
   const [allIngredients, setAllIngredients] = useState<BaseIngredient[]>([]);
   const [loading, setLoading] = useState(true);
+  const lastFocusedTime = useRef<number>(0);
+  const [refreshCustom, setRefreshCustom] = useState(false);
 
   // category & search
   const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey'];
@@ -577,7 +579,7 @@ export default function MenuScreen() {
   };                                                                         // ★ NEW ★
 
   /* ------------------------------------------------------------------ */
-  /*                       NEW: Slot-config redundancy                   */
+  /*                       Slot-config redundancy                        */
   /* ------------------------------------------------------------------ */
   const requestSlotConfig = useCallback(async () => {
     if (!liquorbotId || !isConnected) return;
@@ -587,21 +589,29 @@ export default function MenuScreen() {
         message: GET_CONFIG,
       });
       console.log('[Menu] Requested slot configuration');
+      lastFocusedTime.current = Date.now(); // Update last request time
     } catch (err) {
       console.error('[Menu] Failed to request slot config', err);
     }
   }, [liquorbotId, isConnected]);
 
-  // Automatically re-request config whenever the screen is focused
+  // Automatically re-request config when screen is focused
   useEffect(() => {
     if (!isFocused) return;
-    requestSlotConfig();
+    
+    // Only request if it's been at least 1 second since last request
+    const timeSinceLastFocus = Date.now() - lastFocusedTime.current;
+    if (timeSinceLastFocus > 1000) {
+      requestSlotConfig();
+    }
+
     const retryTimer = setTimeout(() => {
       const anyLoaded = slots.some((id) => id > 0);
       if (!anyLoaded) requestSlotConfig();
     }, 2000);
+    
     return () => clearTimeout(retryTimer);
-  }, [isFocused, slots, requestSlotConfig]);
+  }, [isFocused]);
 
   /* ------------------------------------------------------------------ */
   /*                      existing logic continues …                    */
@@ -765,15 +775,15 @@ export default function MenuScreen() {
     })();
   }, [userID]);
 
-  /* -------- NEW: pull the user’s CustomRecipe items ---------- */
+  /* -------- Pull the user’s CustomRecipe items ---------- */
   useEffect(() => {
-    if (!userID || customFetched) return;
+    if (!userID) return;
 
     (async () => {
       try {
         const res = await client.graphql({
           query: LIST_CUSTOM_RECIPES_WITH_ING,
-          authMode: 'userPool', // owner‑based auth will return only the user’s items
+          authMode: 'userPool',
         });
 
         const placeholder =
@@ -819,17 +829,22 @@ export default function MenuScreen() {
           }),
         );
 
-        // replace merging logic to avoid duplicates
         setDrinks((prev) => {
           const builtOnly = prev.filter((d) => d.category !== 'Custom');
-          return [...builtOnly, ...custom]; // << changed
+          return [...builtOnly, ...custom];
         });
-        setCustomFetched(true);
       } catch (e) {
         console.error('Error loading custom drinks', e);
       }
     })();
-  }, [userID, customFetched]);
+  }, [userID, refreshCustom]); // Add refreshCustom to dependencies
+
+  // Add refresh on screen focus
+  useEffect(() => {
+    if (isFocused && userID) {
+      setRefreshCustom(prev => !prev);
+    }
+  }, [isFocused]);
 
   /* -------------------- favourite toggle -------------------- */
   async function toggleFavorite(drinkId: number) {
@@ -1181,5 +1196,5 @@ const styles = StyleSheet.create({
     padding: 30,
   },
   noDrinksText: { color: '#4f4f4f', fontSize: 12, textAlign: 'center' },
-
+  
 });

@@ -89,6 +89,37 @@ export function LiquorBotProvider({ children }:{ children:ReactNode }) {
   const [tick, setTick] = useState(0);
   const reconnect       = useCallback(() => setTick(t => t + 1), []);
   const forceDisconnect = useCallback(() => { lastHb.current = 0; setIsConnected(false); }, []);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const session = await fetchAuthSession();
+        setIsAuthenticated(!!session.tokens?.accessToken);
+      } catch {
+        setIsAuthenticated(false);
+      }
+    };
+
+    // Check initial auth state
+    checkAuth();
+
+    // Listen for auth changes
+    const listener = Hub.listen('auth', ({ payload }) => {
+      if (payload.event === 'signedIn' || payload.event === 'tokenRefresh') {
+        setIsAuthenticated(true);
+        syncGroups();
+        reconnect();
+      } else if (payload.event === 'signedOut') {
+        setIsAuthenticated(false);
+        forceDisconnect();
+        setGroups([]);
+        AsyncStorage.removeItem('userGroups').catch(() => {});
+      }
+    });
+
+    return () => listener();
+  }, []);
 
   /* Hub – respond to auth events */
   useEffect(() => {
@@ -102,78 +133,107 @@ export function LiquorBotProvider({ children }:{ children:ReactNode }) {
     return () => off();
   }, [reconnect, forceDisconnect, syncGroups]);
 
-  /* guarded subscribe – SKIPS when creds aren’t ready, so no NotAuthorized spam */
+  /* guarded subscribe – SKIPS when not authenticated */
   const subscribeTopic = useCallback(
-    (topic:string,
-     onMsg:(m:any)=>void,
-     onErr:(e:any)=>void) => {
+    (topic: string,
+     onMsg: (m: any) => void,
+     onErr: (e: any) => void) => {
+      if (!isAuthenticated) {
+        console.log('[IoT] Skipping subscribe - not authenticated');
+        return () => {}; // Return empty cleanup function
+      }
+
       let sub: { unsubscribe: () => void } | null = null;
 
-      fetchAuthSession({ forceRefresh:false })
-        .then(() =>
-          pubsub.subscribe({ topics:[topic] })
-                .subscribe({ next:onMsg, error:onErr }),
-        )
-        .then(s => { sub = s; })
+      fetchAuthSession({ forceRefresh: false })
+        .then(() => {
+          const observable = pubsub.subscribe({ topics: [topic] });
+          sub = observable.subscribe({ next: onMsg, error: onErr });
+        })
         .catch(err => {
-          // Silence unauthenticated noise; everything re-tries after sign-in.
           if (err?.name !== 'NotAuthorizedException' &&
               err?.code !== 'NotAuthorizedException') {
             onErr(err);
           }
         });
 
-      return () => sub?.unsubscribe();        // cleanup fn
+      return () => sub?.unsubscribe();
     },
-    [],
+    [isAuthenticated] // Recreate when auth state changes
   );
 
-  /* slot-config */
+  /* slot-config - only when authenticated */
   useEffect(() => {
+    if (!isAuthenticated) {
+      console.log('[IoT] Skipping slot config - not authenticated');
+      setSlots(Array(15).fill(0)); // Reset slots
+      return;
+    }
+    
     const topic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
     const cancel = subscribeTopic(
       topic,
-      (d:any) => {
+      (d: any) => {
         const msg = (d as any).value ?? d;
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots))
-          setSlots(msg.slots.map((n:any)=>Number(n)||0));
+          setSlots(msg.slots.map((n: any) => Number(n) || 0));
         if (msg.action === 'SET_SLOT' && typeof msg.slot === 'number')
-          setSlots(p => { const n=[...p]; n[msg.slot-1] = Number(msg.ingredientId)||0; return n; });
+          setSlots(p => { 
+            const n = [...p]; 
+            n[msg.slot - 1] = Number(msg.ingredientId) || 0; 
+            return n; 
+          });
       },
-      /* onErr ⇒ just schedule a reconnect later */
-      () => { setTimeout(reconnect, 5_000); },
+      () => setTimeout(reconnect, 5_000)
     );
     return cancel;
-  }, [liquorbotId, tick, subscribeTopic]);
+  }, [liquorbotId, tick, subscribeTopic, isAuthenticated]);
 
-  /* heartbeat */
+  /* heartbeat - only when authenticated */
   useEffect(() => {
+    if (!isAuthenticated) {
+      console.log('[IoT] Skipping heartbeat - not authenticated');
+      lastHb.current = 0; // Reset heartbeat
+      setIsConnected(false);
+      return;
+    }
+    
     const topic = `liquorbot/liquorbot${liquorbotId}/heartbeat`;
     const cancel = subscribeTopic(
       topic,
       () => { lastHb.current = Date.now(); },
-      () => { setTimeout(reconnect, 5_000); },
+      () => { setTimeout(reconnect, 5_000); }
     );
     return cancel;
-  }, [liquorbotId, tick, subscribeTopic]);
+  }, [liquorbotId, tick, subscribeTopic, isAuthenticated]);
 
-  /* watchdog */
+  /* watchdog - only when authenticated */
   useEffect(() => {
+    if (!isAuthenticated) return;
+
     const id = setInterval(() => {
       const alive = Date.now() - lastHb.current < HB_TIMEOUT_MS;
       setIsConnected(p => (p === alive ? p : alive));
       if (!alive && Date.now() - lastHb.current > NO_HB_RECONNECT) reconnect();
     }, WATCHDOG_MS);
     return () => clearInterval(id);
-  }, [reconnect]);
+  }, [reconnect, isAuthenticated]);
 
-  /* push updates */
-  const updateSlots = useCallback((newSlots:number[]) => {
+  /* push updates - only when authenticated */
+  const updateSlots = useCallback((newSlots: number[]) => {
     setSlots(newSlots);
+    
+    if (!isAuthenticated) {
+      console.log('[IoT] Skipping slot update - not authenticated');
+      return;
+    }
+
     const topic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
-    pubsub.publish({ topics:[topic], message:{ action:'CURRENT_CONFIG', slots:newSlots } })
-          .catch(console.error);
-  }, [liquorbotId]);
+    pubsub.publish({ 
+      topics: [topic], 
+      message: { action: 'CURRENT_CONFIG', slots: newSlots } 
+    }).catch(console.error);
+  }, [liquorbotId, isAuthenticated]);
 
   /* ───────── event-override helpers ───────── */
   const [prevLiquorbotId, setPrevLiquorbotId] = useState<string|null>(null);

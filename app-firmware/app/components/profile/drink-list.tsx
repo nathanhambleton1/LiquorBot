@@ -28,9 +28,9 @@ import { useRouter } from 'expo-router';
 import { Amplify } from 'aws-amplify';
 import { generateClient } from 'aws-amplify/api';
 import { getUrl } from 'aws-amplify/storage';
-import config from '../src/amplifyconfiguration.json';
+import config from '../../../src/amplifyconfiguration.json';
 
-import { deleteCustomRecipe } from '../src/graphql/mutations';
+import { deleteCustomRecipe } from '../../../src/graphql/mutations';
 
 Amplify.configure(config);
 const client = generateClient();

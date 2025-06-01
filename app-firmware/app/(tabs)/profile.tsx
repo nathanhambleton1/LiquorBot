@@ -339,7 +339,7 @@ export default function ProfileScreen() {
                     signOut();
                     break;
                   case 'My Drinks':
-                    router.push('/drink-list');
+                    router.push('/components/profile/drink-list');
                     break;
                   default:
                     openPopup({ title: b.title });
