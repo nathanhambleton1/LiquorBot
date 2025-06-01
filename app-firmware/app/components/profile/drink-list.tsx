@@ -75,6 +75,7 @@ export default function CustomDrinkListScreen() {
   const scrollRef           = useRef<ScrollView>(null);
   const [drinks, setDrinks] = useState<CustomDrink[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const placeholderURL =
     'https://d3jj0su0y4d6lr.cloudfront.net/placeholder_drink.png';
@@ -146,6 +147,7 @@ export default function CustomDrinkListScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              setDeletingId(drink.id);  // Set deleting state
               await client.graphql({
                 query: deleteCustomRecipe,
                 variables: { input: { id: drink.id } },
@@ -155,6 +157,8 @@ export default function CustomDrinkListScreen() {
             } catch (e) {
               console.error('Delete failed', e);
               Alert.alert('Delete failed – see console.');
+            } finally {
+              setDeletingId(null);  // Reset deleting state
             }
           },
         },
@@ -192,18 +196,24 @@ export default function CustomDrinkListScreen() {
         }
         style={[styles.card, { transform: [{ scale }] }]}
       >
-        {/* delete button */}
+        {/* DELETE BUTTON WITH SPINNER */}
         <TouchableOpacity
           style={styles.deleteBtn}
           onPress={() => handleDelete(drink)}
+          disabled={!!deletingId}  // Disable during any deletion
         >
-          <Ionicons name="trash" size={22} color="#d44a4a" />
+          {deletingId === drink.id ? (
+            <ActivityIndicator size="small" color="#d44a4a" />
+          ) : (
+            <Ionicons name="trash" size={22} color="#d44a4a" />
+          )}
         </TouchableOpacity>
 
-        {/* edit button */}
+        {/* EDIT BUTTON - DISABLE DURING DELETION */}
         <TouchableOpacity
           style={styles.editBtn}
-          onPress={() =>
+          disabled={!!deletingId}
+          onPress={() => 
             router.push({
               pathname: '/create-drink',
               params: {

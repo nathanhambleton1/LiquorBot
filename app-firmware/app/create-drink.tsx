@@ -17,7 +17,7 @@ import React, {
 } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView,
-  Modal, FlatList, Platform, KeyboardAvoidingView, Image, Dimensions,
+  Modal, FlatList, Platform, KeyboardAvoidingView, Image, Dimensions, ActivityIndicator,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
@@ -157,6 +157,7 @@ export default function CreateDrinkScreen() {
 
   /* ----------- state: priority bubble ----------- */
   const [showPriorityInfoIndex, setShowPriorityInfoIndex] = useState<number|null>(null);
+  const [saving, setSaving] = useState(false);
 
   /* ----------- state: image builder ----------- */
   const [builderVisible, setBuilderVisible] = useState(false);
@@ -291,6 +292,8 @@ export default function CreateDrinkScreen() {
 
   /* ═════════════  SAVE  ═════════════ */
   const handleSave = async () => {
+    if (saving) return;
+    setSaving(true); 
     const ingredientsInput = rows.filter(r=>r.id!==0)
       .map(({id,volume,priority})=>({
         ingredientID:String(id), amount:volume, priority,
@@ -333,8 +336,13 @@ export default function CreateDrinkScreen() {
 
         emit('recipe-created', data.createCustomRecipe);   // ← tell whoever opened us
       }
+      setSaving(false);
       navigation.goBack();
-    }catch(e){ console.error('Save failed',e); alert('Save failed – see console.'); }
+    }catch(e){ 
+      console.error('Save failed',e); 
+      alert('Save failed – see console.'); 
+      setSaving(false);
+    }
   };
 
   // Update the close button handlers
@@ -503,10 +511,20 @@ export default function CreateDrinkScreen() {
 
         {/* save */}
         <TouchableOpacity
-          style={[styles.saveButton,(drinkName.trim()===''||exporting)&&{opacity:0.4}]}
-          disabled={drinkName.trim()===''||exporting}
-          onPress={handleSave}>
-          <Text style={styles.saveButtonText}>{exporting?'Saving…': (isEditing?'Update Drink':'Save Drink')}</Text>
+          style={[
+            styles.saveButton,
+            { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }, // 👈 NEW
+            (drinkName.trim() === '' || saving || exporting) && { opacity: 0.4 }
+          ]}
+          disabled={drinkName.trim() === '' || saving || exporting}
+          onPress={handleSave}
+        >
+          {(saving || exporting) && (
+            <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
+          )}
+          <Text style={styles.saveButtonText}>
+            {saving || exporting ? 'Saving…' : isEditing ? 'Update Drink' : 'Save Drink'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
 
