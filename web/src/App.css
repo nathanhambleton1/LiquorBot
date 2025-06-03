@@ -1,0 +1,184 @@
+/* -----------------------------------------------------------------------------
+   File: index.tsx (LiquorBot App – Main Home Screen + IoT Policy Attach)
+   ----------------------------------------------------------------------------- */
+html, body, #root {
+  width: 100%; /* ensure full width */
+  height: 100%;
+  margin: 0;
+  background: #141414;
+  color: #DFDCD9;
+  font-family: 'Inter', sans-serif;
+}
+
+a { color: #CE975E; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Added for responsive fitting */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+html, body {
+  overflow-x: hidden;
+}
+img, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Utility */
+.lb-container {
+  width: 100%;
+  max-width: none; /* removed fixed max-width to fill entire screen */
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+  .lb-container {
+    max-width: 100vw;
+    padding-left: 4vw;
+    padding-right: 4vw;
+  }
+}
+
+.accent { color: #CE975E; }
+
+/* Header */
+.lb-header {
+  background: #1E1E1E;
+  border-bottom: 1px solid #2A2A2A;
+  position: sticky; top: 0; z-index: 100;
+  width: 100%;
+}
+.lb-header .lb-container {
+  display: flex; align-items: center; padding: 14px 0;
+}
+.lb-logo { display: flex; align-items: center; cursor: pointer; gap: 8px; }
+.lb-logo img { height: 34px; width: 34px; }
+.lb-logo span { font-size: 20px; font-weight: 700; }
+
+.lb-header nav {
+  margin-left: auto;
+  display: flex; gap: 24px;
+}
+.lb-header nav a { font-weight: 500; }
+
+.lb-btn {
+  margin-left: 24px;
+  background: #CE975E;
+  color: #141414;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex; align-items: center;
+}
+.lb-btn:hover { opacity: 0.9; }
+.lb-btn.secondary {
+  background: transparent;
+  border: 1px solid #CE975E;
+  color: #CE975E;
+}
+
+/* Hero */
+.lb-hero {
+  background: url('/hero-bg.jpg') center/cover no-repeat;
+  padding: 120px 0;
+  text-align: center;
+}
+.hero-inner h1 {
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  margin: 0 0 18px;
+}
+.hero-inner p {
+  font-size: clamp(1rem, 2vw, 1.125rem);
+  max-width: 90vw;
+  margin-inline: auto;
+  opacity: 0.9;
+}
+.cta-row {
+  margin-top: 34px;
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+.store-btn img { height: 56px; }
+
+/* Features */
+.lb-features { padding: 80px 0; }
+.feature-grid {
+  display: grid;
+  gap: clamp(16px, 4vw, 32px);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.card {
+  background: #1E1E1E;
+  border: 1px solid #2A2A2A;
+  border-radius: 12px;
+  padding: 30px 24px;
+  text-align: center;
+  transition: transform 0.25s ease;
+}
+.card:hover { transform: translateY(-6px); }
+.card .icon { font-size: 42px; margin-bottom: 14px; }
+.card h3 { margin: 0 0 10px; }
+.card p { opacity: 0.85; line-height: 1.5; font-size: 15px; }
+
+/* Help CTA */
+.lb-help {
+  background: #1E1E1E;
+  text-align: center;
+  padding: 70px 0;
+}
+.lb-help h2 { font-size: 32px; margin: 0 0 12px; }
+.lb-help p { max-width: 560px; margin-inline: auto 28px; }
+
+/* Footer */
+.lb-footer {
+  background: #0F0F0F;
+  padding: 48px 0;
+  width: 100%;
+}
+.footer-grid {
+  display: grid;
+  gap: 32px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+.lb-footer h4 { margin-bottom: 12px; }
+.lb-footer ul { list-style: none; padding: 0; margin: 0; }
+.lb-footer li { margin-bottom: 6px; }
+.small { font-size: 13px; opacity: 0.7; }
+
+/* Auth modal backdrop */
+.auth-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+/* Example media query for smaller screens */
+@media (max-width: 600px) {
+  .lb-header .lb-container,
+  .lb-footer .lb-container {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 10px 4vw;
+  }
+  .lb-header nav {
+    gap: 12px;
+  }
+  .lb-btn {
+    margin-left: 0;
+    margin-top: 12px;
+    width: 100%;
+  }
+}
