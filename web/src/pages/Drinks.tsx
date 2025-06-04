@@ -39,7 +39,11 @@ const parseIngredients = (ingredientString: string) => {
 // Drink colors for ingredient indicators
 const DRINK_COLOURS = ['#d72638', '#f5be41', '#e97451', '#57c84d', '#1e90ff'];
 
-const Drinks: React.FC = () => {
+interface DrinksProps {
+  onShowAuth?: () => void;
+}
+
+const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
   const [drinks, setDrinks] = useState<Drink[]>([]);
   const [customDrinks, setCustomDrinks] = useState<CustomDrink[]>([]);
   const [standardDrinks, setStandardDrinks] = useState<Drink[]>([]);
@@ -143,7 +147,7 @@ const Drinks: React.FC = () => {
       
       const drinksWithImages = await Promise.all(
         items.map(async (item: any) => {
-          let imageUrl = '/assets/drinks/placeholder.png';
+        let imageUrl = '/assets/drinks/placeholder.png';
           if (item.image) {
             try {
               const { url } = await getUrl({ key: item.image });
@@ -153,11 +157,10 @@ const Drinks: React.FC = () => {
             }
           }
           
-          // FIX: Properly format ingredients string
           const ingredientsString = item.ingredients
             .map((ing: any) => `${ing.ingredientID}:${ing.amount}:${ing.priority}`)
             .join(',');
-          
+
           return {
             id: item.id,
             recipeId: item.id,
@@ -239,11 +242,14 @@ const Drinks: React.FC = () => {
   const handleUpdate = async () => {
     if (!currentDrink || !name) return;
     
-    // Convert ingredients to string format
-    const ingredientsString = editIngredients
+    // FIX: Properly format ingredients
+    const ingredientsInput = editIngredients
       .filter(ing => ing.id !== 0)
-      .map(ing => `${ing.id}:${ing.amount}:${ing.priority}`)
-      .join(',');
+      .map(ing => ({
+        ingredientId: ing.id.toString(),
+        amount: ing.amount,
+        priority: ing.priority
+      }));
 
     try {
       let imageKey = currentDrink.image.includes('drink-images/') 
@@ -270,16 +276,7 @@ const Drinks: React.FC = () => {
             name,
             description: description || null,
             image: imageKey || null,
-            ingredients: ingredientsString
-              ? ingredientsString.split(',').map(chunk => {
-                  const [id, amount, priority] = chunk.split(':');
-                  return {
-                    ingredientId: parseInt(id),
-                    amount: parseFloat(amount),
-                    priority: parseInt(priority)
-                  };
-                })
-              : []
+            ingredients: ingredientsInput
           }
         },
         authMode: 'userPool'
@@ -287,7 +284,7 @@ const Drinks: React.FC = () => {
       
       // Refresh list
       fetchCustomDrinks();
-      closeModal();
+      setShowEditModal(false); // Close modal after save
     } catch (error) {
       console.error('Error updating drink:', error);
     }
@@ -481,6 +478,15 @@ const Drinks: React.FC = () => {
     );
   };
 
+  // Remove reload-on-signin logic and instead refetch drinks on login state change
+  useEffect(() => {
+    if (isLoggedIn) {
+      fetchCustomDrinks();
+    } else {
+      setCustomDrinks([]); // Clear custom drinks on sign out
+    }
+  }, [isLoggedIn]);
+
   if (loading) {
     return (
       <div className="drinks-page lb-container">
@@ -512,20 +518,22 @@ const Drinks: React.FC = () => {
                 + Create Custom Drink
               </button>
             )}
-            <div className="toggle-label" style={{display: 'flex', alignItems: 'center', gap: 8}}>
-              <span style={{fontSize: '1rem', color: '#cecece'}}>Custom Only</span>
-              <button
-                className={`ios-toggle${showCustomOnly ? ' checked' : ''}`}
-                onClick={() => setShowCustomOnly(v => !v)}
-                aria-pressed={showCustomOnly}
-                tabIndex={0}
-                type="button"
-              >
-                <span className="ios-toggle-track">
-                  <span className="ios-toggle-thumb" />
-                </span>
-              </button>
-            </div>
+            {isLoggedIn && (
+              <div className="toggle-label" style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                <span style={{fontSize: '1rem', color: '#cecece'}}>Custom Only</span>
+                <button
+                  className={`ios-toggle${showCustomOnly ? ' checked' : ''}`}
+                  onClick={() => setShowCustomOnly(v => !v)}
+                  aria-pressed={showCustomOnly}
+                  tabIndex={0}
+                  type="button"
+                >
+                  <span className="ios-toggle-track">
+                    <span className="ios-toggle-thumb" />
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -896,7 +904,28 @@ const Drinks: React.FC = () => {
 
       {!isLoggedIn && (
         <div className="auth-prompt">
-          <p>Want to create your own drinks? <a href="/sign-in">Sign in</a> to create custom recipes.</p>
+          <p>Want to create your own drinks?{' '}
+            <button
+              className="sign-in-btn"
+              type="button"
+              onClick={onShowAuth}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#ce975e',
+                cursor: 'pointer',
+                fontWeight: 600,
+                textDecoration: 'underline',
+                fontSize: 'inherit',
+                padding: 0,
+                transition: 'color 0.2s',
+              }}
+              onMouseOver={e => (e.currentTarget.style.color = '#fff')}
+              onMouseOut={e => (e.currentTarget.style.color = '#ce975e')}
+            >
+              Sign in
+            </button>{' '}to create custom recipes.
+          </p>
         </div>
       )}
     </div>

@@ -7,7 +7,7 @@ import {
 } from '@aws-amplify/ui-react';
 import '@aws-amplify/ui-react/styles.css';
 import './App.css';
-import { FiX } from 'react-icons/fi';
+import { FiX, FiUser, FiLogOut, FiSettings, FiEdit } from 'react-icons/fi';
 import { Hub } from '@aws-amplify/core';
 import { getCurrentUser, signOut } from 'aws-amplify/auth';
 import EventsPage from './pages/EventsPage';
@@ -92,9 +92,11 @@ const App: React.FC = () => {
         case 'signedIn':
           checkAuth();
           setShowAuth(false);
+          window.location.reload(); // Reload after sign in
           break;
         case 'signedOut':
           setUser(null);
+          window.location.reload(); // Reload after sign out
           break;
       }
     });
@@ -124,6 +126,32 @@ const App: React.FC = () => {
     signOut: () => void;
   }> = ({ onShowAuth, user, signOut }) => {
     const location = useLocation();
+    const [showDropdown, setShowDropdown] = React.useState(false);
+    const avatarRef = React.useRef<HTMLDivElement>(null);
+
+    // Close dropdown on outside click
+    React.useEffect(() => {
+      const handleClick = (e: MouseEvent) => {
+        if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) {
+          setShowDropdown(false);
+        }
+      };
+      if (showDropdown) {
+        document.addEventListener('mousedown', handleClick);
+      } else {
+        document.removeEventListener('mousedown', handleClick);
+      }
+      return () => document.removeEventListener('mousedown', handleClick);
+    }, [showDropdown]);    // Get user initial or fallback icon
+    const getAvatar = () => {
+      // Always show a person icon as placeholder/profile image
+      return <FiUser className="profile-icon" style={{ 
+        color: '#ffffff', 
+        fontSize: '18px',
+        strokeWidth: 2
+      }} />;
+    };
+
     return (
       <header className="lb-header">
         <div className="lb-container">
@@ -138,15 +166,51 @@ const App: React.FC = () => {
             <Link to="/help" className={location.pathname === '/help' ? 'active' : ''}>Help</Link>
             <Link to="/contact" className={location.pathname === '/contact' ? 'active' : ''}>Contact</Link>
           </nav>
-          {user ? (
-            <button className="lb-btn" onClick={signOut}>
-              Sign&nbsp;Out
+          <div ref={avatarRef} style={{ position: 'relative', marginLeft: 16 }}>            <button
+              className="profile-avatar-btn"
+              onClick={() => setShowDropdown(v => !v)}
+              aria-label="Profile menu"
+              style={{
+                background: 'none',
+                border: '2px solid #ce975e',
+                borderRadius: '50%',
+                width: 40,
+                height: 40,
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                overflow: 'hidden',
+                boxShadow: showDropdown ? '0 0 0 2px #ce975e' : 'none',
+                transition: 'box-shadow 0.2s, border-color 0.2s',
+                color: '#ffffff'
+              }}
+            >
+              {getAvatar()}
             </button>
-          ) : (
-            <button className="lb-btn" onClick={onShowAuth}>
-              Sign&nbsp;In
-            </button>
-          )}
+            {showDropdown && (
+              <div className="profile-dropdown" style={{ position: 'absolute', right: 0, top: 48, background: '#232323', borderRadius: 10, boxShadow: '0 4px 16px #0008', minWidth: 180, zIndex: 100, padding: '0.5rem 0', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {user ? (
+                  <>
+                    <button className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                      <FiEdit /> Edit Profile
+                    </button>
+                    <button className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                      <FiSettings /> Settings
+                    </button>
+                    <button className="profile-dropdown-item" onClick={signOut} style={{ background: 'none', border: 'none', color: '#d9534f', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                      <FiLogOut /> Sign Out
+                    </button>
+                  </>
+                ) : (
+                  <button className="profile-dropdown-item" onClick={onShowAuth} style={{ background: 'none', border: 'none', color: '#ce975e', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                    <FiUser /> Sign In
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </header>
     );
@@ -196,7 +260,7 @@ const App: React.FC = () => {
         <Route path="/events" element={<EventsPage />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/downloads" element={<DownloadPage />} />
-        <Route path="/drinks" element={<Drinks />} />
+        <Route path="/drinks" element={<Drinks onShowAuth={() => setShowAuth(true)} />} />
         <Route path="/help" element={<HelpPage />} />
         <Route path="/contact" element={<ContactPage />} />
         {/* Add more routes as needed */}
