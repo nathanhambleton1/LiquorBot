@@ -10,6 +10,7 @@ import './styles/HomePage.css';
 import { Amplify } from 'aws-amplify';
 import awsconfig from '../amplifyconfiguration.json';
 import { FiX } from 'react-icons/fi';
+import { FaTiktok, FaInstagram, FaYoutube } from 'react-icons/fa6';
 import { Routes, Route } from 'react-router-dom';
 import EventsPage from './EventsPage';
 import PrivacyPolicy from './PrivacyPolicy';
@@ -166,6 +167,25 @@ const RotatingImage: React.FC = () => {
         style={{ bottom: '5.5%', right: '-5%', transform: 'translateZ(40px) scale(1)' }}
       >
         <img src="/assets/newevent_overlay.png" alt="New Event Overlay" style={{ width: 250, height: 250 }} />
+      </div>
+      {/* Social Media Icons - top right outside edge */}
+      <div
+        className="floating-image"
+        style={{ top: '-5%', right: '-10%', transform: 'translateZ(-50px) scale(1)' }}
+      >
+        <FaTiktok size={54} color="#fff" />
+      </div>
+      <div
+        className="floating-image"
+        style={{ top: '10%', right: '-10%', transform: 'translateZ(-50px) scale(1)' }}
+      >
+        <FaInstagram size={54} color="#fff" />
+      </div>
+      <div
+        className="floating-image"
+        style={{ top: '25%', right: '-10%', transform: 'translateZ(-50px) scale(1)' }}
+      >
+        <FaYoutube size={54} color="#fff" />
       </div>
     </div>
   );
