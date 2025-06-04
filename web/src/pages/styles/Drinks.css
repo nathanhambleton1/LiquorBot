@@ -219,6 +219,7 @@
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  padding: 2rem;
 }
 
 .drink-modal {
@@ -234,6 +235,28 @@
   overflow-y: auto;
   margin-left: auto;
   margin-right: auto;
+}
+
+@media (max-width: 900px) {
+  .drink-modal {
+    max-width: 98vw;
+    width: 99%;
+    padding: 1.2rem;
+  }
+  .modal-overlay {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .drink-modal {
+    max-width: 99vw;
+    width: 100%;
+    padding: 1rem;
+  }
+  .modal-overlay {
+    padding: 0.5rem;
+  }
 }
 
 .close-modal {
