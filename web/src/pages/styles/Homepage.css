@@ -431,18 +431,16 @@
   border-bottom: 1px solid var(--border);
 }
 
-/* Floating Icons */
-.floating-icon {
+/* Floating Images (customizable overlays) */
+.floating-image {
   position: absolute;
   font-size: 2rem;
-  opacity: 0.9;
+  opacity: 0.95;
   color: #fff;
   transform-style: preserve-3d;
+  /* Position, scale, and Z handled inline in JSX for each image */
+  pointer-events: none;
 }
-.icon-calendar { top: 10%; left: 15%; transform: translateZ(30px); }
-.icon-people   { top: 20%; right: 10%; transform: translateZ(40px); }
-.icon-drink    { bottom: 15%; left: 20%; transform: translateZ(50px); }
-.icon-share    { bottom: 10%; right: 20%; transform: translateZ(45px); }
 
 /* Feature Modal Styles */
 .feature-modal-overlay {

@@ -130,17 +130,43 @@ const RotatingImage: React.FC = () => {
     >
       <div className="device-frame">
         <img 
-          src="/assets/apppreview.png" 
+          src="/assets/apppreview_blank.png" 
           alt="LiquorBot App Preview" 
           className="app-preview"
         />
         <div className="device-shadow"></div>
       </div>
-      {/* Floating icons for depth effect */}
-      <div className="floating-icon icon-calendar">📅</div>
-      <div className="floating-icon icon-people">👥</div>
-      <div className="floating-icon icon-drink">🍹</div>
-      <div className="floating-icon icon-share">🔄</div>
+      {/* Floating images for depth effect (customizable) */}
+      <div
+        className="floating-image"
+        style={{ top: '1.5%', left: '5%', transform: 'translateZ(30px) scale(1)' }}
+      >
+        <img src="/assets/liquorbot_overlay.png" alt="Liquorbot Overlay" style={{ width: 250, height: 250 }} />
+      </div>
+      <div
+        className="floating-image"
+        style={{ top: '-3%', right: '-15%', transform: 'translateZ(30px) scale(1)' }}
+      >
+        <img src="/assets/devicesettings_overlay.png" alt="Device Settings Overlay" style={{ width: 300, height: 300 }} />
+      </div>
+      <div
+        className="floating-image"
+        style={{ bottom: '12%', left: '-5%', transform: 'translateZ(40px) scale(1)' }}
+      >
+        <img src="/assets/events_overlay.png" alt="Events Overlay" style={{ width: 250, height: 250 }} />
+      </div>
+      <div
+        className="floating-image"
+        style={{ bottom: '15.5%', right: '-4%', transform: 'translateZ(40px) scale(1)' }}
+      >
+        <img src="/assets/drinkmenu_overlay.png" alt="Drink Menu Overlay" style={{ width: 250, height: 250 }} />
+      </div>
+      <div
+        className="floating-image"
+        style={{ bottom: '5.5%', right: '-5%', transform: 'translateZ(40px) scale(1)' }}
+      >
+        <img src="/assets/newevent_overlay.png" alt="New Event Overlay" style={{ width: 250, height: 250 }} />
+      </div>
     </div>
   );
 };

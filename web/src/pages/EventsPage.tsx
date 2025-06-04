@@ -6,7 +6,7 @@ import { deleteEvent, joinEvent, createEvent, updateEvent, leaveEvent } from '..
 import { fetchAuthSession } from '@aws-amplify/auth';
 import { getUrl } from 'aws-amplify/storage';
 import './styles/EventsPage.css';
-import { FiEdit2, FiTrash2, FiLogOut, FiPlus, FiX } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiLogOut, FiPlus, FiX, FiCalendar } from 'react-icons/fi';
 
 const client = generateClient();
 
@@ -662,7 +662,7 @@ const EventsPage: React.FC = () => {
   if (!currentUser) {
     return (
       <div className="events-container" style={{display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh'}}>
-        <div style={{fontSize: 64, marginBottom: 16, textAlign: 'center'}}>📅</div>
+        <FiCalendar size={64} style={{ marginBottom: 16, color: '#ce975e', textAlign: 'center' }} />
         <h2 style={{marginBottom: 12, textAlign: 'center'}}>You must sign in to view your events</h2>
         <p style={{color: '#cecece', maxWidth: 400, marginBottom: 28, fontSize: 16, textAlign: 'center'}}>
           Sign in to create, join, and manage your events. You'll be able to see your upcoming parties, share invite codes, and keep track of all your cocktail gatherings in one place.

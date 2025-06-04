@@ -552,7 +552,7 @@ const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
 
       <div className="drinks-grid">
         {filteredDrinks
-          .filter(drink => !drink.isCustom || isLoggedIn) // Only show custom drinks if logged in
+          .filter(drink => isLoggedIn ? true : !drink.isCustom) // Always show standard drinks, only show custom drinks if logged in
           .map(drink => (
           <div 
             className={`drink-card ${drink.isCustom ? 'custom' : ''} ${expandedDrinkId === drink.id ? 'expanded' : ''}`}
