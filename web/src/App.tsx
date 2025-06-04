@@ -9,7 +9,7 @@ import '@aws-amplify/ui-react/styles.css';
 import './App.css';
 import { FiX, FiUser, FiLogOut, FiSettings, FiEdit } from 'react-icons/fi';
 import { Hub } from '@aws-amplify/core';
-import { getCurrentUser, signOut } from 'aws-amplify/auth';
+import { getCurrentUser, signOut, fetchUserAttributes } from 'aws-amplify/auth';
 import EventsPage from './pages/EventsPage';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import { HomePage, HelpPage, ContactPage, DownloadPage, Drinks } from './pages';
@@ -73,13 +73,30 @@ const liquorTheme: Theme = {
 const App: React.FC = () => {
   const [showAuth, setShowAuth] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const [showEditProfile, setShowEditProfile] = useState(false); // NEW: edit profile panel state
+  const [showEditProfile, setShowEditProfile] = useState(false);
+
+  const refreshUserAttributes = async () => {
+    try {
+      const currentUser = await getCurrentUser();
+      const attributes = await fetchUserAttributes();
+      setUser({ ...currentUser, attributes });
+    } catch (error) {
+      console.error('Error refreshing user attributes', error);
+    }
+  };
+
+  // Define handleShowEditProfile to refresh user attributes and show the edit profile panel
+  const handleShowEditProfile = async () => {
+    await refreshUserAttributes();
+    setShowEditProfile(true);
+  };
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const currentUser = await getCurrentUser();
-        setUser(currentUser);
+        const attributes = await fetchUserAttributes();
+        setUser({ ...currentUser, attributes });
       } catch {
         setUser(null);
       }
@@ -87,17 +104,17 @@ const App: React.FC = () => {
 
     checkAuth();
 
-    // Listen to authentication events using Hub
-    const removeListener = Hub.listen('auth', ({ payload }: { payload: { event: string } }) => {
+    // UPDATE: Handle auth events with async function
+    const removeListener = Hub.listen('auth', async ({ payload }: { payload: { event: string } }) => {
       switch (payload.event) {
         case 'signedIn':
-          checkAuth();
+          await checkAuth();
           setShowAuth(false);
-          window.location.reload(); // Reload after sign in
+          // REMOVED: window.location.reload();
           break;
         case 'signedOut':
           setUser(null);
-          window.location.reload(); // Reload after sign out
+          // REMOVED: window.location.reload();
           break;
       }
     });
@@ -258,7 +275,7 @@ const App: React.FC = () => {
         onShowAuth={() => setShowAuth(true)} 
         user={user}
         signOut={signOut}
-        onShowEditProfile={() => setShowEditProfile(true)} // Pass handler
+        onShowEditProfile={handleShowEditProfile}
       />
       <Routes>
         <Route path="/" element={<HomePage />} />
@@ -324,53 +341,119 @@ export const HelpCTA: React.FC = () => <section className="help-cta-section">
   {/* TODO: Implement Help CTA content */}
 </section>;
 
-// Sliding Edit Profile Panel
-const EditProfilePanel: React.FC<{ onClose: () => void; user: any }> = ({ onClose, user }) => (
-  <div className="edit-profile-panel-overlay" onClick={onClose}>
-    <div className="edit-profile-panel" onClick={e => e.stopPropagation()}>
-      <button className="close-btn" onClick={onClose} style={{ position: 'absolute', top: 16, right: 16 }}><FiX size={24} /></button>
-      <h2>Edit Profile</h2>
-      {/* Example fields, replace with real profile fields as needed */}
-      <form style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 32 }}>
-        <label>
-          Username
-          <input type="text" defaultValue={user?.username || ''} style={{ width: '100%' }} />
-        </label>
-        <label>
-          Email
-          <input type="email" defaultValue={user?.attributes?.email || ''} style={{ width: '100%' }} />
-        </label>
-        <button type="submit" style={{ marginTop: 16, background: '#ce975e', color: '#fff', border: 'none', borderRadius: 6, padding: '10px 0', fontWeight: 600, fontSize: 16 }}>Save Changes</button>
-      </form>
+const EditProfilePanel: React.FC<{ onClose: () => void; user: any }> = ({ onClose, user }) => {
+  // Extract user info from attributes
+  const registeredUsername = user?.username || '';
+  const email = user?.attributes?.email || '';
+  const birthdayAttr = user?.attributes?.birthdate || '';
+
+  // State for editable fields
+  const [firstName, setFirstName] = React.useState('');
+  const [lastName, setLastName] = React.useState('');
+  const [bio, setBio] = React.useState('');
+
+  // Update form fields when user data changes
+  React.useEffect(() => {
+    if (user) {
+      // FIXED: Use correct Cognito attribute names
+      setFirstName(user.attributes?.given_name || '');
+      setLastName(user.attributes?.family_name || '');
+      setBio(user.attributes?.bio || '');
+    }
+  }, [user]);
+
+  // Save handler (implement actual save logic as needed)
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    // TODO: Save profile changes to backend
+    onClose();
+  };
+
+  return (
+    <div className="edit-profile-panel-overlay" onClick={onClose}>
+      <div className="edit-profile-panel" onClick={e => e.stopPropagation()}>
+        <button className="close-btn" onClick={onClose} style={{ position: 'absolute', top: 16, right: 16 }}><FiX size={24} /></button>
+        <h2>Edit Profile</h2>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 25 }}>
+          <div style={{ marginLeft: 0 }}>
+            <div style={{ color: '#DFDCD9', fontSize: 20, fontWeight: 'bold' }}>{registeredUsername}</div>
+            <div style={{ color: '#4F4F4F', fontSize: 14, marginTop: 5 }}>{email}</div>
+          </div>
+        </div>
+        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="input-container">
+            <label className="label">First Name</label>
+            <input className="input" type="text" value={firstName} onChange={e => setFirstName(e.target.value)} />
+          </div>
+          <div className="input-container">
+            <label className="label">Last Name</label>
+            <input className="input" type="text" value={lastName} onChange={e => setLastName(e.target.value)} />
+          </div>
+          <div className="input-container">
+            <label className="label">Birthday</label>
+            <div className="readonly">{birthdayAttr ? birthdayAttr.replace(/-/g, '/') : 'Not provided'}</div>
+            <div className="support">If this is incorrect, please contact support.</div>
+          </div>
+          <div className="input-container bio-container" style={{ position: 'relative' }}>
+            <label className="label">Bio</label>
+            <textarea
+              className="input bio-input"
+              value={bio}
+              onChange={e => {
+                const txt = e.target.value;
+                if (txt.length <= 100 && txt.split('\n').length <= 3) setBio(txt);
+              }}
+              maxLength={100}
+              rows={3}
+              style={{ resize: 'none', height: 78 }}
+              placeholder="Tell us about yourself (max 100 chars, 3 lines)"
+            />
+            <div className="counter" style={{ position: 'absolute', right: 10, bottom: -18, color: '#4F4F4F', fontSize: 12 }}>{bio.length}/100</div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'row', marginTop: 30 }}>
+            <button type="submit" className="save-btn" style={{ background: '#CE975E', padding: '12px 25px', borderRadius: 10, marginRight: 10, color: '#DFDCD9', fontSize: 16, fontWeight: 600, border: 'none' }}>Save</button>
+            <button type="button" className="cancel-btn" style={{ background: '#444', padding: '12px 25px', borderRadius: 10, color: '#DFDCD9', fontSize: 16, fontWeight: 600, border: 'none' }} onClick={onClose}>Cancel</button>
+          </div>
+        </form>
+      </div>
+      <style>{`
+        .edit-profile-panel-overlay {
+          position: fixed;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(0,0,0,0.45);
+          z-index: 2000;
+          display: flex;
+          justify-content: flex-end;
+          align-items: stretch;
+          transition: background 0.2s;
+        }
+        .edit-profile-panel {
+          background: #181818;
+          color: #fff;
+          width: 350px;
+          max-width: 100vw;
+          height: 100%;
+          box-shadow: -4px 0 24px #000a;
+          position: relative;
+          padding: 32px 32px 32px 32px;
+          transform: translateX(0);
+          animation: slideInRight 0.3s cubic-bezier(.4,1.4,.6,1) 1;
+          overflow-y: auto;
+        }
+        @keyframes slideInRight {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+        .input-container { width: 100%; margin-bottom: 18px; }
+        .label { color: #DFDCD9; font-size: 16px; margin-bottom: 5px; display: block; }
+        .input { background: #1F1F1F; border-radius: 10px; padding: 12px 15px; color: #DFDCD9; font-size: 16px; border: none; width: 100%; }
+        .readonly { background: #1F1F1F; border-radius: 10px; padding: 12px 15px; color: #4F4F4F; font-size: 16px; }
+        .support { color: #4F4F4F; font-size: 12px; margin-top: 5px; }
+        .bio-input { height: 78px; }
+        .counter { position: absolute; right: 10px; bottom: -18px; color: #4F4F4F; font-size: 12px; }
+        .save-btn { background: #CE975E; padding: 12px 25px; border-radius: 10px; margin-right: 10px; color: #DFDCD9; font-size: 16px; font-weight: 600; border: none; }
+        .cancel-btn { background: #444; padding: 12px 25px; border-radius: 10px; color: #DFDCD9; fontSize: 16px; fontWeight: 600; border: none; }
+      `}</style>
     </div>
-    <style>{`
-      .edit-profile-panel-overlay {
-        position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(0,0,0,0.45);
-        z-index: 2000;
-        display: flex;
-        justify-content: flex-end;
-        align-items: stretch;
-        transition: background 0.2s;
-      }
-      .edit-profile-panel {
-        background: #181818;
-        color: #fff;
-        width: 350px;
-        max-width: 100vw;
-        height: 100%;
-        box-shadow: -4px 0 24px #000a;
-        position: relative;
-        padding: 32px 32px 32px 32px;
-        transform: translateX(0);
-        animation: slideInRight 0.3s cubic-bezier(.4,1.4,.6,1) 1;
-        overflow-y: auto;
-      }
-      @keyframes slideInRight {
-        from { transform: translateX(100%); }
-        to { transform: translateX(0); }
-      }
-    `}</style>
-  </div>
-);
+  );
+};
