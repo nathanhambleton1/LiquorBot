@@ -72,6 +72,10 @@ const Drinks: React.FC = () => {
   // Add showInfoIndex state for info popup
   const [showInfoIndex, setShowInfoIndex] = useState<number | null>(null);
 
+  // Error validation states
+  const [formError, setFormError] = useState<string | null>(null);
+  const [formShake, setFormShake] = useState(false);
+
   // Check auth status
   useEffect(() => {
     const checkAuth = async () => {
@@ -180,7 +184,26 @@ const Drinks: React.FC = () => {
 
   // Handle create drink
   const handleCreate = async () => {
-    if (!name) return;
+    // Validation: require name, at least one valid ingredient, and image
+    if (!name.trim()) {
+      setFormError('Please enter a drink name.');
+      setFormShake(true);
+      setTimeout(() => setFormShake(false), 600);
+      return;
+    }
+    if (!createIngredients.length || createIngredients.some(ing => !ing.id)) {
+      setFormError('Please select at least one ingredient.');
+      setFormShake(true);
+      setTimeout(() => setFormShake(false), 600);
+      return;
+    }
+    if (!imageFile) {
+      setFormError('Please choose an image for your drink.');
+      setFormShake(true);
+      setTimeout(() => setFormShake(false), 600);
+      return;
+    }
+    setFormError(null);
 
     // Convert ingredients to string format
     const ingredientsString = createIngredients
@@ -608,9 +631,12 @@ const Drinks: React.FC = () => {
       {/* Create Drink Modal */}
       {showCreateModal && (
         <div className="modal-overlay">
-          <div className="drink-modal" style={{ maxWidth: 500, width: '90%' }}>
+          <div className={`drink-modal${formShake ? ' shake' : ''}`} style={{ maxWidth: 500, width: '90%' }}>
             <button className="close-modal" onClick={closeModal}>×</button>
             <h2>Create Custom Drink</h2>
+            {formError && (
+              <div className="modal-error" style={{ marginBottom: 16 }}>{formError}</div>
+            )}
             
             <div className="form-group">
               <label>Drink Name</label>
