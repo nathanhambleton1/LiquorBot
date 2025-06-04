@@ -73,6 +73,7 @@ const liquorTheme: Theme = {
 const App: React.FC = () => {
   const [showAuth, setShowAuth] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [showEditProfile, setShowEditProfile] = useState(false); // NEW: edit profile panel state
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -124,7 +125,8 @@ const App: React.FC = () => {
     onShowAuth: () => void; 
     user: any; 
     signOut: () => void;
-  }> = ({ onShowAuth, user, signOut }) => {
+    onShowEditProfile: () => void; // NEW: prop for edit profile
+  }> = ({ onShowAuth, user, signOut, onShowEditProfile }) => {
     const location = useLocation();
     const [showDropdown, setShowDropdown] = React.useState(false);
     const avatarRef = React.useRef<HTMLDivElement>(null);
@@ -193,7 +195,9 @@ const App: React.FC = () => {
               <div className="profile-dropdown" style={{ position: 'absolute', right: 0, top: 48, background: '#232323', borderRadius: 10, boxShadow: '0 4px 16px #0008', minWidth: 180, zIndex: 100, padding: '0.5rem 0', display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {user ? (
                   <>
-                    <button className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                    <button className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+                      onClick={() => { setShowDropdown(false); onShowEditProfile(); }} // Open edit profile
+                    >
                       <FiEdit /> Edit Profile
                     </button>
                     <button className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
@@ -254,6 +258,7 @@ const App: React.FC = () => {
         onShowAuth={() => setShowAuth(true)} 
         user={user}
         signOut={signOut}
+        onShowEditProfile={() => setShowEditProfile(true)} // Pass handler
       />
       <Routes>
         <Route path="/" element={<HomePage />} />
@@ -266,6 +271,10 @@ const App: React.FC = () => {
         {/* Add more routes as needed */}
       </Routes>
       <Footer />
+      {/* Edit Profile Panel */}
+      {showEditProfile && (
+        <EditProfilePanel onClose={() => setShowEditProfile(false)} user={user} />
+      )}
       {showAuth && (
         <div className="auth-modal">
           <button
@@ -314,3 +323,54 @@ export const AppPreviews: React.FC = () => <section className="previews-section"
 export const HelpCTA: React.FC = () => <section className="help-cta-section">
   {/* TODO: Implement Help CTA content */}
 </section>;
+
+// Sliding Edit Profile Panel
+const EditProfilePanel: React.FC<{ onClose: () => void; user: any }> = ({ onClose, user }) => (
+  <div className="edit-profile-panel-overlay" onClick={onClose}>
+    <div className="edit-profile-panel" onClick={e => e.stopPropagation()}>
+      <button className="close-btn" onClick={onClose} style={{ position: 'absolute', top: 16, right: 16 }}><FiX size={24} /></button>
+      <h2>Edit Profile</h2>
+      {/* Example fields, replace with real profile fields as needed */}
+      <form style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 32 }}>
+        <label>
+          Username
+          <input type="text" defaultValue={user?.username || ''} style={{ width: '100%' }} />
+        </label>
+        <label>
+          Email
+          <input type="email" defaultValue={user?.attributes?.email || ''} style={{ width: '100%' }} />
+        </label>
+        <button type="submit" style={{ marginTop: 16, background: '#ce975e', color: '#fff', border: 'none', borderRadius: 6, padding: '10px 0', fontWeight: 600, fontSize: 16 }}>Save Changes</button>
+      </form>
+    </div>
+    <style>{`
+      .edit-profile-panel-overlay {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.45);
+        z-index: 2000;
+        display: flex;
+        justify-content: flex-end;
+        align-items: stretch;
+        transition: background 0.2s;
+      }
+      .edit-profile-panel {
+        background: #181818;
+        color: #fff;
+        width: 350px;
+        max-width: 100vw;
+        height: 100%;
+        box-shadow: -4px 0 24px #000a;
+        position: relative;
+        padding: 32px 32px 32px 32px;
+        transform: translateX(0);
+        animation: slideInRight 0.3s cubic-bezier(.4,1.4,.6,1) 1;
+        overflow-y: auto;
+      }
+      @keyframes slideInRight {
+        from { transform: translateX(100%); }
+        to { transform: translateX(0); }
+      }
+    `}</style>
+  </div>
+);

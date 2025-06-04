@@ -140,50 +140,50 @@ const RotatingImage: React.FC = () => {
       {/* Floating images for depth effect (customizable) */}
       <div
         className="floating-image"
-        style={{ top: '1.5%', left: '5%', transform: 'translateZ(30px) scale(1)' }}
+        style={{ top: '1.5%', left: '5%', transform: 'translateZ(30px) scale(1)', zIndex: 2 }}
       >
         <img src="/assets/liquorbot_overlay.png" alt="Liquorbot Overlay" style={{ width: 250, height: 250 }} />
       </div>
       <div
         className="floating-image"
-        style={{ top: '-3%', right: '-15%', transform: 'translateZ(30px) scale(1)' }}
+        style={{ top: '-3%', right: '-15%', transform: 'translateZ(30px) scale(1)', zIndex: 2 }}
       >
         <img src="/assets/devicesettings_overlay.png" alt="Device Settings Overlay" style={{ width: 300, height: 300 }} />
       </div>
       <div
         className="floating-image"
-        style={{ bottom: '12%', left: '-5%', transform: 'translateZ(40px) scale(1)' }}
+        style={{ bottom: '12%', left: '-5%', transform: 'translateZ(40px) scale(1)', zIndex: 2 }}
       >
         <img src="/assets/events_overlay.png" alt="Events Overlay" style={{ width: 250, height: 250 }} />
       </div>
       <div
         className="floating-image"
-        style={{ bottom: '15.5%', right: '-4%', transform: 'translateZ(40px) scale(1)' }}
+        style={{ bottom: '15.5%', right: '-4%', transform: 'translateZ(40px) scale(1)', zIndex: 2 }}
       >
         <img src="/assets/drinkmenu_overlay.png" alt="Drink Menu Overlay" style={{ width: 250, height: 250 }} />
       </div>
       <div
         className="floating-image"
-        style={{ bottom: '5.5%', right: '-5%', transform: 'translateZ(40px) scale(1)' }}
+        style={{ bottom: '5.5%', right: '-5%', transform: 'translateZ(40px) scale(1)', zIndex: 2 }}
       >
         <img src="/assets/newevent_overlay.png" alt="New Event Overlay" style={{ width: 250, height: 250 }} />
       </div>
       {/* Social Media Icons - top right outside edge */}
       <div
         className="floating-image"
-        style={{ top: '-5%', right: '-10%', transform: 'translateZ(-50px) scale(1)' }}
+        style={{ top: '-5%', right: '-10%', transform: 'translateZ(-50px) scale(1)', zIndex: 2 }}
       >
         <FaTiktok size={54} color="#fff" />
       </div>
       <div
         className="floating-image"
-        style={{ top: '10%', right: '-10%', transform: 'translateZ(-50px) scale(1)' }}
+        style={{ top: '10%', right: '-10%', transform: 'translateZ(-50px) scale(1)', zIndex: 2 }}
       >
         <FaInstagram size={54} color="#fff" />
       </div>
       <div
         className="floating-image"
-        style={{ top: '25%', right: '-10%', transform: 'translateZ(-50px) scale(1)' }}
+        style={{ top: '25%', right: '-10%', transform: 'translateZ(-50px) scale(1)', zIndex: 2 }}
       >
         <FaYoutube size={54} color="#fff" />
       </div>
