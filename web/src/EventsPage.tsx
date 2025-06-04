@@ -138,17 +138,27 @@ const EventsPage: React.FC = () => {
         authMode: 'userPool'
       });
       
-      setEvents(
-        (data.listEvents.items || []).map((item: any) => ({
+      const userEvents = (data.listEvents.items || [])
+        .filter((item: any) => {
+          // Fix 2: Only include events where user is owner or guest
+          return (
+            item.owner === currentUser || 
+            (item.guestOwners && item.guestOwners.includes(currentUser))
+          );
+        })
+        .map((item: any) => ({
           ...item,
           description: item.description ?? undefined,
           location: item.location ?? undefined,
           liquorbotId: item.liquorbotId,
-          guestOwners: Array.isArray(item.guestOwners) ? item.guestOwners.filter((g: any) => typeof g === 'string') : [],
+          guestOwners: Array.isArray(item.guestOwners) 
+            ? item.guestOwners.filter((g: any) => typeof g === 'string') 
+            : [],
           drinkIDs: item.drinkIDs || [],
           customRecipeIDs: item.customRecipeIDs || [],
-        }))
-      );
+        }));
+
+      setEvents(userEvents);
     } catch (error) {
       console.error('Error fetching events:', error);
     } finally {
@@ -232,9 +242,12 @@ const EventsPage: React.FC = () => {
         variables: { input: { id: eventToDelete } },
         authMode: 'userPool'
       });
-      setEvents(prevEvents => prevEvents.filter(event => event.id !== eventToDelete));
+      // Fix 5: Refetch after deletion
+      fetchEvents();
     } catch (error) {
       console.error('Error deleting event:', error);
+      // Fix 6: Refetch on error
+      fetchEvents();
     } finally {
       setShowDeleteModal(false);
       setEventToDelete(null);
@@ -417,12 +430,12 @@ const EventsPage: React.FC = () => {
         variables: { eventId: eventToLeave },
         authMode: 'userPool'
       });
-      setEvents(prev => prev.filter(evt =>
-        evt.id !== eventToLeave &&
-        (!currentUser || !(evt.guestOwners && evt.guestOwners.includes(currentUser)))
-      ));
+      // Fix 3: Refetch events after leaving
+      fetchEvents();
     } catch (error) {
       console.error('Error leaving event:', error);
+      // Fix 4: Refetch even on error to ensure consistency
+      fetchEvents();
     } finally {
       setIsLeaving(false);
       setShowLeaveModal(false);
