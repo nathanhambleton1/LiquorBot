@@ -507,39 +507,53 @@ const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
               className="drinks-search-bar"
               placeholder="Search drinks..."
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => {
+                if (!isLoggedIn && onShowAuth) { onShowAuth(); return; }
+                setSearch(e.target.value);
+              }}
               style={{padding: '0.75rem 2.5rem 0.75rem 1.25rem', borderRadius: 8, border: '1px solid #444', fontSize: '1rem', width: '100%'}}
+              readOnly={!isLoggedIn}
+              onFocus={() => { if (!isLoggedIn && onShowAuth) onShowAuth(); }}
             />
             <FiSearch style={{position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', color: '#888', pointerEvents: 'none'}} size={22} />
           </div>
           <div style={{display: 'flex', alignItems: 'center', gap: '1.5rem', marginTop: 8}}>
-            {isLoggedIn && (
-              <button className="create-drink-btn" onClick={openCreateModal} style={{whiteSpace: 'nowrap', padding: '0.75rem 1.25rem', fontSize: '1rem', borderRadius: 8}}>
-                + Create Custom Drink
+            <button
+              className="create-drink-btn"
+              onClick={() => {
+                if (!isLoggedIn && onShowAuth) { onShowAuth(); return; }
+                openCreateModal();
+              }}
+              style={{whiteSpace: 'nowrap', padding: '0.75rem 1.25rem', fontSize: '1rem', borderRadius: 8, opacity: isLoggedIn ? 1 : 0.7, cursor: isLoggedIn ? 'pointer' : 'pointer'}}
+            >
+              + Create Custom Drink
+            </button>
+            <div className="toggle-label" style={{display: 'flex', alignItems: 'center', gap: 8}}>
+              <span style={{fontSize: '1rem', color: '#cecece'}}>Custom Only</span>
+              <button
+                className={`ios-toggle${showCustomOnly ? ' checked' : ''}`}
+                onClick={() => {
+                  if (!isLoggedIn && onShowAuth) { onShowAuth(); return; }
+                  setShowCustomOnly(v => !v);
+                }}
+                aria-pressed={showCustomOnly}
+                tabIndex={0}
+                type="button"
+                style={{opacity: isLoggedIn ? 1 : 0.7, cursor: isLoggedIn ? 'pointer' : 'pointer'}}
+              >
+                <span className="ios-toggle-track">
+                  <span className="ios-toggle-thumb" />
+                </span>
               </button>
-            )}
-            {isLoggedIn && (
-              <div className="toggle-label" style={{display: 'flex', alignItems: 'center', gap: 8}}>
-                <span style={{fontSize: '1rem', color: '#cecece'}}>Custom Only</span>
-                <button
-                  className={`ios-toggle${showCustomOnly ? ' checked' : ''}`}
-                  onClick={() => setShowCustomOnly(v => !v)}
-                  aria-pressed={showCustomOnly}
-                  tabIndex={0}
-                  type="button"
-                >
-                  <span className="ios-toggle-track">
-                    <span className="ios-toggle-thumb" />
-                  </span>
-                </button>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       </header>
 
       <div className="drinks-grid">
-        {filteredDrinks.map(drink => (
+        {filteredDrinks
+          .filter(drink => !drink.isCustom || isLoggedIn) // Only show custom drinks if logged in
+          .map(drink => (
           <div 
             className={`drink-card ${drink.isCustom ? 'custom' : ''} ${expandedDrinkId === drink.id ? 'expanded' : ''}`}
             key={drink.id}
@@ -616,7 +630,7 @@ const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
       </div>
 
       {/* Create Drink Modal */}
-      {showCreateModal && (
+      {showCreateModal && isLoggedIn && (
         <div className="modal-overlay">
           <div className={`drink-modal${formShake ? ' shake' : ''}`} style={{ maxWidth: 500, width: '90%' }}>
             <button className="close-modal" onClick={closeModal}>×</button>
@@ -766,7 +780,7 @@ const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
       )}
 
       {/* Edit Drink Modal */}
-      {showEditModal && currentDrink && (
+      {showEditModal && currentDrink && isLoggedIn && (
         <div className="modal-overlay">
           <div className="drink-modal">
             <button className="close-modal" onClick={closeModal}>×</button>
