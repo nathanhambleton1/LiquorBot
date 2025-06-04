@@ -91,6 +91,11 @@
   overflow-y: auto;
 }
 
+.modal-content.shake {
+  animation: shakeX 0.5s ease-in-out;
+  border: 1px solid #d9534f;
+}
+
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -106,10 +111,32 @@
 .modal-close {
   cursor: pointer;
   color: #8f8f8f;
+  font-size: 2rem;
+  line-height: 1;
+  width: 2.2rem;
+  height: 2.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.modal-close:hover {
+  color: #ce975e;
 }
 
 .modal-body {
   margin-bottom: 1rem;
+}
+
+.modal-error {
+  background-color: #d9534f;
+  color: #fff;
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+  text-align: center;
 }
 
 .modal-input {
@@ -456,4 +483,58 @@
   font-weight: bold;
   color: #ce975e;
   font-size: 1rem;
+}
+.slots-section {
+  margin-top: 15px;
+  padding: 12px;
+  background-color: #2a2a2a;
+  border-radius: 8px;
+}
+
+.slots-header {
+  font-size: 14px;
+  color: #cecece;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.slot-box {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #3a3a3a;
+}
+
+.slot-line {
+  font-size: 13px;
+  color: #8f8f8f;
+  padding: 4px 0;
+}
+
+/* Shake animation for error feedback */
+@keyframes shakeX {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+.drink-item.shake {
+  animation: shakeX 0.5s ease-in-out;
+  border-color: #d9534f;
+}
+
+/* Inline error message bubble */
+.error-bubble {
+  position: absolute;
+  top: -1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #d9534f;
+  color: #fff;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
 }

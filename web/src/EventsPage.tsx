@@ -14,11 +14,13 @@ interface Drink {
   id: number;
   name: string;
   category: string;
+  ingredients?: string;
 }
 
 interface CustomRecipe {
   id: string;
   name: string;
+  ingredients?: { ingredientID: number }[];
 }
 
 interface Event {
@@ -34,6 +36,13 @@ interface Event {
   liquorbotId: number;
   drinkIDs?: number[];
   customRecipeIDs?: string[];
+}
+
+interface Ingredient {
+  id: number;
+  name: string;
+  type: string;
+  ingredients?: string;
 }
 
 const EventsPage: React.FC = () => {
@@ -60,6 +69,16 @@ const EventsPage: React.FC = () => {
   const [showDrinkPicker, setShowDrinkPicker] = useState(false);
   const [drinkSearch, setDrinkSearch] = useState('');
   const [drinkCategory, setDrinkCategory] = useState('All');
+  const [ingredientsList, setIngredientsList] = useState<Ingredient[]>([]);
+  const [showSlots, setShowSlots] = useState(false);
+  const [ingredientSet, setIngredientSet] = useState<Set<number>>(new Set());
+  const [slotsOK, setSlotsOK] = useState(true);
+  // Error feedback for drink selection
+  const [errorItemId, setErrorItemId] = useState<number | string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  // Validation error state for event forms
+  const [formError, setFormError] = useState<string | null>(null);
+  const [formShake, setFormShake] = useState(false);
   
   // Form states
   const [eventName, setEventName] = useState('');
@@ -263,8 +282,40 @@ const EventsPage: React.FC = () => {
   };
 
   const handleCreateEvent = async () => {
-    if (!eventName.trim()) return;
+    // Validate required fields
+    if (!eventName.trim()) {
+      setFormError('Event name is required');
+      setFormShake(true);
+      setTimeout(() => { setFormShake(false); }, 500);
+      return;
+    }
+    if (!eventStartTime || !eventEndTime) {
+      setFormError('Start and end time are required');
+      setFormShake(true);
+      setTimeout(() => { setFormShake(false); }, 500);
+      return;
+    }
+    // New: Validate device ID and drink selection
+    if (!eventDeviceId.trim()) {
+      setFormError('Device ID is required');
+      setFormShake(true);
+      setTimeout(() => { setFormShake(false); }, 500);
+      return;
+    }
+    if (!/^\d{1}$/.test(eventDeviceId.trim())) {
+      setFormError('Device ID must be a 6-digit number');
+      setFormShake(true);
+      setTimeout(() => { setFormShake(false); }, 500);
+      return;
+    }
+    if (selectedDrinkIds.length + selectedCustomIds.length === 0) {
+      setFormError('At least one drink must be selected');
+      setFormShake(true);
+      setTimeout(() => { setFormShake(false); }, 500);
+      return;
+    }
     try {
+      setFormError(null);
       await client.graphql({
         query: createEvent,
         variables: {
@@ -287,6 +338,7 @@ const EventsPage: React.FC = () => {
       fetchEvents();
       setShowCreateModal(false);
       resetEventForm();
+      setFormError(null);
     } catch (error) {
       console.error('Error creating event:', error);
     }
@@ -294,8 +346,34 @@ const EventsPage: React.FC = () => {
 
   const handleUpdateEvent = async () => {
     if (!currentEvent || !eventName.trim()) return;
+    if (!eventName.trim()) {
+      setFormError('Event name is required');
+      setFormShake(true);
+      setTimeout(() => { setFormShake(false); }, 500);
+      return;
+    }
+    // New: Validate device ID and drink selection before update
+    if (!eventDeviceId.trim()) {
+      setFormError('Device ID is required');
+      setFormShake(true);
+      setTimeout(() => { setFormShake(false); }, 500);
+      return;
+    }
+    if (!/^\d{1}$/.test(eventDeviceId.trim())) {
+      setFormError('Device ID must be a 6-digit number');
+      setFormShake(true);
+      setTimeout(() => { setFormShake(false); }, 500);
+      return;
+    }
+    if (selectedDrinkIds.length + selectedCustomIds.length === 0) {
+      setFormError('At least one drink must be selected');
+      setFormShake(true);
+      setTimeout(() => { setFormShake(false); }, 500);
+      return;
+    }
     setIsUpdating(true);
     try {
+      setFormError(null);
       await client.graphql({
         query: updateEvent,
         variables: {
@@ -316,6 +394,7 @@ const EventsPage: React.FC = () => {
 
       fetchEvents();
       resetEventForm();
+      setFormError(null);
     } catch (error) {
       console.error('Error updating event:', error);
     } finally {
@@ -417,10 +496,26 @@ const EventsPage: React.FC = () => {
   };
 
   const addDrinkToEvent = (id: number) => {
+    const drink = standardDrinks.find(d => d.id === id);
+    if (drink && !canAddDrink(drink)) {
+      // Trigger shake and show message
+      setErrorItemId(id);
+      setErrorMessage('Cannot add: exceeds 15 unique ingredients');
+      setTimeout(() => setErrorItemId(null), 2000);
+      return;
+    }
     setSelectedDrinkIds(prev => [...prev, id]);
   };
 
   const addCustomToEvent = (id: string) => {
+    const recipe = customRecipes[id];
+    if (recipe && !canAddDrink(recipe)) {
+      // Trigger shake and show message
+      setErrorItemId(id);
+      setErrorMessage('Cannot add: exceeds 15 unique ingredients');
+      setTimeout(() => setErrorItemId(null), 2000);
+      return;
+    }
     setSelectedCustomIds(prev => [...prev, id]);
   };
 
@@ -440,6 +535,105 @@ const EventsPage: React.FC = () => {
   const getCustomName = (id: string) => {
     return customRecipes[id]?.name || `Custom Recipe #${id.slice(0, 6)}`;
   };
+
+  // Fetch ingredients list
+  useEffect(() => {
+    const fetchIngredients = async () => {
+      try {
+        const url = await getUrl({ key: 'drinkMenu/ingredients.json' });
+        const response = await fetch(url.url);
+        const data = await response.json();
+        setIngredientsList(data);
+      } catch (error) {
+        console.error('Error fetching ingredients:', error);
+      }
+    };
+    
+    fetchIngredients();
+  }, []);
+
+  // Function to parse ingredients from a drink
+  const parseIngredients = (item: Drink | CustomRecipe): number[] => {
+    if ('ingredients' in item && typeof item.ingredients === 'string') {
+      // Parse standard drink ingredients
+      return item.ingredients.split(',').map((part: string): number => {
+        const [idStr]: string[] = part.split(':');
+        return parseInt(idStr, 10);
+      });
+    } else if ('ingredients' in item && Array.isArray(item.ingredients)) {
+      // Parse custom recipe ingredients
+      return item.ingredients.map(ing => ing.ingredientID);
+    }
+    return [];
+  };
+
+  // Function to calculate ingredient set
+  const calculateIngredientSet = useCallback(() => {
+    const newSet = new Set<number>();
+    
+    // Process standard drinks
+    selectedDrinkIds.forEach(id => {
+      const drink = standardDrinks.find(d => d.id === id);
+      if (drink) {
+        parseIngredients(drink).forEach(ingId => newSet.add(ingId));
+      }
+    });
+    
+    // Process custom recipes
+    selectedCustomIds.forEach(id => {
+      const recipe = customRecipes[id];
+      if (recipe) {
+        parseIngredients(recipe).forEach(ingId => newSet.add(ingId));
+      }
+    });
+    
+    setIngredientSet(newSet);
+    setSlotsOK(newSet.size <= 15);
+  }, [selectedDrinkIds, selectedCustomIds, standardDrinks, customRecipes]);
+
+  useEffect(() => {
+    calculateIngredientSet();
+  }, [selectedDrinkIds, selectedCustomIds, standardDrinks, customRecipes, calculateIngredientSet]);
+
+  // Function to check if adding a drink would exceed the limit
+  const canAddDrink = (item: Drink | CustomRecipe): boolean => {
+    const tempSet = new Set(ingredientSet);
+    const itemIngredients = parseIngredients(item);
+    itemIngredients.forEach(ingId => tempSet.add(ingId));
+    return tempSet.size <= 15;
+  };
+
+  const IngredientSlots = () => (
+    <div className="slots-section">
+      <div 
+        className="slots-header"
+        onClick={() => setShowSlots(!showSlots)}
+        style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+      >
+        <span style={{ color: slotsOK ? '#cecece' : '#d9534f' }}>
+          {ingredientSet.size}/15 unique ingredients
+        </span>
+        {ingredientSet.size > 0 && (
+          <span style={{ marginLeft: 8 }}>
+            {showSlots ? '▲' : '▼'}
+          </span>
+        )}
+      </div>
+      
+      {showSlots && (
+        <div className="slot-box">
+          {Array.from(ingredientSet).sort((a, b) => a - b).map((id, i) => {
+            const ing = ingredientsList.find(x => x.id === id);
+            return (
+              <div key={id} className="slot-line">
+                Slot {i + 1}: {ing?.name || `Ingredient ${id}`}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 
   if (loading) {
     return (
@@ -490,6 +684,8 @@ const EventsPage: React.FC = () => {
             className="lb-btn" 
             onClick={() => {
               resetEventForm();
+              setFormError(null);
+              setFormShake(false);
               setShowCreateModal(true);
             }}
           >
@@ -691,7 +887,8 @@ const EventsPage: React.FC = () => {
       {/* Create Event Modal */}
       {showCreateModal && (
         <div className="events-modal">
-          <div className="modal-content">
+          <div className={`modal-content ${formShake ? 'shake' : ''}`}>
+            {formError && <div className="modal-error">{formError}</div>}
             <div className="modal-header">
               <h3 className="modal-title">Create New Event</h3>
               <span 
@@ -803,6 +1000,7 @@ const EventsPage: React.FC = () => {
                       </div>
                     )}
                   </div>
+                  <IngredientSlots />
                 </div>
               </div>
             </div>
@@ -816,6 +1014,7 @@ const EventsPage: React.FC = () => {
               <button 
                 className="lb-btn"
                 onClick={handleCreateEvent}
+                disabled={!slotsOK}
               >
                 Create Event
               </button>
@@ -827,7 +1026,8 @@ const EventsPage: React.FC = () => {
       {/* Edit Event Modal */}
       {showEditModal && currentEvent && (
         <div className="events-modal">
-          <div className="modal-content">
+          <div className={`modal-content ${formShake ? 'shake' : ''}`}>
+            {formError && <div className="modal-error">{formError}</div>}
             <div className="modal-header">
               <h3 className="modal-title">Edit Event</h3>
               <span 
@@ -935,6 +1135,7 @@ const EventsPage: React.FC = () => {
                       </div>
                     )}
                   </div>
+                  <IngredientSlots />
                 </div>
               </div>
               <div className="form-group">
@@ -957,7 +1158,7 @@ const EventsPage: React.FC = () => {
               <button 
                 className="lb-btn"
                 onClick={handleUpdateEvent}
-                disabled={isUpdating}
+                disabled={isUpdating || !slotsOK}
               >
                 {isUpdating ? (<><span className="spinner-btn"></span>Updating...</>) : 'Update Event'}
               </button>
@@ -1003,10 +1204,12 @@ const EventsPage: React.FC = () => {
                 <div className="drink-list-container">
                   <h4>Standard Drinks</h4>
                   <div className="drink-grid">
-                    {filteredDrinks().map(drink => (
+                    {filteredDrinks().map(drink => {
+                      const isError = errorItemId === drink.id;
+                      return (
                       <div 
                         key={drink.id} 
-                        className={`drink-item ${selectedDrinkIds.includes(drink.id) ? 'selected' : ''}`}
+                        className={`drink-item ${selectedDrinkIds.includes(drink.id) ? 'selected' : ''} ${isError ? 'shake' : ''}`}
                         onClick={() => {
                           if (selectedDrinkIds.includes(drink.id)) {
                             removeDrink(drink.id);
@@ -1014,6 +1217,7 @@ const EventsPage: React.FC = () => {
                             addDrinkToEvent(drink.id);
                           }
                         }}
+                        style={{ position: 'relative' }}
                       >
                         <div className="drink-info">
                           <div className="drink-name">{drink.name}</div>
@@ -1022,17 +1226,23 @@ const EventsPage: React.FC = () => {
                         <div className="drink-action">
                           {selectedDrinkIds.includes(drink.id) ? '✓' : '+'}
                         </div>
+                        {isError && (
+                          <div className="error-bubble">{errorMessage}</div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   
                   <h4>Custom Recipes</h4>
                   {Object.keys(customRecipes).length > 0 ? (
                     <div className="drink-grid">
-                      {Object.values(customRecipes).map(recipe => (
+                      {Object.values(customRecipes).map(recipe => {
+                        const isErr = errorItemId === recipe.id;
+                        return (
                         <div 
                           key={recipe.id} 
-                          className={`drink-item ${selectedCustomIds.includes(recipe.id) ? 'selected' : ''}`}
+                          className={`drink-item ${selectedCustomIds.includes(recipe.id) ? 'selected' : ''} ${isErr ? 'shake' : ''}`}
                           onClick={() => {
                             if (selectedCustomIds.includes(recipe.id)) {
                               removeCustom(recipe.id);
@@ -1040,6 +1250,7 @@ const EventsPage: React.FC = () => {
                               addCustomToEvent(recipe.id);
                             }
                           }}
+                          style={{ position: 'relative' }}
                         >
                           <div className="drink-info">
                             <div className="drink-name">{recipe.name}</div>
@@ -1048,8 +1259,12 @@ const EventsPage: React.FC = () => {
                           <div className="drink-action">
                             {selectedCustomIds.includes(recipe.id) ? '✓' : '+'}
                           </div>
+                          {isErr && (
+                            <div className="error-bubble">{errorMessage}</div>
+                          )}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <p>No custom recipes available</p>
