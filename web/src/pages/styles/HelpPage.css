@@ -1,0 +1,109 @@
+/* HelpPage.css – Professional dark-gold theme for Help Center */
+.help-page-wrapper {
+  padding: 2.5rem 1rem 4rem 1rem;
+  max-width: 700px;
+  margin: 0 auto;
+}
+.help-title {
+  color: #dfdcd9;
+  font-size: 2.1rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+.help-divider {
+  height: 3px;
+  width: 80px;
+  background: #ce975e;
+  border-radius: 2px;
+  margin: 0 auto 1.5rem auto;
+}
+
+.help-section {
+  margin-bottom: 1.3rem;
+}
+.help-sec-header {
+  display: flex;
+  align-items: center;
+  background: #2a2a2a;
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+.help-sec-header.open {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  background: #23201a;
+}
+.help-sec-title {
+  color: #fff;
+  font-size: 1.18rem;
+  font-weight: 600;
+}
+.help-sec-chevron {
+  margin-left: auto;
+  color: #ce975e;
+  font-size: 1.3rem;
+  transition: transform 0.18s;
+}
+.help-sec-header.open .help-sec-chevron {
+  transform: rotate(180deg);
+}
+.help-sec-body {
+  background: #1e1e1e;
+  padding: 0.7rem 1.5rem 0.7rem 2.1rem;
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+  animation: fadeIn 0.3s;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.help-bullet-row {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+.help-bullet {
+  margin-top: 0.5em;
+  margin-right: 0.7em;
+  color: #ce975e;
+  font-size: 0.7em;
+}
+.help-bullet-text {
+  color: #dfdcd9;
+  font-size: 1rem;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+.help-footer {
+  color: #4f4f4f;
+  font-size: 0.98rem;
+  margin-top: 2.2rem;
+  line-height: 1.6;
+  text-align: center;
+}
+.help-link {
+  color: #ce975e;
+  text-decoration: underline;
+  transition: color 0.18s;
+}
+.help-link:hover {
+  color: #d6a777;
+}
+@media (max-width: 600px) {
+  .help-page-wrapper {
+    padding: 1.2rem 0.2rem 2.5rem 0.2rem;
+  }
+  .help-title {
+    font-size: 1.3rem;
+  }
+  .help-sec-title {
+    font-size: 1rem;
+  }
+  .help-sec-body {
+    padding: 0.6rem 0.7rem 0.6rem 1.1rem;
+  }
+}

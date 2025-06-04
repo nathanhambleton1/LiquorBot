@@ -141,11 +141,15 @@
 }
 .download-help a {
   color: var(--accent, #ce975e);
-  text-decoration: underline;
+  text-decoration: none;
   transition: color 0.18s;
 }
 .download-help a:hover {
   color: var(--accent-light, #d6a777);
+}
+.lb-logo span:last-child {
+  color: #ce975e;
+  font-weight: 800;
 }
 @media (max-width: 900px) {
   .download-hero {
