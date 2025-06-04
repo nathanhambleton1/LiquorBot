@@ -169,7 +169,15 @@ const App: React.FC = () => {
   }> = ({ onShowAuth, user, signOut, onShowEditProfile, onShowSettings }) => {
     const location = useLocation();
     const [showDropdown, setShowDropdown] = React.useState(false);
+    const [isMobile, setIsMobile] = React.useState(window.innerWidth < 770);
     const avatarRef = React.useRef<HTMLDivElement>(null);
+
+    // Responsive: update isMobile on resize
+    React.useEffect(() => {
+      const handleResize = () => setIsMobile(window.innerWidth < 770);
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Close dropdown on outside click
     React.useEffect(() => {
@@ -184,15 +192,60 @@ const App: React.FC = () => {
         document.removeEventListener('mousedown', handleClick);
       }
       return () => document.removeEventListener('mousedown', handleClick);
-    }, [showDropdown]);    // Get user initial or fallback icon
+    }, [showDropdown]);
+
+    // Hamburger icon
+    const HamburgerIcon = () => (
+      <div style={{ width: 28, height: 28, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', cursor: 'pointer' }}>
+        <div style={{ width: 22, height: 3, background: '#ce975e', borderRadius: 2, margin: '2px 0' }} />
+        <div style={{ width: 22, height: 3, background: '#ce975e', borderRadius: 2, margin: '2px 0' }} />
+        <div style={{ width: 22, height: 3, background: '#ce975e', borderRadius: 2, margin: '2px 0' }} />
+      </div>
+    );
+
+    // Get user initial or fallback icon
     const getAvatar = () => {
-      // Always show a person icon as placeholder/profile image
       return <FiUser className="profile-icon" style={{ 
         color: '#ffffff', 
         fontSize: '18px',
         strokeWidth: 2
       }} />;
     };
+
+    // Dropdown menu content (for mobile and desktop)
+    const dropdownMenu = (
+      <div className="profile-dropdown" style={{ position: 'absolute', right: 0, top: 48, background: '#232323', borderRadius: 10, boxShadow: '0 4px 16px #0008', minWidth: 200, zIndex: 100, padding: '0.5rem 0', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {/* Navigation links */}
+        <Link to="/downloads" className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textDecoration: 'none' }} onClick={() => setShowDropdown(false)}>Download</Link>
+        <Link to="/events" className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textDecoration: 'none' }} onClick={() => setShowDropdown(false)}>Events</Link>
+        <Link to="/drinks" className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textDecoration: 'none' }} onClick={() => setShowDropdown(false)}>Drinks</Link>
+        <Link to="/help" className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textDecoration: 'none' }} onClick={() => setShowDropdown(false)}>Help</Link>
+        <Link to="/contact" className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textDecoration: 'none' }} onClick={() => setShowDropdown(false)}>Contact</Link>
+        <div style={{ borderTop: '1px solid #333', margin: '8px 0' }} />
+        {/* Profile actions */}
+        {user ? (
+          <>
+            <button className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+              onClick={() => { setShowDropdown(false); onShowEditProfile(); }} 
+            >
+              <FiEdit /> Edit Profile
+            </button>
+            <button className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+              onClick={() => { setShowDropdown(false); onShowSettings(); }}
+            >
+              <FiSettings /> Settings
+            </button>
+            <button className="profile-dropdown-item" onClick={signOut} style={{ background: 'none', border: 'none', color: '#d9534f', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+              <FiLogOut /> Sign Out
+            </button>
+          </>
+        ) : (
+          <button className="profile-dropdown-item" onClick={onShowAuth} style={{ background: 'none', border: 'none', color: '#ce975e', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <FiUser /> Sign In
+          </button>
+        )}
+      </div>
+    );
 
     return (
       <header className="lb-header">
@@ -201,17 +254,22 @@ const App: React.FC = () => {
             <img src="/assets/logo.png" alt="LiquorBot Logo" className="logo-icon" style={{height:'1.8em',width:'auto'}} />
             <span>LiquorBot</span>
           </Link>
-          <nav>
-            <Link to="/downloads" className={location.pathname === '/downloads' ? 'active' : ''}>Download</Link>
-            <Link to="/events" className={location.pathname === '/events' ? 'active' : ''}>Events</Link>
-            <Link to="/drinks" className={location.pathname === '/drinks' ? 'active' : ''}>Drinks</Link>
-            <Link to="/help" className={location.pathname === '/help' ? 'active' : ''}>Help</Link>
-            <Link to="/contact" className={location.pathname === '/contact' ? 'active' : ''}>Contact</Link>
-          </nav>
-          <div ref={avatarRef} style={{ position: 'relative', marginLeft: 16 }}>            <button
+          {/* Desktop nav */}
+          {!isMobile && (
+            <nav>
+              <Link to="/downloads" className={location.pathname === '/downloads' ? 'active' : ''}>Download</Link>
+              <Link to="/events" className={location.pathname === '/events' ? 'active' : ''}>Events</Link>
+              <Link to="/drinks" className={location.pathname === '/drinks' ? 'active' : ''}>Drinks</Link>
+              <Link to="/help" className={location.pathname === '/help' ? 'active' : ''}>Help</Link>
+              <Link to="/contact" className={location.pathname === '/contact' ? 'active' : ''}>Contact</Link>
+            </nav>
+          )}
+          {/* Avatar or Hamburger */}
+          <div ref={avatarRef} style={{ position: 'relative', marginLeft: 16 }}>
+            <button
               className="profile-avatar-btn"
               onClick={() => setShowDropdown(v => !v)}
-              aria-label="Profile menu"
+              aria-label={isMobile ? 'Open menu' : 'Profile menu'}
               style={{
                 background: 'none',
                 border: '2px solid #ce975e',
@@ -229,33 +287,9 @@ const App: React.FC = () => {
                 color: '#ffffff'
               }}
             >
-              {getAvatar()}
+              {isMobile ? <HamburgerIcon /> : getAvatar()}
             </button>
-            {showDropdown && (
-              <div className="profile-dropdown" style={{ position: 'absolute', right: 0, top: 48, background: '#232323', borderRadius: 10, boxShadow: '0 4px 16px #0008', minWidth: 180, zIndex: 100, padding: '0.5rem 0', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {user ? (
-                  <>
-                    <button className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
-                      onClick={() => { setShowDropdown(false); onShowEditProfile(); }} 
-                    >
-                      <FiEdit /> Edit Profile
-                    </button>
-                    <button className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
-                      onClick={() => { setShowDropdown(false); onShowSettings(); }}
-                    >
-                      <FiSettings /> Settings
-                    </button>
-                    <button className="profile-dropdown-item" onClick={signOut} style={{ background: 'none', border: 'none', color: '#d9534f', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                      <FiLogOut /> Sign Out
-                    </button>
-                  </>
-                ) : (
-                  <button className="profile-dropdown-item" onClick={onShowAuth} style={{ background: 'none', border: 'none', color: '#ce975e', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                    <FiUser /> Sign In
-                  </button>
-                )}
-              </div>
-            )}
+            {showDropdown && dropdownMenu}
           </div>
         </div>
       </header>
