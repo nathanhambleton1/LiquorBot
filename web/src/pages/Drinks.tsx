@@ -56,6 +56,7 @@ const Drinks: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [createIngredients, setCreateIngredients] = useState<{id: number; amount: number; priority: number}[]>([]);
   const [editIngredients, setEditIngredients] = useState<{id: number; amount: number; priority: number}[]>([]);
+  const [saving, setSaving] = useState(false);
 
   // Form state
   const [name, setName] = useState('');
@@ -81,10 +82,8 @@ const Drinks: React.FC = () => {
     const checkAuth = async () => {
       try {
         await getCurrentUser();
-        console.log('Authenticated user found');
         setIsLoggedIn(true);
-        console.log('Fetching custom recipes');
-        fetchCustomDrinks();
+        fetchCustomDrinks(); // Ensure this is called
       } catch {
         setIsLoggedIn(false);
       } finally {
@@ -92,6 +91,7 @@ const Drinks: React.FC = () => {
       }
     };
     checkAuth();
+    fetchStandardDrinks(); // Ensure this is called
   }, []);
 
   // Fetch standard drinks from server
@@ -133,13 +133,12 @@ const Drinks: React.FC = () => {
 
   // Fetch custom drinks
   const fetchCustomDrinks = async () => {
-    console.log('Starting fetchCustomDrinks');
     try {
       const result = await client.graphql({ 
         query: listCustomRecipes,
         authMode: 'userPool'
       });
-      console.log('Fetched custom recipes:', result.data?.listCustomRecipes?.items);
+      
       const items = result.data?.listCustomRecipes?.items || [];
       
       const drinksWithImages = await Promise.all(
@@ -153,16 +152,17 @@ const Drinks: React.FC = () => {
               console.error('Error loading image:', error);
             }
           }
-
+          
+          // FIX: Properly format ingredients string
           const ingredientsString = item.ingredients
-            .map((ing: any) => `${ing.ingredientId}:${ing.amount}:${ing.priority}`)
+            .map((ing: any) => `${ing.ingredientID}:${ing.amount}:${ing.priority}`)
             .join(',');
           
           return {
             id: item.id,
             recipeId: item.id,
             name: item.name,
-            description: item.description,
+            description: item.description || '',
             image: imageUrl,
             isCustom: true,
             ingredients: ingredientsString
@@ -171,7 +171,6 @@ const Drinks: React.FC = () => {
       );
       
       setCustomDrinks(drinksWithImages);
-      console.log('Custom drinks set, count:', drinksWithImages.length);
     } catch (error) {
       console.error('Error fetching custom drinks:', error);
     }
@@ -184,37 +183,17 @@ const Drinks: React.FC = () => {
 
   // Handle create drink
   const handleCreate = async () => {
-    // Validation: require name, at least one valid ingredient, and image
     if (!name.trim()) {
       setFormError('Please enter a drink name.');
       setFormShake(true);
       setTimeout(() => setFormShake(false), 600);
       return;
     }
-    if (!createIngredients.length || createIngredients.some(ing => !ing.id)) {
-      setFormError('Please select at least one ingredient.');
-      setFormShake(true);
-      setTimeout(() => setFormShake(false), 600);
-      return;
-    }
-    if (!imageFile) {
-      setFormError('Please choose an image for your drink.');
-      setFormShake(true);
-      setTimeout(() => setFormShake(false), 600);
-      return;
-    }
-    setFormError(null);
-
-    // Convert ingredients to string format
-    const ingredientsString = createIngredients
-      .filter(ing => ing.id !== 0)
-      .map(ing => `${ing.id}:${ing.amount}:${ing.priority}`)
-      .join(',');
-
+    
+    setSaving(true); // NEW: Show loading
+    
     try {
       let imageKey = '';
-
-      // Upload image if selected
       if (imageFile) {
         const key = `drink-images/${Date.now()}-${imageFile.name}`;
         await uploadData({
@@ -225,7 +204,15 @@ const Drinks: React.FC = () => {
         imageKey = key;
       }
 
-      // Create the drink
+      // FIX: Properly format ingredients
+      const ingredientsInput = createIngredients
+        .filter(ing => ing.id !== 0)
+        .map(ing => ({
+          ingredientID: ing.id.toString(),
+          amount: ing.amount,
+          priority: ing.priority
+        }));
+
       await client.graphql({
         query: createCustomRecipe,
         variables: {
@@ -233,26 +220,18 @@ const Drinks: React.FC = () => {
             name,
             description: description || null,
             image: imageKey || null,
-            ingredients: ingredientsString
-              ? ingredientsString.split(',').map(chunk => {
-                  const [id, amount, priority] = chunk.split(':');
-                  return {
-                    ingredientId: parseInt(id),
-                    amount: parseFloat(amount),
-                    priority: parseInt(priority)
-                  };
-                })
-              : []
+            ingredients: ingredientsInput
           }
         },
         authMode: 'userPool'
       });
 
-      // Refresh list
       fetchCustomDrinks();
-      closeModal();
+      setShowCreateModal(false); // NEW: Close modal after save
     } catch (error) {
       console.error('Error creating drink:', error);
+    } finally {
+      setSaving(false); // NEW: Hide loading
     }
   };
 
@@ -757,8 +736,22 @@ const Drinks: React.FC = () => {
             </div>
             
             <div className="modal-actions">
-              <button className="cancel-btn" onClick={closeModal}>Cancel</button>
-              <button className="save-btn" onClick={handleCreate}>Create Drink</button>
+              <button className="cancel-btn" onClick={closeModal} disabled={saving}>
+                Cancel
+              </button>
+              <button 
+                className="save-btn" 
+                onClick={handleCreate}
+                disabled={saving}
+              >
+                {saving ? (
+                  <>
+                    <span className="spinner"></span> Saving...
+                  </>
+                ) : (
+                  'Create Drink'
+                )}
+              </button>
             </div>
           </div>
         </div>
@@ -877,8 +870,22 @@ const Drinks: React.FC = () => {
             </div>
             
             <div className="modal-actions">
-              <button className="cancel-btn" onClick={closeModal}>Cancel</button>
-              <button className="save-btn" onClick={handleUpdate}>Update Drink</button>
+              <button className="cancel-btn" onClick={closeModal} disabled={saving}>
+                Cancel
+              </button>
+              <button 
+                className="save-btn" 
+                onClick={handleUpdate}
+                disabled={saving}
+              >
+                {saving ? (
+                  <>
+                    <span className="spinner"></span> Saving...
+                  </>
+                ) : (
+                  'Create Drink'
+                )}
+              </button>
             </div>
           </div>
         </div>
