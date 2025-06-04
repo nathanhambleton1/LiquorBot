@@ -13,6 +13,7 @@ import { FiLogOut, FiX } from 'react-icons/fi';
 import { Hub } from '@aws-amplify/core';
 import { getCurrentUser, signOut } from 'aws-amplify/auth';
 import EventsPage from './EventsPage';
+import PrivacyPolicy from './PrivacyPolicy';
 
 Amplify.configure(awsconfig);
 
@@ -342,7 +343,7 @@ const HelpCTA: React.FC = () => (
   </section>
 );
 
-const Footer: React.FC = () => (
+const Footer: React.FC<{ onPrivacyClick?: () => void }> = ({ onPrivacyClick }) => (
   <footer id="contact" className="lb-footer">
     <div className="lb-container footer-grid">
       <div className="footer-brand">
@@ -362,6 +363,7 @@ const Footer: React.FC = () => (
           <li><a href="#previews">App Previews</a></li>
           <li><a href="#help">Help</a></li>
           <li><a href="mailto:support@liquorbot.io">Support</a></li>
+          <li><a style={{ cursor: 'pointer' }} onClick={onPrivacyClick}>Privacy Policy</a></li>
         </ul>
       </div>
 
@@ -384,7 +386,7 @@ const Footer: React.FC = () => (
 const App: React.FC = () => {
   const [showAuth, setShowAuth] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const [currentView, setCurrentView] = useState<'home' | 'events'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'events' | 'privacy'>('home');
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -438,7 +440,6 @@ const App: React.FC = () => {
         signOut={signOut}
         onEventsClick={() => setCurrentView('events')} // Add this prop
       />
-      
       {currentView === 'home' ? (
         <main>
           <Hero />
@@ -446,12 +447,12 @@ const App: React.FC = () => {
           <AppPreviews />
           <HelpCTA />
         </main>
+      ) : currentView === 'events' ? (
+        <EventsPage />
       ) : (
-        <EventsPage /> // Render the new Events page
+        <PrivacyPolicy />
       )}
-
-      <Footer />
-
+      <Footer onPrivacyClick={() => setCurrentView('privacy')} />
       {showAuth && (
         <div className="auth-modal">
           <button
