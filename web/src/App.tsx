@@ -12,6 +12,7 @@ import awsconfig from './amplifyconfiguration.json';
 import { FiLogOut, FiX } from 'react-icons/fi';
 import { Hub } from '@aws-amplify/core';
 import { getCurrentUser, signOut } from 'aws-amplify/auth';
+import EventsPage from './EventsPage';
 
 Amplify.configure(awsconfig);
 
@@ -152,7 +153,8 @@ const SiteHeader: React.FC<{
   onShowAuth: () => void; 
   user: any; 
   signOut: () => void;
-}> = ({ onShowAuth, user, signOut }) => {
+  onEventsClick: () => void; // Add this prop
+}> = ({ onShowAuth, user, signOut, onEventsClick }) => {
 
   return (
     <header className="lb-header">
@@ -163,9 +165,10 @@ const SiteHeader: React.FC<{
           <span>LiquorBot</span>
         </div>
 
-        {/* Simple anchor-based nav */}
+        {/* Updated navigation with Events button */}
         <nav>
           <a href="#features">Features</a>
+          <a onClick={onEventsClick} style={{ cursor: 'pointer' }}>Events</a> {/* Add this */}
           <a href="#previews">App Previews</a>
           <a href="#help">Help</a>
           <a href="#contact">Contact</a>
@@ -381,6 +384,7 @@ const Footer: React.FC = () => (
 const App: React.FC = () => {
   const [showAuth, setShowAuth] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [currentView, setCurrentView] = useState<'home' | 'events'>('home');
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -425,13 +429,20 @@ const App: React.FC = () => {
         onShowAuth={() => setShowAuth(true)} 
         user={user}
         signOut={signOut}
+        onEventsClick={() => setCurrentView('events')} // Add this prop
       />
-      <main>
-        <Hero />
-        <Features />
-        <AppPreviews />
-        <HelpCTA />
-      </main>
+      
+      {currentView === 'home' ? (
+        <main>
+          <Hero />
+          <Features />
+          <EventsPage />
+          <AppPreviews />
+          <HelpCTA />
+        </main>
+      ) : (
+        <EventsPage /> // Render the new Events page
+      )}
 
       <Footer />
 
