@@ -2,6 +2,7 @@
 // SettingsPopup – user-tweakable preferences (kept locally with AsyncStorage)
 // ---------------------------------------------------------------------------
 import React, { useState, useEffect, useRef } from 'react';
+import { useUnits } from '../UnitsContext';
 import {
   View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView,
   Platform, PermissionsAndroid, Alert, Animated,
@@ -20,8 +21,7 @@ const KEYS = {
 export default function SettingsPopup({ signOut }: { signOut: () => void }) {
   // ───────────────────────────── state ─────────────────────────────
   const [notifications, setNotifications] = useState(false);
-  const [useWifi,       setUseWifi]       = useState(false);
-  const [units,         setUnits]         = useState<'oz' | 'ml'>('oz');
+  const { units, setUnits } = useUnits();
 
   // ─────────── Animated values for the Danger-Zone dropdown ───────────
   const [isDangerCollapsed, setIsDangerCollapsed] = useState(true);
@@ -80,23 +80,17 @@ export default function SettingsPopup({ signOut }: { signOut: () => void }) {
 
   // ───────────────────── persistence helpers ─────────────────────
   const save = (k: string, v: string) => AsyncStorage.setItem(k, v).catch(()=>{});
+  // notification preferences only; units are managed by UnitsContext
   const loadPrefs = async () => {
     try {
-      const vals = await AsyncStorage.multiGet(Object.values(KEYS));
-      const prefs = {
-        notifications: vals.find(([k]) => k === KEYS.notifications)?.[1] === '1',
-        useWifi:       vals.find(([k]) => k === KEYS.useWifi)?.[1] === '1',
-        units:         vals.find(([k]) => k === KEYS.units)?.[1] === 'ml' ? 'ml' : 'oz',
-      };
-
-      if (prefs.notifications && !(await checkNotificationPermission())) {
-        prefs.notifications = false;
+      const vals = await AsyncStorage.multiGet([KEYS.notifications]);
+      const notif = vals.find(([k]) => k === KEYS.notifications)?.[1] === '1';
+      if (notif && !(await checkNotificationPermission())) {
         await save(KEYS.notifications, '0');
+        setNotifications(false);
+      } else {
+        setNotifications(notif);
       }
-
-      setNotifications(prefs.notifications);
-      setUseWifi(prefs.useWifi);
-      setUnits(prefs.units as 'oz' | 'ml');
     } catch {}
   };
   useEffect(() => { loadPrefs(); }, []);
@@ -168,22 +162,18 @@ export default function SettingsPopup({ signOut }: { signOut: () => void }) {
         value={notifications}
         onValueChange={handleNotificationsToggle}
       />
-      <PrefRow
-        label="Use Wi-Fi Instead of Bluetooth"
-        value={useWifi}
-        onValueChange={(v)=>{ setUseWifi(v); save(KEYS.useWifi, v?'1':'0'); }}
-      />
+
 
       {/* units picker */}
-      <Text style={[styles.label, { marginTop: 25, marginBottom: 10 }]}>
+      <Text style={[styles.label, { marginTop: 25, marginBottom: 10 }]}>  
         Default Measurement Units
       </Text>
       <View style={styles.unitRow}>
-        {['oz', 'ml'].map((u) => (
+        {(['oz','ml'] as const).map(u => (
           <TouchableOpacity
             key={u}
             style={[styles.unitBtn, units === u && styles.unitBtnActive]}
-            onPress={() => { setUnits(u as 'oz'|'ml'); save(KEYS.units, u); }}
+            onPress={() => setUnits(u)}
           >
             <Text style={styles.unitText}>{u.toUpperCase()}</Text>
           </TouchableOpacity>
