@@ -15,6 +15,7 @@ import React, {
   useMemo,
   useCallback,
 } from 'react';
+import { useUnits, ozToMl, mlToOz } from './components/UnitsContext';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView,
   Modal, FlatList, Platform, KeyboardAvoidingView, Image, Dimensions, ActivityIndicator,
@@ -380,6 +381,7 @@ export default function CreateDrinkScreen() {
     <Image source={PLACEHOLDER_IMAGE} style={styles.previewCanvasSmall} resizeMode="contain"/>
   );
 
+  const { units } = useUnits();
   /* ═════════════  UI  ═════════════ */
   return (
     <KeyboardAvoidingView style={styles.container}
@@ -447,40 +449,48 @@ export default function CreateDrinkScreen() {
                     <TextInput
                       style={styles.volumeInput}
                       keyboardType="decimal-pad"
-                      value={row.volStr ?? String(row.volume)}
+                      // display in selected units
+                      value={(() => {
+                        const v = row.volume;
+                        return units === 'oz'
+                          ? (row.volStr ?? String(v))
+                          : ozToMl(v).toFixed(1);
+                      })()}
                       onChangeText={txt => {
-                        if (!isValidNumberInput(txt)) return;      // refuse bad chars
-
+                        if (!isValidNumberInput(txt)) return;
+                        // convert input back to oz for storage
+                        const val = parseFloat(txt);
+                        const oz = units === 'oz' ? val : mlToOz(val);
                         setRows(prev => prev.map((r, i) =>
-                          i === idx ? { ...r, volStr: txt } : r
+                          i === idx
+                            ? { ...r, volStr: String(txt), volume: Math.round(oz * 4) / 4 }
+                            : r
                         ));
                       }}
                       onBlur={() => {
                         setRows(prev => prev.map((r, i) => {
                           if (i !== idx) return r;
-
                           const raw = r.volStr ?? '';
                           const num = parseFloat(raw);
-
-                          // If the user left it empty or just ".", keep the old volume
                           if (isNaN(num)) {
                             return { ...r, volStr: String(r.volume) };
                           }
-
-                          // Clamp & round to nearest 0.25
-                          const clamped = Math.max(0.25, Math.min(99.75, num));
+                          // clamp & round
+                          const valRaw = units === 'oz' ? num : mlToOz(num);
+                          const clamped = Math.max(0.25, Math.min(99.75, valRaw));
                           const rounded = Math.round(clamped * 4) / 4;
-
                           return { ...r, volume: rounded, volStr: String(rounded) };
                         }));
                       }}
-                      maxLength={5}
+                      maxLength={7}
                     />
                     <TouchableOpacity onPress={()=>adjustVol(idx,0.25)} style={styles.volBtn}>
                       <Ionicons name="add" size={18} color="#DFDCD9"/>
                     </TouchableOpacity>
                   </View>
-                  <Text style={styles.counterLabel}>Volume in oz</Text>
+                  <Text style={styles.counterLabel}>
+                    Volume ({units.toUpperCase()})
+                  </Text>
                 </View>
                 {/* priority */}
                 <View style={styles.priorityGroup}>

@@ -20,6 +20,7 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
+import { useUnits, ozToMl } from '../UnitsContext';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Picker } from '@react-native-picker/picker';
@@ -46,6 +47,7 @@ export default function PourHistoryPopup({ onClear }: Props) {
   const [events, setEvents]   = useState<PourEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const { units } = useUnits();
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [sortOption, setSortOption] = useState<'date' | 'alphabetical'>('date');
   const [dateRange, setDateRange] = useState<'7days' | 'month' | 'year' | 'all'>('7days');
@@ -203,7 +205,9 @@ export default function PourHistoryPopup({ onClear }: Props) {
                       hour: '2-digit',
                       minute: '2-digit',
                     })}{' '}
-                    • {ev.volumeOz.toFixed(1)} oz
+                    • {units === 'oz'
+                      ? `${ev.volumeOz.toFixed(1)} oz`
+                      : `${ozToMl(ev.volumeOz).toFixed(1)} ml`}
                   </Text>
                 </View>
               </View>

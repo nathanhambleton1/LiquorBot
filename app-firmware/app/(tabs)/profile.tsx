@@ -327,7 +327,7 @@ export default function ProfileScreen() {
       </View>
 
       {/* button list */}
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         <View style={styles.buttonContainer}>
           {buttons.map((b) => (
             <TouchableOpacity
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
   profilePicture:        { width: 125, height: 125, borderRadius: 75, marginVertical: 20 },
   usernameText:          { color: '#DFDCD9', fontSize: 24 },
   emailText:             { color: '#4F4F4F', fontSize: 16, marginTop: 5 },
-  scrollContainer:       { paddingHorizontal: 20 },
+  scrollContainer:       { paddingHorizontal: 20, paddingBottom: 80 },
   buttonContainer:       { marginVertical: 20 },
   button:                { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F',
                             borderRadius: 10, paddingVertical: 15, paddingHorizontal: 15, marginBottom: 10 },

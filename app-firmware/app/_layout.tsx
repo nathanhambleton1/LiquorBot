@@ -11,6 +11,7 @@ import { Stack } from 'expo-router';
 import { Amplify } from 'aws-amplify';
 import config from '../src/amplifyconfiguration.json';
 import { StatusBar } from 'expo-status-bar';
+import { UnitsProvider } from './components/UnitsContext';
 // Auth wrapper
 import { Authenticator } from '@aws-amplify/ui-react-native';
 
@@ -30,18 +31,18 @@ import { LiquorBotProvider } from './components/liquorbot-provider';
 export default function RootLayout() {
   return (
     <Authenticator.Provider>
-      {/* 👇 WRAP everything inside LiquorBotProvider */}
+      {/* 👇 WRAP everything inside LiquorBotProvider and UnitsProvider */}
       <LiquorBotProvider>
-        {/* Force white (light-content) status-bar icons everywhere */}
-        <StatusBar style="light" translucent />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-          }}
-        >
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="auth" />
-        </Stack>
+        <UnitsProvider>
+          {/* Force white (light-content) status-bar icons everywhere */}
+          <StatusBar style="light" translucent />
+          <Stack
+            screenOptions={{ headerShown: false }}
+          >
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="auth" />
+          </Stack>
+        </UnitsProvider>
       </LiquorBotProvider>
     </Authenticator.Provider>
   );
