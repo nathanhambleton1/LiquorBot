@@ -1,0 +1,376 @@
+/* Drinks.css */
+.drinks-page {
+  padding: 4rem 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.drinks-header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.drinks-header h1 {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  color: #DFDCD9;
+}
+
+.subtitle {
+  color: #9E9E9E;
+  font-size: 1.1rem;
+  margin-bottom: 1.5rem;
+}
+
+.create-drink-btn {
+  background-color: #CE975E;
+  color: white;
+  border: none;
+  padding: 0.8rem 1.5rem;
+  border-radius: 30px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.create-drink-btn:hover {
+  background-color: #b8834d;
+}
+
+.drinks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 2rem;
+  margin: 2rem 0;
+}
+
+.drink-card {
+  background: var(--tertiary-bg, #232323);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  transition: all 0.3s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.drink-card.custom {
+  border: 2px solid #CE975E;
+}
+
+.drink-card.expanded {
+  grid-column: 1 / -1;
+}
+
+.drink-card-header {
+  display: flex;
+  align-items: center;
+  padding: 1.5rem;
+  transition: background-color 0.3s;
+}
+
+.drink-card-header:hover {
+  background-color: #2c2c2c;
+}
+
+.drink-image-container {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+  margin-right: 1.5rem;
+}
+
+.drink-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.custom-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #CE975E;
+  color: white;
+  padding: 0.3rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  z-index: 1;
+}
+
+.drink-info {
+  flex: 1;
+}
+
+.drink-info h3 {
+  margin: 0 0 0.5rem;
+  color: #DFDCD9;
+  font-size: 1.3rem;
+}
+
+.description-preview {
+  color: #9E9E9E;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.expand-icon {
+  font-size: 1.2rem;
+  color: #9E9E9E;
+  margin-left: 1rem;
+  transition: transform 0.3s;
+}
+
+.drink-card.expanded .expand-icon {
+  transform: rotate(180deg);
+}
+
+.drink-details {
+  padding: 1.5rem;
+  border-top: 1px solid #333;
+  background: #1a1a1a;
+}
+
+.drink-details p {
+  color: #cecece;
+  line-height: 1.6;
+  margin-bottom: 1.5rem;
+}
+
+.ingredients-section {
+  margin-bottom: 1.5rem;
+}
+
+.ingredients-section h4 {
+  color: #CE975E;
+  margin-bottom: 0.8rem;
+  font-size: 1.1rem;
+}
+
+.ingredients-section ul {
+  padding-left: 1.5rem;
+}
+
+.ingredients-section li {
+  color: #cecece;
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
+}
+
+.drink-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.edit-btn, .delete-btn {
+  padding: 0.7rem 1.2rem;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: opacity 0.3s;
+}
+
+.edit-btn {
+  background: #2c2c2c;
+  color: #CE975E;
+}
+
+.delete-btn {
+  background: #3a1a1a;
+  color: #d44a4a;
+}
+
+.edit-btn:hover, .delete-btn:hover {
+  opacity: 0.8;
+}
+
+.auth-prompt {
+  text-align: center;
+  margin-top: 3rem;
+  color: #9E9E9E;
+}
+
+.auth-prompt a {
+  color: #CE975E;
+  text-decoration: none;
+}
+
+.auth-prompt a:hover {
+  text-decoration: underline;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.drink-modal {
+  background: #1F1F1F;
+  border-radius: 12px;
+  padding: 2rem;
+  width: 90%;
+  max-width: 500px;
+  position: relative;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.close-modal {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  color: #9E9E9E;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.drink-modal h2 {
+  color: #DFDCD9;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #9E9E9E;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 0.8rem;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #2c2c2c;
+  color: #DFDCD9;
+  font-size: 1rem;
+}
+
+.form-group textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.hint {
+  color: #666;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.image-preview {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.image-preview img {
+  max-width: 100%;
+  max-height: 150px;
+  border-radius: 8px;
+}
+
+.current-image {
+  margin: 1rem 0;
+  text-align: center;
+}
+
+.current-image img {
+  max-width: 100%;
+  max-height: 150px;
+  border-radius: 8px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.cancel-btn {
+  background: #3a3a3a;
+  color: #DFDCD9;
+  border: none;
+  padding: 0.7rem 1.5rem;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.save-btn {
+  background: #CE975E;
+  color: white;
+  border: none;
+  padding: 0.7rem 1.5rem;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+/* Loader */
+.loader {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  color: #CE975E;
+  font-size: 1.2rem;
+}
+
+/* iOS Toggle Switch */
+.ios-toggle {
+  background: none;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+}
+.ios-toggle-track {
+  width: 48px;
+  height: 28px;
+  background: #444;
+  border-radius: 14px;
+  position: relative;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+}
+.ios-toggle.checked .ios-toggle-track {
+  background: var(--accent, #ce975e);
+}
+.ios-toggle-thumb {
+  width: 22px;
+  height: 22px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  transition: left 0.2s;
+}
+.ios-toggle.checked .ios-toggle-thumb {
+  left: 23px;
+}
