@@ -11,8 +11,8 @@ import { Amplify } from 'aws-amplify';
 import awsconfig from '../amplifyconfiguration.json';
 import { FiX } from 'react-icons/fi';
 import { Routes, Route } from 'react-router-dom';
-import EventsPage from '../EventsPage';
-import PrivacyPolicy from '../PrivacyPolicy';
+import EventsPage from './EventsPage';
+import PrivacyPolicy from './PrivacyPolicy';
 
 Amplify.configure(awsconfig);
 
@@ -162,7 +162,7 @@ const Hero: React.FC = () => (
         </p>
 
         <div className="cta-row">
-          <a className="store-btn" href="#">
+          <a className="store-btn" href="https://apps.apple.com/us/app/liquorbot/id6746461095" target="_blank" rel="noopener noreferrer">
             <img src="/assets/appstore.png" alt="Download on the App Store" />
           </a>
         </div>

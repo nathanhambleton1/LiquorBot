@@ -1,11 +1,11 @@
 // File: src/EventsPage.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { generateClient } from 'aws-amplify/api';
-import { listEvents, getEvent, getCustomRecipe } from './graphql/queries';
-import { deleteEvent, joinEvent, createEvent, updateEvent, leaveEvent } from './graphql/mutations';
+import { listEvents, getEvent, getCustomRecipe } from '../graphql/queries';
+import { deleteEvent, joinEvent, createEvent, updateEvent, leaveEvent } from '../graphql/mutations';
 import { fetchAuthSession } from '@aws-amplify/auth';
 import { getUrl } from 'aws-amplify/storage';
-import './EventsPage.css';
+import './styles/EventsPage.css';
 import { FiEdit2, FiTrash2, FiLogOut, FiPlus, FiX } from 'react-icons/fi';
 
 const client = generateClient();

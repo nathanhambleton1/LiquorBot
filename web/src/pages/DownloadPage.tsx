@@ -6,7 +6,7 @@ const DownloadPage: React.FC = () => (
     <h1>Download LiquorBot App</h1>
     <p className="subtitle">Get the official LiquorBot app for your device</p>
     <div className="download-buttons" style={{display: 'flex', justifyContent: 'center', gap: '2rem', margin: '2rem 0'}}>
-      <a href="https://apps.apple.com/" target="_blank" rel="noopener noreferrer" className="store-btn">
+      <a href="https://apps.apple.com/us/app/liquorbot/id6746461095" target="_blank" rel="noopener noreferrer" className="store-btn">
         <img src="/assets/appstore.png" alt="Download on the App Store" style={{height: 80}} />
       </a>
     </div>

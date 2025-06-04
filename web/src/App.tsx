@@ -10,9 +10,9 @@ import './App.css';
 import { FiX } from 'react-icons/fi';
 import { Hub } from '@aws-amplify/core';
 import { getCurrentUser, signOut } from 'aws-amplify/auth';
-import EventsPage from './EventsPage';
-import PrivacyPolicy from './PrivacyPolicy';
-import { HomePage, HelpPage, ContactPage, DownloadPage } from './pages';
+import EventsPage from './pages/EventsPage';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import { HomePage, HelpPage, ContactPage, DownloadPage, Drinks } from './pages';
 import { Link, Routes, Route, useLocation } from 'react-router-dom';
 
 /* -------------------------------------------------------------------------- */
@@ -196,7 +196,7 @@ const App: React.FC = () => {
         <Route path="/events" element={<EventsPage />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/downloads" element={<DownloadPage />} />
-        <Route path="/drinks" element={<div style={{padding:'4rem',textAlign:'center'}}><h1>Drinks</h1><p>Explore and discover cocktail recipes for your LiquorBot.</p></div>} />
+        <Route path="/drinks" element={<Drinks />} />
         <Route path="/help" element={<HelpPage />} />
         <Route path="/contact" element={<ContactPage />} />
         {/* Add more routes as needed */}
