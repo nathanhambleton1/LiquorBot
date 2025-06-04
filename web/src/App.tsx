@@ -14,6 +14,7 @@ import { Hub } from '@aws-amplify/core';
 import { getCurrentUser, signOut } from 'aws-amplify/auth';
 import EventsPage from './EventsPage';
 import PrivacyPolicy from './PrivacyPolicy';
+import { Link, Routes, Route, useLocation } from 'react-router-dom';
 
 Amplify.configure(awsconfig);
 
@@ -154,28 +155,22 @@ const SiteHeader: React.FC<{
   onShowAuth: () => void; 
   user: any; 
   signOut: () => void;
-  onEventsClick: () => void; // Add this prop
-}> = ({ onShowAuth, user, signOut, onEventsClick }) => {
-
+}> = ({ onShowAuth, user, signOut }) => {
+  const location = useLocation();
   return (
     <header className="lb-header">
       <div className="lb-container">
-        {/* Logo + word-mark */}
-        <div className="lb-logo" onClick={() => window.scrollTo(0, 0)}>
+        <Link className="lb-logo" to="/">
           <span className="logo-icon">🍸</span>
           <span>LiquorBot</span>
-        </div>
-
-        {/* Updated navigation with Events button */}
+        </Link>
         <nav>
-          <a href="#features">Features</a>
-          <a onClick={onEventsClick} style={{ cursor: 'pointer' }}>Events</a> {/* Add this */}
-          <a href="#previews">App Previews</a>
-          <a href="#help">Help</a>
-          <a href="#contact">Contact</a>
+          <Link to="/features" className={location.pathname === '/features' ? 'active' : ''}>Features</Link>
+          <Link to="/events" className={location.pathname === '/events' ? 'active' : ''}>Events</Link>
+          <Link to="/previews" className={location.pathname === '/previews' ? 'active' : ''}>App Previews</Link>
+          <Link to="/help" className={location.pathname === '/help' ? 'active' : ''}>Help</Link>
+          <Link to="/contact" className={location.pathname === '/contact' ? 'active' : ''}>Contact</Link>
         </nav>
-
-        {/* Auth CTA */}
         {user ? (
           <button className="lb-btn" onClick={signOut}>
             <FiLogOut style={{ marginRight: 6 }} />
@@ -343,30 +338,28 @@ const HelpCTA: React.FC = () => (
   </section>
 );
 
-const Footer: React.FC<{ onPrivacyClick?: () => void }> = ({ onPrivacyClick }) => (
+const Footer: React.FC = () => (
   <footer id="contact" className="lb-footer">
     <div className="lb-container footer-grid">
       <div className="footer-brand">
-        <div className="lb-logo">
+        <Link className="lb-logo" to="/">
           <span className="logo-icon">🍸</span>
           <span>LiquorBot</span>
-        </div>
+        </Link>
         <p className="small">
           © {new Date().getFullYear()} LiquorBot, Inc. All rights reserved.
         </p>
       </div>
-
       <div className="footer-links">
         <h4>Links</h4>
         <ul>
-          <li><a href="#features">Features</a></li>
-          <li><a href="#previews">App Previews</a></li>
-          <li><a href="#help">Help</a></li>
+          <li><Link to="/features">Features</Link></li>
+          <li><Link to="/previews">App Previews</Link></li>
+          <li><Link to="/help">Help</Link></li>
           <li><a href="mailto:support@liquorbot.io">Support</a></li>
-          <li><a style={{ cursor: 'pointer' }} onClick={onPrivacyClick}>Privacy Policy</a></li>
+          <li><Link to="/privacy">Privacy Policy</Link></li>
         </ul>
       </div>
-
       <div className="footer-social">
         <h4>Follow</h4>
         <ul>
@@ -386,7 +379,6 @@ const Footer: React.FC<{ onPrivacyClick?: () => void }> = ({ onPrivacyClick }) =
 const App: React.FC = () => {
   const [showAuth, setShowAuth] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const [currentView, setCurrentView] = useState<'home' | 'events' | 'privacy'>('home');
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -438,21 +430,24 @@ const App: React.FC = () => {
         onShowAuth={() => setShowAuth(true)} 
         user={user}
         signOut={signOut}
-        onEventsClick={() => setCurrentView('events')} // Add this prop
       />
-      {currentView === 'home' ? (
-        <main>
-          <Hero />
-          <Features />
-          <AppPreviews />
-          <HelpCTA />
-        </main>
-      ) : currentView === 'events' ? (
-        <EventsPage />
-      ) : (
-        <PrivacyPolicy />
-      )}
-      <Footer onPrivacyClick={() => setCurrentView('privacy')} />
+      <Routes>
+        <Route path="/" element={
+          <main>
+            <Hero />
+            <Features />
+            <AppPreviews />
+            <HelpCTA />
+          </main>
+        } />
+        <Route path="/events" element={<EventsPage />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/features" element={<Features />} />
+        <Route path="/previews" element={<AppPreviews />} />
+        <Route path="/help" element={<HelpCTA />} />
+        {/* Add more routes as needed */}
+      </Routes>
+      <Footer />
       {showAuth && (
         <div className="auth-modal">
           <button

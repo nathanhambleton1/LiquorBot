@@ -111,10 +111,16 @@ a:hover {
 .lb-header nav a { 
   font-weight: 500;
   color: var(--secondary-text);
+  text-decoration: none;
 }
 
 .lb-header nav a:hover {
   color: var(--primary-text);
+}
+
+.lb-header nav a.active {
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 .lb-btn {
@@ -414,10 +420,20 @@ a:hover {
 .lb-footer li a {
   color: var(--secondary-text);
   transition: var(--transition);
+  text-decoration: none;
 }
 
 .lb-footer li a:hover {
   color: var(--accent);
+}
+
+.lb-footer .footer-links a {
+  text-decoration: none;
+}
+
+.lb-footer .footer-links a.active {
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 .small { 
