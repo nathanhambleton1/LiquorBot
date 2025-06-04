@@ -209,7 +209,7 @@ a:hover {
 }
 
 .store-btn img { 
-  height: 50px; 
+  height: 80px; 
   transition: var(--transition);
   border-radius: 10px;
 }
