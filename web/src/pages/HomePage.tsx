@@ -254,7 +254,6 @@ const AppPreviews: React.FC = () => {
       <div className="lb-container">
         <div className="section-header">
           <h2>App Previews</h2>
-          <p className="subtitle">Explore the LiquorBot experience</p>
         </div>
         
         <div className="preview-grid">

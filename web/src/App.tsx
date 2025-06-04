@@ -128,11 +128,11 @@ const App: React.FC = () => {
       <header className="lb-header">
         <div className="lb-container">
           <Link className="lb-logo" to="/">
-            <span className="logo-icon">🍸</span>
+            <img src="/assets/logo.png" alt="LiquorBot Logo" className="logo-icon" style={{height:'1.8em',width:'auto'}} />
             <span>LiquorBot</span>
           </Link>
           <nav>
-            <Link to="/downloads" className={location.pathname === '/downloads' ? 'active' : ''}>Downloads</Link>
+            <Link to="/downloads" className={location.pathname === '/downloads' ? 'active' : ''}>Download</Link>
             <Link to="/events" className={location.pathname === '/events' ? 'active' : ''}>Events</Link>
             <Link to="/drinks" className={location.pathname === '/drinks' ? 'active' : ''}>Drinks</Link>
             <Link to="/help" className={location.pathname === '/help' ? 'active' : ''}>Help</Link>
@@ -157,7 +157,7 @@ const App: React.FC = () => {
       <div className="lb-container footer-grid">
         <div className="footer-brand">
           <Link className="lb-logo" to="/">
-            <span className="logo-icon">🍸</span>
+            <img src="/assets/logo.png" alt="LiquorBot Logo" className="logo-icon" style={{height:'2em',width:'auto'}} />
             <span>LiquorBot</span>
           </Link>
           <p className="small">
@@ -167,10 +167,8 @@ const App: React.FC = () => {
         <div className="footer-links">
           <h4>Links</h4>
           <ul>
-            <li><Link to="/features">Features</Link></li>
-            <li><Link to="/previews">App Previews</Link></li>
             <li><Link to="/help">Help</Link></li>
-            <li><a href="mailto:support@liquorbot.io">Support</a></li>
+            <li><a href="/contact">Contact</a></li>
             <li><Link to="/privacy">Privacy Policy</Link></li>
           </ul>
         </div>
