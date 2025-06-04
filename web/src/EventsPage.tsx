@@ -18,6 +18,8 @@ interface Event {
   endTime: string;
   inviteCode: string;
   owner: string; // add owner field
+  guestOwners?: string[];
+  liquorbotId: number;
 }
 
 const EventsPage: React.FC = () => {
@@ -32,6 +34,9 @@ const EventsPage: React.FC = () => {
   const [currentEvent, setCurrentEvent] = useState<Event | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<string | null>(null);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [eventToLeave, setEventToLeave] = useState<string | null>(null);
+  const [isLeaving, setIsLeaving] = useState(false);
   
   // Form states for create/edit
   const [eventName, setEventName] = useState('');
@@ -39,6 +44,7 @@ const EventsPage: React.FC = () => {
   const [eventLocation, setEventLocation] = useState('');
   const [eventStartTime, setEventStartTime] = useState('');
   const [eventEndTime, setEventEndTime] = useState('');
+  const [eventDeviceId, setEventDeviceId] = useState('');
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -74,6 +80,8 @@ const EventsPage: React.FC = () => {
             ...item,
             description: item.description ?? undefined,
             location: item.location ?? undefined,
+            liquorbotId: item.liquorbotId,
+            guestOwners: Array.isArray(item.guestOwners) ? item.guestOwners.filter((g: any) => typeof g === 'string') : [],
           }))
         );
       } catch (error) {
@@ -147,13 +155,13 @@ const EventsPage: React.FC = () => {
         variables: { id: eventId },
         authMode: 'userPool'
       });
-      
       const eventRaw = data.getEvent ?? null;
       const event: Event | null = eventRaw
         ? {
             ...eventRaw,
             description: eventRaw.description ?? undefined,
             location: eventRaw.location ?? undefined,
+            guestOwners: Array.isArray(eventRaw.guestOwners) ? eventRaw.guestOwners.filter((g: any) => typeof g === 'string') : [],
           }
         : null;
       setCurrentEvent(event);
@@ -163,6 +171,7 @@ const EventsPage: React.FC = () => {
         setEventLocation(event.location || '');
         setEventStartTime(event.startTime.substring(0, 16));
         setEventEndTime(event.endTime.substring(0, 16));
+        setEventDeviceId(event.liquorbotId.toString());
         setShowEditModal(true);
       }
     } catch (error) {
@@ -172,7 +181,6 @@ const EventsPage: React.FC = () => {
 
   const handleCreateEvent = async () => {
     if (!eventName.trim()) return;
-    
     try {
       await client.graphql({
         query: createEvent,
@@ -183,8 +191,8 @@ const EventsPage: React.FC = () => {
             location: eventLocation || null,
             startTime: new Date(eventStartTime).toISOString(),
             endTime: new Date(eventEndTime).toISOString(),
-            liquorbotId: 1, // Replace with actual number value if needed
-            inviteCode: Math.random().toString(36).substring(2, 10).toUpperCase(), // Generate a random code or use your logic
+            liquorbotId: parseInt(eventDeviceId, 10),
+            inviteCode: Math.random().toString(36).substring(2, 10).toUpperCase(),
             owner: currentUser || '' // Use the current user's username
           }
         },
@@ -220,7 +228,8 @@ const EventsPage: React.FC = () => {
             description: eventDescription || null,
             location: eventLocation || null,
             startTime: new Date(eventStartTime).toISOString(),
-            endTime: new Date(eventEndTime).toISOString()
+            endTime: new Date(eventEndTime).toISOString(),
+            liquorbotId: parseInt(eventDeviceId, 10),
           }
         },
         authMode: 'userPool'
@@ -251,17 +260,36 @@ const EventsPage: React.FC = () => {
     }
   };
 
-  const handleLeaveEvent = async (id: string) => {
+  const handleLeaveEvent = (id: string) => {
+    setEventToLeave(id);
+    setShowLeaveModal(true);
+  };
+
+  const confirmLeaveEvent = async () => {
+    if (!eventToLeave) return;
+    setIsLeaving(true);
     try {
       await client.graphql({
         query: leaveEvent,
-        variables: { eventId: id },
+        variables: { eventId: eventToLeave },
         authMode: 'userPool'
       });
-      setEvents(prev => prev.filter(evt => evt.id !== id));
+      setEvents(prev => prev.filter(evt =>
+        evt.id !== eventToLeave &&
+        (!currentUser || !(evt.guestOwners && evt.guestOwners.includes(currentUser)))
+      ));
     } catch (error) {
       console.error('Error leaving event:', error);
+    } finally {
+      setIsLeaving(false);
+      setShowLeaveModal(false);
+      setEventToLeave(null);
     }
+  };
+
+  const cancelLeaveEvent = () => {
+    setShowLeaveModal(false);
+    setEventToLeave(null);
   };
 
   const resetEventForm = () => {
@@ -270,6 +298,7 @@ const EventsPage: React.FC = () => {
     setEventLocation('');
     setEventStartTime('');
     setEventEndTime('');
+    setEventDeviceId('');
   };
 
   const formatDate = (dateString: string) => {
@@ -329,7 +358,10 @@ const EventsPage: React.FC = () => {
           </button>
           <button 
             className="lb-btn" 
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => {
+              resetEventForm();
+              setShowCreateModal(true);
+            }}
           >
             New Event
           </button>
@@ -373,8 +405,9 @@ const EventsPage: React.FC = () => {
                       title="Leave Event"
                       onClick={() => handleLeaveEvent(event.id)}
                       style={{background: 'none', border: 'none', color: '#d9534f', cursor: 'pointer', padding: 4, borderRadius: 4}}
+                      disabled={isLeaving && eventToLeave === event.id}
                     >
-                      <FiLogOut size={20} />
+                      {isLeaving && eventToLeave === event.id ? <span className="spinner-btn"></span> : <FiLogOut size={20} />}
                     </button>
                   )}
                 </div>
@@ -484,21 +517,36 @@ const EventsPage: React.FC = () => {
                   onChange={(e) => setEventLocation(e.target.value)}
                 />
               </div>
-              <div className="form-row">
+              {currentUser && (
                 <div className="form-group">
+                  <label>Device ID</label>
+                  <input
+                    type="text"
+                    className="modal-input"
+                    placeholder="Enter 6-digit Device ID"
+                    value={eventDeviceId}
+                    onChange={(e) => setEventDeviceId(e.target.value)}
+                    maxLength={6}
+                  />
+                </div>
+              )}
+              <div className="form-row" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
                   <label>Start Time</label>
                   <input
                     type="datetime-local"
                     className="modal-input"
+                    style={{ minWidth: 0, maxWidth: '100%' }}
                     value={eventStartTime}
                     onChange={(e) => setEventStartTime(e.target.value)}
                   />
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
                   <label>End Time</label>
                   <input
                     type="datetime-local"
                     className="modal-input"
+                    style={{ minWidth: 0, maxWidth: '100%' }}
                     value={eventEndTime}
                     onChange={(e) => setEventEndTime(e.target.value)}
                   />
@@ -563,23 +611,38 @@ const EventsPage: React.FC = () => {
                   onChange={(e) => setEventLocation(e.target.value)}
                 />
               </div>
-              <div className="form-row">
+              {currentEvent.owner === currentUser && (
                 <div className="form-group">
+                  <label>Device ID</label>
+                  <input
+                    type="text"
+                    className="modal-input"
+                    placeholder="Enter 6-digit Device ID"
+                    value={eventDeviceId}
+                    onChange={(e) => setEventDeviceId(e.target.value)}
+                    maxLength={6}
+                  />
+                </div>
+              )}
+              <div className="form-row" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
                   <label>Start Time</label>
                   <input
                     type="datetime-local"
                     className="modal-input"
                     value={eventStartTime}
                     onChange={(e) => setEventStartTime(e.target.value)}
+                    style={{ minWidth: 0, maxWidth: '100%' }}
                   />
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
                   <label>End Time</label>
                   <input
                     type="datetime-local"
                     className="modal-input"
                     value={eventEndTime}
                     onChange={(e) => setEventEndTime(e.target.value)}
+                    style={{ minWidth: 0, maxWidth: '100%' }}
                   />
                 </div>
               </div>
@@ -626,6 +689,27 @@ const EventsPage: React.FC = () => {
             <div className="modal-footer">
               <button className="lb-btn secondary" onClick={cancelDeleteEvent}>Cancel</button>
               <button className="lb-btn" style={{background: '#d9534f', color: '#fff'}} onClick={confirmDeleteEvent}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leave Event Modal */}
+      {showLeaveModal && (
+        <div className="events-modal">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3 className="modal-title">Leave Event</h3>
+              <span className="modal-close" onClick={cancelLeaveEvent}>&times;</span>
+            </div>
+            <div className="modal-body">
+              <p>Are you sure you want to leave this event? You will lose access to its details and updates.</p>
+            </div>
+            <div className="modal-footer">
+              <button className="lb-btn secondary" onClick={cancelLeaveEvent} disabled={isLeaving}>Cancel</button>
+              <button className="lb-btn" style={{background: '#d9534f', color: '#fff'}} onClick={confirmLeaveEvent} disabled={isLeaving}>
+                {isLeaving ? <span className="spinner-btn"></span> : 'Leave'}
+              </button>
             </div>
           </div>
         </div>
