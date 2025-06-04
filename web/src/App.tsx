@@ -411,7 +411,14 @@ const App: React.FC = () => {
       }
     });
 
-    return () => removeListener(); // Cleanup listener
+    // Listen for custom event to show sign-in modal
+    const showSignin = () => setShowAuth(true);
+    window.addEventListener('show-signin-modal', showSignin);
+
+    return () => {
+      removeListener(); // Cleanup listener
+      window.removeEventListener('show-signin-modal', showSignin);
+    };
   }, []);
 
   /** Minimal header override for the modal */
@@ -436,7 +443,6 @@ const App: React.FC = () => {
         <main>
           <Hero />
           <Features />
-          <EventsPage />
           <AppPreviews />
           <HelpCTA />
         </main>

@@ -124,9 +124,41 @@ const EventsPage: React.FC = () => {
   };
 
   if (loading) {
-    return <div className="events-container">Loading events...</div>;
+    return (
+      <div className="events-container">
+        <div className="spinner-container">
+          <div className="spinner"></div>
+          <div style={{marginTop: 16}}>Loading events...</div>
+        </div>
+      </div>
+    );
   }
 
+  if (!currentUser) {
+    return (
+      <div className="events-container" style={{display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh'}}>
+        <div style={{fontSize: 64, marginBottom: 16, textAlign: 'center'}}>📅</div>
+        <h2 style={{marginBottom: 12, textAlign: 'center'}}>You must sign in to view your events</h2>
+        <p style={{color: '#cecece', maxWidth: 400, marginBottom: 28, fontSize: 16, textAlign: 'center'}}>
+          Sign in to create, join, and manage your events. You'll be able to see your upcoming parties, share invite codes, and keep track of all your cocktail gatherings in one place.
+        </p>
+        <button
+          className="lb-btn"
+          onClick={() => {
+            // Try to trigger the sign-in modal from the parent App
+            if (window && typeof window.dispatchEvent === 'function') {
+              window.dispatchEvent(new CustomEvent('show-signin-modal'));
+            }
+          }}
+          style={{marginTop: 0, minWidth: 160, fontSize: 18, textAlign: 'center', display: 'flex', justifyContent: 'center'}}
+        >
+          <span style={{width: '100%', textAlign: 'center'}}>Sign In</span>
+        </button>
+      </div>
+    );
+  }
+
+  // Only show empty state if not loading and events.length === 0
   return (
     <div className="events-container">
       <div className="events-header">
@@ -147,12 +179,12 @@ const EventsPage: React.FC = () => {
         </div>
       </div>
 
-      {events.length === 0 ? (
+      {!loading && events.length === 0 ? (
         <div className="empty-events">
           <p>You haven't created or joined any events yet</p>
           <p>Create a new event or join one using an invite code</p>
         </div>
-      ) : (
+      ) : events.length > 0 ? (
         <div className="events-grid">
           {events.map(event => (
             <div key={event.id} className="event-card">
@@ -194,7 +226,7 @@ const EventsPage: React.FC = () => {
             </div>
           ))}
         </div>
-      )}
+      ) : null}
 
       {/* Join Event Modal */}
       {showJoinModal && (
