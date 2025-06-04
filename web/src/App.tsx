@@ -79,11 +79,18 @@ const liquorTheme: Theme = {
 /*                                  APP ROOT                                  */
 /* -------------------------------------------------------------------------- */
 
+// Language context for app-wide language switching
+const LanguageContext = React.createContext({
+  language: 'en',
+  setLanguage: (_: string) => {},
+});
+
 const App: React.FC = () => {
   const [showAuth, setShowAuth] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+  const [language, setLanguage] = React.useState('en');
 
   const refreshUserAttributes = async () => {
     try {
@@ -288,61 +295,63 @@ const App: React.FC = () => {
   );
 
   return (
-    <ThemeProvider theme={liquorTheme}>
-      <SiteHeader 
-        onShowAuth={() => setShowAuth(true)} 
-        user={user}
-        signOut={signOut}
-        onShowEditProfile={handleShowEditProfile}
-        onShowSettings={handleShowSettingsPanel}
-      />
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/events" element={<EventsPage />} />
-        <Route path="/privacy" element={<PrivacyPolicy />} />
-        <Route path="/downloads" element={<DownloadPage />} />
-        <Route path="/drinks" element={<Drinks onShowAuth={() => setShowAuth(true)} />} />
-        <Route path="/help" element={<HelpPage />} />
-        <Route path="/contact" element={<ContactPage />} />
-        {/* Add more routes as needed */}
-      </Routes>
-      <Footer />
-      {/* Edit Profile Panel */}
-      {showEditProfile && (
-        <EditProfilePanel onClose={() => setShowEditProfile(false)} user={user} />
-      )}
-      {showSettingsPanel && (
-        <SettingsPanel onClose={() => setShowSettingsPanel(false)} />
-      )}
-      {showAuth && (
-        <div className="auth-modal">
-          <button
-            className="close-btn"
-            onClick={() => setShowAuth(false)}
-          >
-            <FiX size={24} />
-          </button>
-          <Authenticator
-            components={authComponents}
-            variation="modal"
-            hideSignUp={false}
-            loginMechanisms={['username']}
-            formFields={{
-              signIn: {
-                username: {
-                  placeholder: 'Username',
+    <LanguageContext.Provider value={{ language, setLanguage }}>
+      <ThemeProvider theme={liquorTheme}>
+        <SiteHeader 
+          onShowAuth={() => setShowAuth(true)} 
+          user={user}
+          signOut={signOut}
+          onShowEditProfile={handleShowEditProfile}
+          onShowSettings={handleShowSettingsPanel}
+        />
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/events" element={<EventsPage />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/downloads" element={<DownloadPage />} />
+          <Route path="/drinks" element={<Drinks onShowAuth={() => setShowAuth(true)} />} />
+          <Route path="/help" element={<HelpPage />} />
+          <Route path="/contact" element={<ContactPage />} />
+          {/* Add more routes as needed */}
+        </Routes>
+        <Footer />
+        {/* Edit Profile Panel */}
+        {showEditProfile && (
+          <EditProfilePanel onClose={() => setShowEditProfile(false)} user={user} />
+        )}
+        {showSettingsPanel && (
+          <SettingsPanel onClose={() => setShowSettingsPanel(false)} />
+        )}
+        {showAuth && (
+          <div className="auth-modal">
+            <button
+              className="close-btn"
+              onClick={() => setShowAuth(false)}
+            >
+              <FiX size={24} />
+            </button>
+            <Authenticator
+              components={authComponents}
+              variation="modal"
+              hideSignUp={false}
+              loginMechanisms={['username']}
+              formFields={{
+                signIn: {
+                  username: {
+                    placeholder: 'Username',
+                  },
+                  password: {
+                    placeholder: 'Password',
+                  },
                 },
-                password: {
-                  placeholder: 'Password',
-                },
-              },
-            }}
-          >
-            {() => <></>}
-          </Authenticator>
-        </div>
-      )}
-    </ThemeProvider>
+              }}
+            >
+              {() => <></>}
+            </Authenticator>
+          </div>
+        )}
+      </ThemeProvider>
+    </LanguageContext.Provider>
   );
 };
 
@@ -481,7 +490,37 @@ const EditProfilePanel: React.FC<{ onClose: () => void; user: any }> = ({ onClos
 };
 
 const SettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const { language, setLanguage } = React.useContext(LanguageContext);
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [openSection, setOpenSection] = React.useState<string | null>(null);
+  // Notification toggle state
+  const [notificationsAllowed, setNotificationsAllowed] = React.useState(Notification.permission === 'granted');
+  const [notificationError, setNotificationError] = React.useState<string | null>(null);
+
+  const handleNotificationToggle = async () => {
+    if (notificationsAllowed) {
+      // No way to revoke permission from JS, so just update UI
+      setNotificationsAllowed(false);
+      setNotificationError('To fully disable, change your browser settings.');
+    } else {
+      try {
+        const result = await Notification.requestPermission();
+        if (result === 'granted') {
+          setNotificationsAllowed(true);
+          setNotificationError(null);
+        } else if (result === 'denied') {
+          setNotificationsAllowed(false);
+          setNotificationError('Permission denied. Enable in browser settings.');
+        } else {
+          setNotificationsAllowed(false);
+          setNotificationError('Permission not granted.');
+        }
+      } catch (e) {
+        setNotificationError('Error requesting permission.');
+      }
+    }
+  };
+
   return (
     <div className="edit-profile-panel-overlay" onClick={onClose}>
       <div className="edit-profile-panel" onClick={e => e.stopPropagation()}>
@@ -489,8 +528,75 @@ const SettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <FiX size={24} />
         </button>
         <h2>Settings</h2>
+        {/* Notifications */}
+        <div className="settings-section">
+          <button className="settings-section-btn" onClick={() => setOpenSection(openSection === 'notifications' ? null : 'notifications')} style={{...sectionBtnStyle, marginTop: 0}}>
+            <span>Notifications</span>
+            <FiChevronDown style={{ fontSize: 22, marginLeft: 8, transform: openSection === 'notifications' ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+          </button>
+          {openSection === 'notifications' && (
+            <div className="settings-section-content">
+              <label style={{ color: '#cecece', fontSize: 14, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input
+                  type="checkbox"
+                  checked={notificationsAllowed}
+                  onChange={handleNotificationToggle}
+                  style={{ marginRight: 10, accentColor: '#ce975e', width: 18, height: 18 }}
+                  disabled={Notification.permission === 'denied'}
+                />
+                Allow browser notifications
+              </label>
+              {notificationError && <div style={{ color: '#e74c3c', fontSize: 13, marginTop: 6 }}>{notificationError}</div>}
+              <div style={{ color: '#aaa', fontSize: 13, marginTop: 8 }}>
+                You can change notification permissions in your browser settings at any time.
+              </div>
+            </div>
+          )}
+        </div>
+        {/* Language */}
+        <div className="settings-section">
+          <button className="settings-section-btn" onClick={() => setOpenSection(openSection === 'language' ? null : 'language')} style={sectionBtnStyle}>
+            <span>Language</span>
+            <FiChevronDown style={{ fontSize: 22, marginLeft: 8, transform: openSection === 'language' ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+          </button>
+          {openSection === 'language' && (
+            <div className="settings-section-content">
+              <label style={{ color: '#cecece', fontSize: 14, marginBottom: 8, display: 'block' }}>Language</label>
+              <select
+                style={{ width: '100%', padding: '8px', borderRadius: 7, background: '#232323', color: '#DFDCD9', border: '1px solid #444', marginBottom: 10 }}
+                value={language}
+                onChange={e => setLanguage(e.target.value)}
+              >
+                <option value="en">English (US)</option>
+                <option value="en-GB">English (UK)</option>
+                <option value="es">Español</option>
+                <option value="fr">Français</option>
+                <option value="de">Deutsch</option>
+                {/* Add more languages as needed */}
+              </select>
+              <div style={{ color: '#aaa', fontSize: 13 }}>Region: United States (default)</div>
+            </div>
+          )}
+        </div>
+        {/* Support */}
+        <div className="settings-section">
+          <button className="settings-section-btn" onClick={() => setOpenSection(openSection === 'support' ? null : 'support')} style={sectionBtnStyle}>
+            <span>Support</span>
+            <FiChevronDown style={{ fontSize: 22, marginLeft: 8, transform: openSection === 'support' ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+          </button>
+          {openSection === 'support' && (
+            <div className="settings-section-content">
+              <p style={{ color: '#cecece', fontSize: 14, marginBottom: 8 }}>Need help? Contact our support team:</p>
+              <ul style={{ color: '#aaa', fontSize: 13, marginLeft: 18, marginBottom: 0 }}>
+                <li>Email: <a href="mailto:nhambleton03@gmail.com" style={{ color: '#ce975e' }}>nhambleton03@gmail.com</a></li>
+                <li><a href="/help" style={{ color: '#ce975e' }}>Help Center</a></li>
+                <li><a href="/contact" style={{ color: '#ce975e' }}>Contact Form</a></li>
+              </ul>
+            </div>
+          )}
+        </div>
         {/* Sign Out Button */}
-        <div style={{ marginBottom: 24 }}>
+        <div style={{ marginBottom: 24, marginTop: 30 }}>
           <button 
             className="signout-btn"
             style={{ width: '100%', fontSize: 15, padding: '8px 0', borderRadius: 8, background: '#444', color: '#DFDCD9', border: 'none', fontWeight: 500, marginBottom: 8 }}
@@ -500,8 +606,8 @@ const SettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           </button>
         </div>
         {/* Danger Zone */}
-        <div className="danger-zone">
-          <h3 style={{ color: '#e74c3c', fontSize: 17, marginBottom: 10 }}>
+        <div className="danger-zone" style={{ marginTop: 10 }}>
+          <h3 style={{ color: '#e74c3c', fontSize: 17, marginBottom: 10, marginTop: 0, paddingTop: 0, display: 'flex', alignItems: 'center' }}>
             <FiAlertTriangle style={{ marginRight: 8, fontSize: 20, verticalAlign: 'middle' }} /> 
             Danger Zone
           </h3>
@@ -589,7 +695,49 @@ const SettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           from { transform: translateX(100%); }
           to { transform: translateX(0); }
         }
+        .settings-section { margin-bottom: 10px; }
+        .settings-section-btn {
+          width: 100%;
+          background: #232323;
+          color: #DFDCD9;
+          border: none;
+          border-radius: 8px;
+          font-size: 15px;
+          font-weight: 500;
+          padding: 12px 16px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 0;
+          margin-top: 10px;
+          transition: background 0.15s;
+          cursor: pointer;
+        }
+        .settings-section-content {
+          background: #202020;
+          border-radius: 8px;
+          padding: 14px 16px 10px 16px;
+          margin-top: 2px;
+          margin-bottom: 2px;
+        }
       `}</style>
     </div>
   );
+};
+const sectionBtnStyle = {
+  width: '100%',
+  background: '#232323',
+  color: '#DFDCD9',
+  border: 'none',
+  borderRadius: 8,
+  fontSize: 15,
+  fontWeight: 500,
+  padding: '12px 16px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  marginBottom: 0,
+  marginTop: 10,
+  transition: 'background 0.15s',
+  cursor: 'pointer',
 };

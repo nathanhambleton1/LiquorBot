@@ -36,14 +36,14 @@ a:hover {
 .lb-container {
   width: 100%;
   max-width: 1200px;
-  margin: 0 auto;
-  box-sizing: border-box;
+  padding-left: 32px;
+  padding-right: 32px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
-@media (max-width: 768px) {
-  .lb-container {
-    padding: 0 20px;
-  }
+body {
+  box-sizing: border-box;
 }
 
 .lb-header {
@@ -99,7 +99,7 @@ a:hover {
 }
 
 .lb-logo span {
-  color: #fff;
+  color: #fff !important;
 }
 
 .lb-btn {
@@ -382,4 +382,12 @@ a:hover {
   border-radius: 6px;
   font-weight: 600;
   cursor: pointer;
+}
+
+@media (max-width: 899px) {
+  .rotating-image,
+  .app-previews,
+  .previews-section {
+    display: none !important;
+  }
 }
