@@ -1,0 +1,180 @@
+/* DownloadPage.css - Professional, modern style for DownloadPage */
+.download-page {
+  padding: 0;
+  background: var(--secondary-bg, #181818);
+  border-radius: 18px;
+  margin: 3rem auto 2rem auto;
+  box-shadow: 0 8px 40px 0 rgba(0,0,0,0.18);
+  max-width: 1100px;
+}
+.download-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3rem;
+  padding: 4rem 2rem 2rem 2rem;
+  background: linear-gradient(120deg, var(--primary-bg, #0f0f0f) 60%, var(--tertiary-bg, #232323) 100%);
+  border-radius: 18px 18px 0 0;
+}
+.download-hero-content {
+  flex: 1 1 350px;
+  min-width: 320px;
+  max-width: 500px;
+  text-align: left;
+}
+.download-title {
+  font-size: 2.7rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+  color: var(--primary-text, #fff);
+}
+.download-subtitle {
+  color: var(--secondary-text, #cecece);
+  font-size: 1.25rem;
+  margin-bottom: 2.2rem;
+  line-height: 1.6;
+}
+.download-buttons {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.download-buttons .store-btn img {
+  height: 60px;
+  border-radius: 12px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.18);
+  transition: transform 0.18s, box-shadow 0.18s;
+}
+.download-buttons .store-btn:hover img {
+  transform: scale(1.07) rotate(-2deg);
+  box-shadow: 0 8px 32px rgba(206,151,94,0.18);
+}
+.download-platforms {
+  margin-top: 0.5rem;
+  color: var(--secondary-text, #cecece);
+  font-size: 1.05rem;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+.platform-badge {
+  background: var(--accent, #ce975e);
+  color: var(--primary-bg, #0f0f0f);
+  border-radius: 6px;
+  padding: 0.2em 0.8em;
+  font-size: 0.95em;
+  font-weight: 600;
+  margin-left: 0.2em;
+}
+.download-hero-image {
+  flex: 1 1 320px;
+  min-width: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.download-app-preview {
+  width: 100%;
+  max-width: 320px;
+  border-radius: 18px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  background: #222;
+}
+.download-features {
+  background: var(--tertiary-bg, #232323);
+  border-radius: 0 0 18px 18px;
+  padding: 3rem 2rem 2rem 2rem;
+  margin-top: -1.5rem;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.10);
+}
+.download-features h2 {
+  text-align: center;
+  font-size: 2rem;
+  margin-bottom: 2.5rem;
+  color: var(--primary-text, #fff);
+}
+.feature-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+  justify-content: center;
+}
+.feature-card {
+  background: var(--secondary-bg, #181818);
+  border: 1px solid var(--border, #3a3a3a);
+  border-radius: 14px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.10);
+  padding: 2rem 1.5rem 1.5rem 1.5rem;
+  min-width: 220px;
+  max-width: 260px;
+  text-align: center;
+  transition: transform 0.18s, box-shadow 0.18s, border 0.18s;
+}
+.feature-card:hover {
+  transform: translateY(-8px) scale(1.03);
+  border-color: var(--accent, #ce975e);
+  box-shadow: 0 8px 32px rgba(206,151,94,0.10);
+}
+.feature-icon {
+  font-size: 2.2rem;
+  margin-bottom: 1rem;
+}
+.feature-card h3 {
+  font-size: 1.18rem;
+  margin-bottom: 0.7rem;
+  color: var(--primary-text, #fff);
+}
+.feature-card p {
+  color: var(--secondary-text, #cecece);
+  font-size: 1.02rem;
+  line-height: 1.5;
+}
+.download-help {
+  text-align: center;
+  margin: 3rem 0 1rem 0;
+}
+.download-help h2 {
+  font-size: 1.4rem;
+  color: var(--primary-text, #fff);
+  margin-bottom: 0.7rem;
+}
+.download-help a {
+  color: var(--accent, #ce975e);
+  text-decoration: underline;
+  transition: color 0.18s;
+}
+.download-help a:hover {
+  color: var(--accent-light, #d6a777);
+}
+@media (max-width: 900px) {
+  .download-hero {
+    flex-direction: column;
+    padding: 3rem 1rem 1.5rem 1rem;
+    gap: 2rem;
+  }
+  .download-hero-image {
+    margin-top: 1.5rem;
+  }
+  .download-features {
+    padding: 2rem 1rem 1.5rem 1rem;
+  }
+}
+@media (max-width: 600px) {
+  .download-page {
+    margin: 1.5rem 0 1rem 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .download-hero, .download-features {
+    border-radius: 0;
+    padding: 1.5rem 0.5rem 1rem 0.5rem;
+  }
+  .download-app-preview {
+    max-width: 90vw;
+  }
+  .feature-list {
+    flex-direction: column;
+    gap: 1.2rem;
+  }
+}

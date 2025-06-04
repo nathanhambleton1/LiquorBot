@@ -1,5 +1,5 @@
 // File: App.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Authenticator,
   ThemeProvider,
@@ -7,16 +7,13 @@ import {
 } from '@aws-amplify/ui-react';
 import '@aws-amplify/ui-react/styles.css';
 import './App.css';
-import { Amplify } from 'aws-amplify';
-import awsconfig from './amplifyconfiguration.json';
-import { FiLogOut, FiX } from 'react-icons/fi';
+import { FiX } from 'react-icons/fi';
 import { Hub } from '@aws-amplify/core';
 import { getCurrentUser, signOut } from 'aws-amplify/auth';
 import EventsPage from './EventsPage';
 import PrivacyPolicy from './PrivacyPolicy';
+import { HomePage, HelpPage, ContactPage, DownloadPage } from './pages';
 import { Link, Routes, Route, useLocation } from 'react-router-dom';
-
-Amplify.configure(awsconfig);
 
 /* -------------------------------------------------------------------------- */
 /*                               THEME OVERRIDE                               */
@@ -70,309 +67,6 @@ const liquorTheme: Theme = {
 };
 
 /* -------------------------------------------------------------------------- */
-/*                              3D ROTATING IMAGE                            */
-/* -------------------------------------------------------------------------- */
-const RotatingImage: React.FC = () => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const targetRotation = useRef({ x: 0, y: 0 });
-  const currentRotation = useRef({ x: 0, y: 0 });
-  const animationFrame = useRef<number | null>(null);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const maxRotation = 20; // degrees
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-
-    const animate = () => {
-      currentRotation.current.x = lerp(currentRotation.current.x, targetRotation.current.x, 0.12);
-      currentRotation.current.y = lerp(currentRotation.current.y, targetRotation.current.y, 0.12);
-      container.style.transform = `perspective(1000px) rotateX(${currentRotation.current.x}deg) rotateY(${currentRotation.current.y}deg)`;
-      animationFrame.current = requestAnimationFrame(animate);
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const rect = container.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
-      let rotateX = -((e.clientY - centerY) / rect.height) * maxRotation;
-      let rotateY = -((centerX - e.clientX) / rect.width) * maxRotation;
-      // Clamp for smooth max edges
-      rotateX = Math.max(-maxRotation, Math.min(maxRotation, rotateX));
-      rotateY = Math.max(-maxRotation, Math.min(maxRotation, rotateY));
-      targetRotation.current = { x: rotateX, y: rotateY };
-    };
-
-    const handleMouseLeave = () => {
-      targetRotation.current = { x: 0, y: 0 };
-    };
-
-    // Attach to window instead of container
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseleave', handleMouseLeave);
-    animate();
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseleave', handleMouseLeave);
-      if (animationFrame.current) cancelAnimationFrame(animationFrame.current);
-    };
-  }, []);
-
-  return (
-    <div 
-      ref={containerRef}
-      className="rotating-image"
-      style={{
-        perspective: '1000px',
-        transition: 'transform 0.1s cubic-bezier(0.22, 1, 0.36, 1)',
-        transformStyle: 'preserve-3d'
-      }}
-    >
-      <div className="device-frame">
-        <img 
-          src="/assets/apppreview.png" 
-          alt="LiquorBot App Preview" 
-          className="app-preview"
-        />
-        <div className="device-shadow"></div>
-      </div>
-      {/* Floating icons for depth effect */}
-      <div className="floating-icon icon-calendar">📅</div>
-      <div className="floating-icon icon-people">👥</div>
-      <div className="floating-icon icon-drink">🍹</div>
-      <div className="floating-icon icon-share">🔄</div>
-    </div>
-  );
-};
-
-/* -------------------------------------------------------------------------- */
-/*                             UTILITY COMPONENTS                             */
-/* -------------------------------------------------------------------------- */
-
-const SiteHeader: React.FC<{ 
-  onShowAuth: () => void; 
-  user: any; 
-  signOut: () => void;
-}> = ({ onShowAuth, user, signOut }) => {
-  const location = useLocation();
-  return (
-    <header className="lb-header">
-      <div className="lb-container">
-        <Link className="lb-logo" to="/">
-          <span className="logo-icon">🍸</span>
-          <span>LiquorBot</span>
-        </Link>
-        <nav>
-          <Link to="/features" className={location.pathname === '/features' ? 'active' : ''}>Features</Link>
-          <Link to="/events" className={location.pathname === '/events' ? 'active' : ''}>Events</Link>
-          <Link to="/previews" className={location.pathname === '/previews' ? 'active' : ''}>App Previews</Link>
-          <Link to="/help" className={location.pathname === '/help' ? 'active' : ''}>Help</Link>
-          <Link to="/contact" className={location.pathname === '/contact' ? 'active' : ''}>Contact</Link>
-        </nav>
-        {user ? (
-          <button className="lb-btn" onClick={signOut}>
-            <FiLogOut style={{ marginRight: 6 }} />
-            Sign&nbsp;Out
-          </button>
-        ) : (
-          <button className="lb-btn" onClick={onShowAuth}>
-            Sign&nbsp;In
-          </button>
-        )}
-      </div>
-    </header>
-  );
-};
-
-const Hero: React.FC = () => (
-  <section className="lb-hero">
-    <div className="lb-container hero-inner">
-      <div className="hero-content">
-        <h1>
-          Your Personal&nbsp;<span className="accent">Robotic Bartender</span>
-        </h1>
-        <p>
-          LiquorBot mixes perfect cocktails on demand, tracks your favorites and
-          keeps the party flowing — all from the convenience of our companion app.
-        </p>
-
-        <div className="cta-row">
-          <a className="store-btn" href="#">
-            <img src="/assets/appstore.png" alt="Download on the App Store" />
-          </a>
-          <a className="store-btn" href="#">
-            <img src="/assets/googleplay.png" alt="Get it on Google Play" />
-          </a>
-        </div>
-      </div>
-      
-      <div className="hero-image">
-        <RotatingImage />
-      </div>
-    </div>
-  </section>
-);
-
-const Features: React.FC = () => {
-  const [selectedFeature, setSelectedFeature] = useState<null | {
-    title: string;
-    copy: string;
-    icon: string;
-  }>(null);
-
-  const cards = [
-    {
-      title: 'Smart Pouring',
-      copy: 'Precision pumps and sensors craft bar-quality drinks in seconds. LiquorBot uses advanced flow control and real-time feedback to ensure every pour is perfect, every time.',
-      icon: '⚙️',
-    },
-    {
-      title: 'Custom Recipes',
-      copy: 'Design and save your own mixes — complete with a generated drink image. Personalize your cocktail experience and share your creations with friends.',
-      icon: '✨',
-    },
-    {
-      title: 'Anytime, Anywhere',
-      copy: 'Bluetooth for the remote Wedding, Wi-Fi for the bars. LiquorBot just works. Seamless connectivity means you can control your bar from anywhere.',
-      icon: '🔗',
-    },
-    {
-      title: 'Events & Sharing',
-      copy: 'Create events, invite friends, and share your favorite drink recipes effortlessly. LiquorBot makes every gathering memorable and interactive.',
-      icon: '🎉',
-    },
-  ];
-
-  return (
-    <section id="features" className="lb-features">
-      <div className="lb-container">
-        <div className="section-header">
-          <h2>Powerful Features</h2>
-          <p className="subtitle">Everything you need for the perfect cocktail experience</p>
-        </div>
-        <div className="feature-grid">
-          {cards.map((card) => (
-            <div
-              key={card.title}
-              className="card"
-              style={{ cursor: 'pointer' }}
-              onClick={() => setSelectedFeature(card)}
-            >
-              <div className="icon">{card.icon}</div>
-              <h3>{card.title}</h3>
-              <p>{card.copy.split('.')[0] + '.'}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-      {selectedFeature && (
-        <div className="feature-modal-overlay" onClick={() => setSelectedFeature(null)}>
-          <div className="feature-modal" onClick={e => e.stopPropagation()}>
-            <button className="close-btn" onClick={() => setSelectedFeature(null)}><FiX size={24} /></button>
-            <div className="feature-modal-icon">{selectedFeature.icon}</div>
-            <h2>{selectedFeature.title}</h2>
-            <p>{selectedFeature.copy}</p>
-          </div>
-        </div>
-      )}
-    </section>
-  );
-};
-
-const AppPreviews: React.FC = () => {
-  const previews = [
-    { id: 1, title: 'Pour Drinks', img: '/assets/pourdrinks.png' },
-    { id: 2, title: 'Plan Events', img: '/assets/planevents.png' },
-    { id: 3, title: 'Custom Drinks', img: '/assets/customdrinks.png' },
-    { id: 4, title: 'Explore Recipes', img: '/assets/explorerecipes.png' },
-  ];
-
-  return (
-    <section id="previews" className="lb-previews">
-      <div className="lb-container">
-        <div className="section-header">
-          <h2>App Previews</h2>
-          <p className="subtitle">Explore the LiquorBot experience</p>
-        </div>
-        
-        <div className="preview-grid">
-          {previews.map(({ id, title, img }) => (
-            <div key={id} className="preview-card">
-              <div className="preview-header">
-                <div className="dots">
-                  <span className="dot red"></span>
-                  <span className="dot yellow"></span>
-                  <span className="dot green"></span>
-                </div>
-                <div className="preview-title">{title}</div>
-              </div>
-              <img 
-                src={img} 
-                alt={`App preview: ${title}`} 
-                className="preview-image"
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-};
-
-const HelpCTA: React.FC = () => (
-  <section id="help" className="lb-help">
-    <div className="lb-container">
-      <div className="help-content">
-        <h2>Need a Hand?</h2>
-        <p>
-          The&nbsp;<strong>LiquorBot Help Center</strong> walks you through setup,
-          troubleshooting and pro-level tips.
-        </p>
-        <a href="/help" className="lb-btn secondary">
-          View Help&nbsp;→
-        </a>
-      </div>
-    </div>
-  </section>
-);
-
-const Footer: React.FC = () => (
-  <footer id="contact" className="lb-footer">
-    <div className="lb-container footer-grid">
-      <div className="footer-brand">
-        <Link className="lb-logo" to="/">
-          <span className="logo-icon">🍸</span>
-          <span>LiquorBot</span>
-        </Link>
-        <p className="small">
-          © {new Date().getFullYear()} LiquorBot, Inc. All rights reserved.
-        </p>
-      </div>
-      <div className="footer-links">
-        <h4>Links</h4>
-        <ul>
-          <li><Link to="/features">Features</Link></li>
-          <li><Link to="/previews">App Previews</Link></li>
-          <li><Link to="/help">Help</Link></li>
-          <li><a href="mailto:support@liquorbot.io">Support</a></li>
-          <li><Link to="/privacy">Privacy Policy</Link></li>
-        </ul>
-      </div>
-      <div className="footer-social">
-        <h4>Follow</h4>
-        <ul>
-          <li><a href="https://tiktok.com/@liquorbot" target="_blank" rel="noopener noreferrer">TikTok</a></li>
-          <li><a href="https://instagram.com/liquorbot" target="_blank" rel="noopener noreferrer">Instagram</a></li>
-          <li><a href="https://youtube.com/@liquorbot" target="_blank" rel="noopener noreferrer">YouTube</a></li>
-        </ul>
-      </div>
-    </div>
-  </footer>
-);
-
-/* -------------------------------------------------------------------------- */
 /*                                  APP ROOT                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -424,6 +118,74 @@ const App: React.FC = () => {
     ),
   };
 
+  const SiteHeader: React.FC<{ 
+    onShowAuth: () => void; 
+    user: any; 
+    signOut: () => void;
+  }> = ({ onShowAuth, user, signOut }) => {
+    const location = useLocation();
+    return (
+      <header className="lb-header">
+        <div className="lb-container">
+          <Link className="lb-logo" to="/">
+            <span className="logo-icon">🍸</span>
+            <span>LiquorBot</span>
+          </Link>
+          <nav>
+            <Link to="/downloads" className={location.pathname === '/downloads' ? 'active' : ''}>Downloads</Link>
+            <Link to="/events" className={location.pathname === '/events' ? 'active' : ''}>Events</Link>
+            <Link to="/drinks" className={location.pathname === '/drinks' ? 'active' : ''}>Drinks</Link>
+            <Link to="/help" className={location.pathname === '/help' ? 'active' : ''}>Help</Link>
+            <Link to="/contact" className={location.pathname === '/contact' ? 'active' : ''}>Contact</Link>
+          </nav>
+          {user ? (
+            <button className="lb-btn" onClick={signOut}>
+              Sign&nbsp;Out
+            </button>
+          ) : (
+            <button className="lb-btn" onClick={onShowAuth}>
+              Sign&nbsp;In
+            </button>
+          )}
+        </div>
+      </header>
+    );
+  };
+
+  const Footer: React.FC = () => (
+    <footer id="contact" className="lb-footer">
+      <div className="lb-container footer-grid">
+        <div className="footer-brand">
+          <Link className="lb-logo" to="/">
+            <span className="logo-icon">🍸</span>
+            <span>LiquorBot</span>
+          </Link>
+          <p className="small">
+            © {new Date().getFullYear()} LiquorBot, Inc. All rights reserved.
+          </p>
+        </div>
+        <div className="footer-links">
+          <h4>Links</h4>
+          <ul>
+            <li><Link to="/features">Features</Link></li>
+            <li><Link to="/previews">App Previews</Link></li>
+            <li><Link to="/help">Help</Link></li>
+            <li><a href="mailto:support@liquorbot.io">Support</a></li>
+            <li><Link to="/privacy">Privacy Policy</Link></li>
+          </ul>
+        </div>
+        <div className="footer-social">
+          <h4>Follow</h4>
+          <ul>
+            <li><a href="https://tiktok.com/@liquorbot" target="_blank" rel="noopener noreferrer">TikTok</a></li>
+            <li><a href="https://instagram.com/liquorbot" target="_blank" rel="noopener noreferrer">Instagram</a></li>
+            <li><a href="https://youtube.com/@liquorbot" target="_blank" rel="noopener noreferrer">YouTube</a></li>
+          </ul>
+        </div>
+      </div>
+    </footer>
+  );
+
   return (
     <ThemeProvider theme={liquorTheme}>
       <SiteHeader 
@@ -432,19 +194,13 @@ const App: React.FC = () => {
         signOut={signOut}
       />
       <Routes>
-        <Route path="/" element={
-          <main>
-            <Hero />
-            <Features />
-            <AppPreviews />
-            <HelpCTA />
-          </main>
-        } />
+        <Route path="/" element={<HomePage />} />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
-        <Route path="/features" element={<Features />} />
-        <Route path="/previews" element={<AppPreviews />} />
-        <Route path="/help" element={<HelpCTA />} />
+        <Route path="/downloads" element={<DownloadPage />} />
+        <Route path="/drinks" element={<div style={{padding:'4rem',textAlign:'center'}}><h1>Drinks</h1><p>Explore and discover cocktail recipes for your LiquorBot.</p></div>} />
+        <Route path="/help" element={<HelpPage />} />
+        <Route path="/contact" element={<ContactPage />} />
         {/* Add more routes as needed */}
       </Routes>
       <Footer />
@@ -481,3 +237,18 @@ const App: React.FC = () => {
 };
 
 export default App;
+
+// Components for lazy-loaded sections
+export const RotatingImage: React.FC = () => <div className="rotating-image" />;
+export const Hero: React.FC = () => <section className="hero-inner">
+  {/* TODO: Implement Hero section content */}
+</section>;
+export const Features: React.FC = () => <section className="features-section">
+  {/* TODO: Implement Features section content */}
+</section>;
+export const AppPreviews: React.FC = () => <section className="previews-section">
+  {/* TODO: Implement App Previews section content */}
+</section>;
+export const HelpCTA: React.FC = () => <section className="help-cta-section">
+  {/* TODO: Implement Help CTA content */}
+</section>;
