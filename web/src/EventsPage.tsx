@@ -1,13 +1,25 @@
 // File: src/EventsPage.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { generateClient } from 'aws-amplify/api';
-import { listEvents, getEvent } from './graphql/queries';
+import { listEvents, getEvent, getCustomRecipe } from './graphql/queries';
 import { deleteEvent, joinEvent, createEvent, updateEvent, leaveEvent } from './graphql/mutations';
 import { fetchAuthSession } from '@aws-amplify/auth';
+import { getUrl } from 'aws-amplify/storage';
 import './EventsPage.css';
-import { FiEdit2, FiTrash2, FiLogOut } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiLogOut, FiPlus, FiX } from 'react-icons/fi';
 
 const client = generateClient();
+
+interface Drink {
+  id: number;
+  name: string;
+  category: string;
+}
+
+interface CustomRecipe {
+  id: string;
+  name: string;
+}
 
 interface Event {
   id: string;
@@ -17,9 +29,11 @@ interface Event {
   startTime: string;
   endTime: string;
   inviteCode: string;
-  owner: string; // add owner field
+  owner: string;
   guestOwners?: string[];
   liquorbotId: number;
+  drinkIDs?: number[];
+  customRecipeIDs?: string[];
 }
 
 const EventsPage: React.FC = () => {
@@ -37,14 +51,27 @@ const EventsPage: React.FC = () => {
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [eventToLeave, setEventToLeave] = useState<string | null>(null);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const [standardDrinks, setStandardDrinks] = useState<Drink[]>([]);
+  const [customRecipes, setCustomRecipes] = useState<Record<string, CustomRecipe>>({});
+  const [copiedEventId, setCopiedEventId] = useState<string | null>(null);
+  const [copiedLinkEventId, setCopiedLinkEventId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showDrinkPicker, setShowDrinkPicker] = useState(false);
+  const [drinkSearch, setDrinkSearch] = useState('');
+  const [drinkCategory, setDrinkCategory] = useState('All');
   
-  // Form states for create/edit
+  // Form states
   const [eventName, setEventName] = useState('');
   const [eventDescription, setEventDescription] = useState('');
   const [eventLocation, setEventLocation] = useState('');
   const [eventStartTime, setEventStartTime] = useState('');
   const [eventEndTime, setEventEndTime] = useState('');
   const [eventDeviceId, setEventDeviceId] = useState('');
+  const [selectedDrinkIds, setSelectedDrinkIds] = useState<number[]>([]);
+  const [selectedCustomIds, setSelectedCustomIds] = useState<string[]>([]);
+
+  const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey', 'Gin', 'Brandy', 'Liqueur', 'Custom'];
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -54,6 +81,9 @@ const EventsPage: React.FC = () => {
           ? session.tokens?.idToken?.payload['cognito:username'] 
           : null;
         setCurrentUser(username);
+        
+        const groups = session.tokens?.idToken?.payload['cognito:groups'] as string[] | undefined;
+        setIsAdmin(groups?.includes('ADMIN') || false);
       } catch (error) {
         console.error('Error fetching user:', error);
       }
@@ -63,36 +93,93 @@ const EventsPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const fetchEvents = async () => {
-      if (!currentUser) {
-        setLoading(false);
-        return;
-      }
-      
+    const fetchStandardDrinks = async () => {
       try {
-        const { data } = await client.graphql({
-          query: listEvents,
-          authMode: 'userPool'
-        });
-        
-        setEvents(
-          (data.listEvents.items || []).map((item: any) => ({
-            ...item,
-            description: item.description ?? undefined,
-            location: item.location ?? undefined,
-            liquorbotId: item.liquorbotId,
-            guestOwners: Array.isArray(item.guestOwners) ? item.guestOwners.filter((g: any) => typeof g === 'string') : [],
-          }))
-        );
+        const url = await getUrl({ key: 'drinkMenu/drinks.json' });
+        const response = await fetch(url.url);
+        const data = await response.json();
+        setStandardDrinks(data);
       } catch (error) {
-        console.error('Error fetching events:', error);
-      } finally {
-        setLoading(false);
+        console.error('Error fetching standard drinks:', error);
       }
     };
 
-    fetchEvents();
+    fetchStandardDrinks();
+  }, []);
+
+  const fetchEvents = useCallback(async () => {
+    if (!currentUser) {
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      const { data } = await client.graphql({
+        query: listEvents,
+        authMode: 'userPool'
+      });
+      
+      setEvents(
+        (data.listEvents.items || []).map((item: any) => ({
+          ...item,
+          description: item.description ?? undefined,
+          location: item.location ?? undefined,
+          liquorbotId: item.liquorbotId,
+          guestOwners: Array.isArray(item.guestOwners) ? item.guestOwners.filter((g: any) => typeof g === 'string') : [],
+          drinkIDs: item.drinkIDs || [],
+          customRecipeIDs: item.customRecipeIDs || [],
+        }))
+      );
+    } catch (error) {
+      console.error('Error fetching events:', error);
+    } finally {
+      setLoading(false);
+    }
   }, [currentUser]);
+
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
+
+  const fetchCustomRecipes = useCallback(async (ids: string[]) => {
+    const newRecipes: Record<string, CustomRecipe> = {};
+    
+    for (const id of ids) {
+      if (!customRecipes[id]) {
+        try {
+          const { data } = await client.graphql({
+            query: getCustomRecipe,
+            variables: { id },
+            authMode: 'apiKey'
+          });
+          
+          if (data?.getCustomRecipe) {
+            newRecipes[id] = {
+              id: data.getCustomRecipe.id,
+              name: data.getCustomRecipe.name
+            };
+          }
+        } catch (error) {
+          console.error(`Error fetching custom recipe ${id}:`, error);
+          newRecipes[id] = { id, name: `Custom Drink (${id.slice(0, 6)})` };
+        }
+      }
+    }
+    
+    setCustomRecipes(prev => ({ ...prev, ...newRecipes }));
+  }, [customRecipes]);
+
+  useEffect(() => {
+    if (expandedEventId) {
+      const event = events.find(e => e.id === expandedEventId);
+      if (event?.customRecipeIDs?.length) {
+        const missingIds = event.customRecipeIDs.filter(id => !customRecipes[id]);
+        if (missingIds.length > 0) {
+          fetchCustomRecipes(missingIds);
+        }
+      }
+    }
+  }, [expandedEventId, events, customRecipes, fetchCustomRecipes]);
 
   const handleJoinEvent = async () => {
     if (!inviteCode.trim()) return;
@@ -104,15 +191,7 @@ const EventsPage: React.FC = () => {
         authMode: 'userPool'
       });
       
-      // Refresh events after joining
-      const { data } = await client.graphql({ query: listEvents });
-      setEvents(
-        (data.listEvents.items || []).map((item: any) => ({
-          ...item,
-          description: item.description ?? undefined,
-          location: item.location ?? undefined,
-        }))
-      );
+      fetchEvents();
       setShowJoinModal(false);
       setInviteCode('');
     } catch (error) {
@@ -162,6 +241,8 @@ const EventsPage: React.FC = () => {
             description: eventRaw.description ?? undefined,
             location: eventRaw.location ?? undefined,
             guestOwners: Array.isArray(eventRaw.guestOwners) ? eventRaw.guestOwners.filter((g: any) => typeof g === 'string') : [],
+            drinkIDs: Array.isArray(eventRaw.drinkIDs) ? eventRaw.drinkIDs.filter((id: any): id is number => typeof id === 'number') : [],
+            customRecipeIDs: Array.isArray(eventRaw.customRecipeIDs) ? eventRaw.customRecipeIDs.filter((id: any): id is string => typeof id === 'string') : [],
           }
         : null;
       setCurrentEvent(event);
@@ -172,6 +253,8 @@ const EventsPage: React.FC = () => {
         setEventStartTime(event.startTime.substring(0, 16));
         setEventEndTime(event.endTime.substring(0, 16));
         setEventDeviceId(event.liquorbotId.toString());
+        setSelectedDrinkIds(event.drinkIDs || []);
+        setSelectedCustomIds(event.customRecipeIDs || []);
         setShowEditModal(true);
       }
     } catch (error) {
@@ -193,21 +276,15 @@ const EventsPage: React.FC = () => {
             endTime: new Date(eventEndTime).toISOString(),
             liquorbotId: parseInt(eventDeviceId, 10),
             inviteCode: Math.random().toString(36).substring(2, 10).toUpperCase(),
-            owner: currentUser || '' // Use the current user's username
+            owner: currentUser || '',
+            drinkIDs: selectedDrinkIds,
+            customRecipeIDs: selectedCustomIds
           }
         },
         authMode: 'userPool'
       });
       
-      // Refresh events
-      const { data } = await client.graphql({ query: listEvents });
-      setEvents(
-        (data.listEvents.items || []).map((item: any) => ({
-          ...item,
-          description: item.description ?? undefined,
-          location: item.location ?? undefined,
-        }))
-      );
+      fetchEvents();
       setShowCreateModal(false);
       resetEventForm();
     } catch (error) {
@@ -230,27 +307,14 @@ const EventsPage: React.FC = () => {
             startTime: new Date(eventStartTime).toISOString(),
             endTime: new Date(eventEndTime).toISOString(),
             liquorbotId: parseInt(eventDeviceId, 10),
+            drinkIDs: selectedDrinkIds,
+            customRecipeIDs: selectedCustomIds
           }
         },
         authMode: 'userPool'
       });
 
-      // Update local state for immediate UI update
-      setEvents(prevEvents =>
-        prevEvents.map(evt =>
-          evt.id === currentEvent.id
-            ? {
-                ...evt,
-                name: eventName,
-                description: eventDescription || undefined,
-                location: eventLocation || undefined,
-                startTime: new Date(eventStartTime).toISOString(),
-                endTime: new Date(eventEndTime).toISOString()
-              }
-            : evt
-        )
-      );
-
+      fetchEvents();
       resetEventForm();
     } catch (error) {
       console.error('Error updating event:', error);
@@ -299,6 +363,8 @@ const EventsPage: React.FC = () => {
     setEventStartTime('');
     setEventEndTime('');
     setEventDeviceId('');
+    setSelectedDrinkIds([]);
+    setSelectedCustomIds([]);
   };
 
   const formatDate = (dateString: string) => {
@@ -308,6 +374,71 @@ const EventsPage: React.FC = () => {
       day: 'numeric',
       year: 'numeric'
     });
+  };
+
+  const toggleExpand = (id: string) => {
+    if (expandedEventId === id) {
+      setExpandedEventId(null);
+    } else {
+      setExpandedEventId(id);
+    }
+  };
+
+  // Copy for invite code
+  const copyInviteCodeToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedEventId(id);
+    setTimeout(() => setCopiedEventId(null), 2000);
+  };
+
+  // Copy for event link
+  const copyLinkToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedLinkEventId(id);
+    setTimeout(() => setCopiedLinkEventId(null), 2000);
+  };
+
+  const filteredDrinks = () => {
+    let drinks = [...standardDrinks];
+    
+    if (drinkCategory !== 'All' && drinkCategory !== 'Custom') {
+      drinks = drinks.filter(d => d.category === drinkCategory);
+    }
+    
+    if (drinkSearch) {
+      const query = drinkSearch.toLowerCase();
+      drinks = drinks.filter(d => 
+        d.name.toLowerCase().includes(query) || 
+        d.category.toLowerCase().includes(query)
+      );
+    }
+    
+    return drinks;
+  };
+
+  const addDrinkToEvent = (id: number) => {
+    setSelectedDrinkIds(prev => [...prev, id]);
+  };
+
+  const addCustomToEvent = (id: string) => {
+    setSelectedCustomIds(prev => [...prev, id]);
+  };
+
+  const removeDrink = (id: number) => {
+    setSelectedDrinkIds(prev => prev.filter(d => d !== id));
+  };
+
+  const removeCustom = (id: string) => {
+    setSelectedCustomIds(prev => prev.filter(c => c !== id));
+  };
+
+  const getDrinkName = (id: number) => {
+    const drink = standardDrinks.find(d => d.id === id);
+    return drink ? drink.name : `Drink #${id}`;
+  };
+
+  const getCustomName = (id: string) => {
+    return customRecipes[id]?.name || `Custom Recipe #${id.slice(0, 6)}`;
   };
 
   if (loading) {
@@ -332,7 +463,6 @@ const EventsPage: React.FC = () => {
         <button
           className="lb-btn"
           onClick={() => {
-            // Try to trigger the sign-in modal from the parent App
             if (window && typeof window.dispatchEvent === 'function') {
               window.dispatchEvent(new CustomEvent('show-signin-modal'));
             }
@@ -376,17 +506,30 @@ const EventsPage: React.FC = () => {
       ) : events.length > 0 ? (
         <div className="events-grid">
           {events.map(event => (
-            <div key={event.id} className="event-card">
-              <div className="event-card-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
-                <h3 className="event-name" style={{marginBottom: 0}}>{event.name}</h3>
-                <div className="event-card-actions" style={{display: 'flex', gap: 8}}>
+            <div
+              key={event.id}
+              className={expandedEventId === event.id ? 'event-card expanded' : 'event-card'}
+            >
+              <div
+                className="event-card-header"
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}
+                onClick={() => toggleExpand(event.id)}
+              >
+                <div>
+                  <h3 className="event-name" style={{ marginBottom: 0 }}>{event.name}</h3>
+                  <div className="event-meta">
+                    <span>{formatDate(event.startTime)}</span>
+                    {event.location && <span> • {event.location}</span>}
+                  </div>
+                </div>
+                <div className="event-card-actions" style={{ display: 'flex', gap: 8 }} onClick={e => e.stopPropagation()}>
                   {event.owner === currentUser ? (
                     <>
                       <button
                         className="icon-btn"
                         title="Edit Event"
                         onClick={() => openEditModal(event.id)}
-                        style={{background: 'none', border: 'none', color: '#ce975e', cursor: 'pointer', padding: 4, borderRadius: 4}}
+                        style={{ background: 'none', border: 'none', color: '#ce975e', cursor: 'pointer', padding: 4, borderRadius: 4 }}
                       >
                         <FiEdit2 size={20} />
                       </button>
@@ -394,7 +537,7 @@ const EventsPage: React.FC = () => {
                         className="icon-btn"
                         title="Delete Event"
                         onClick={() => handleDeleteEvent(event.id)}
-                        style={{background: 'none', border: 'none', color: '#d9534f', cursor: 'pointer', padding: 4, borderRadius: 4}}
+                        style={{ background: 'none', border: 'none', color: '#d9534f', cursor: 'pointer', padding: 4, borderRadius: 4 }}
                       >
                         <FiTrash2 size={20} />
                       </button>
@@ -404,7 +547,7 @@ const EventsPage: React.FC = () => {
                       className="icon-btn"
                       title="Leave Event"
                       onClick={() => handleLeaveEvent(event.id)}
-                      style={{background: 'none', border: 'none', color: '#d9534f', cursor: 'pointer', padding: 4, borderRadius: 4}}
+                      style={{ background: 'none', border: 'none', color: '#d9534f', cursor: 'pointer', padding: 4, borderRadius: 4 }}
                       disabled={isLeaving && eventToLeave === event.id}
                     >
                       {isLeaving && eventToLeave === event.id ? <span className="spinner-btn"></span> : <FiLogOut size={20} />}
@@ -412,23 +555,94 @@ const EventsPage: React.FC = () => {
                   )}
                 </div>
               </div>
-              {event.location && (
-                <p className="event-details">
-                  <strong>Location:</strong> {event.location}
-                </p>
+
+              {expandedEventId === event.id && (
+                <>
+                  <div className="event-expanded-content">
+                    {event.description && (
+                      <p className="event-description">{event.description}</p>
+                    )}
+
+                    <div className="drink-menu-section">
+                      <h4>Drink Menu</h4>
+                      {event.drinkIDs && event.drinkIDs.length > 0 && (
+                        <div className="drink-list">
+                          <h5>Standard Drinks</h5>
+                          <ul>
+                            {event.drinkIDs.map(id => (
+                              <li key={`std-${id}`}>{getDrinkName(id)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {event.customRecipeIDs && event.customRecipeIDs.length > 0 && (
+                        <div className="drink-list">
+                          <h5>Custom Recipes</h5>
+                          <ul>
+                            {event.customRecipeIDs.map(id => (
+                              <li key={`cus-${id}`}>{getCustomName(id)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {(event.drinkIDs?.length || 0) + (event.customRecipeIDs?.length || 0) === 0 && (
+                        <p>No drinks added to this event yet</p>
+                      )}
+                    </div>
+
+                    <div className="event-link-section">
+                      <h4>Event Link</h4>
+                      <div className="invite-link">
+                        <span>https://yourapp.com/join/{event.inviteCode}</span>
+                        <button
+                          className="copy-btn"
+                          onClick={() => copyLinkToClipboard(`https://yourapp.com/join/${event.inviteCode}`, event.id)}
+                        >
+                          {copiedLinkEventId === event.id ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {isAdmin && (
+                      <div className="device-info">
+                        <h4>Device ID</h4>
+                        <p>{event.liquorbotId}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="event-footer" onClick={e => e.stopPropagation()}>
+                    <div className="invite-code">
+                      <span>Code: {event.inviteCode}</span>
+                      <button
+                        className="copy-btn small"
+                        onClick={() => copyInviteCodeToClipboard(event.inviteCode, event.id)}
+                      >
+                        {copiedEventId === event.id ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                    <div className="drink-count">
+                      {(event.drinkIDs?.length || 0) + (event.customRecipeIDs?.length || 0)} drinks
+                    </div>
+                  </div>
+                </>
               )}
-              <p className="event-details">
-                <strong>Starts:</strong> {formatDate(event.startTime)}
-              </p>
-              <p className="event-details">
-                <strong>Ends:</strong> {formatDate(event.endTime)}
-              </p>
-              {event.description && (
-                <p className="event-details">{event.description}</p>
+              {expandedEventId !== event.id && (
+                <div className="event-footer" onClick={e => e.stopPropagation()}>
+                  <div className="invite-code">
+                    <span>Code: {event.inviteCode}</span>
+                    <button
+                      className="copy-btn small"
+                      onClick={() => copyInviteCodeToClipboard(event.inviteCode, event.id)}
+                    >
+                      {copiedEventId === event.id ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <div className="drink-count">
+                    {(event.drinkIDs?.length || 0) + (event.customRecipeIDs?.length || 0)} drinks
+                  </div>
+                </div>
               )}
-              <p className="event-details">
-                <strong>Invite Code:</strong> {event.inviteCode}
-              </p>
             </div>
           ))}
         </div>
@@ -552,6 +766,45 @@ const EventsPage: React.FC = () => {
                   />
                 </div>
               </div>
+              
+              <div className="form-group">
+                <label>Drink Menu</label>
+                <div className="drink-selection">
+                  <button 
+                    type="button" 
+                    className="lb-btn secondary"
+                    onClick={() => setShowDrinkPicker(true)}
+                  >
+                    <FiPlus /> Add Drinks
+                  </button>
+                  
+                  <div className="selected-drinks">
+                    <h4>Selected Drinks</h4>
+                    {selectedDrinkIds.length === 0 && selectedCustomIds.length === 0 ? (
+                      <p>No drinks selected</p>
+                    ) : (
+                      <div className="drink-tags">
+                        {selectedDrinkIds.map(id => (
+                          <span key={`sel-std-${id}`} className="drink-tag">
+                            {getDrinkName(id)}
+                            <button onClick={() => removeDrink(id)} className="remove-tag">
+                              <FiX />
+                            </button>
+                          </span>
+                        ))}
+                        {selectedCustomIds.map(id => (
+                          <span key={`sel-cus-${id}`} className="drink-tag">
+                            {getCustomName(id)}
+                            <button onClick={() => removeCustom(id)} className="remove-tag">
+                              <FiX />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="modal-footer">
               <button 
@@ -647,6 +900,44 @@ const EventsPage: React.FC = () => {
                 </div>
               </div>
               <div className="form-group">
+                <label>Drink Menu</label>
+                <div className="drink-selection">
+                  <button 
+                    type="button" 
+                    className="lb-btn secondary"
+                    onClick={() => setShowDrinkPicker(true)}
+                  >
+                    <FiPlus /> Add Drinks
+                  </button>
+                  
+                  <div className="selected-drinks">
+                    <h4>Selected Drinks</h4>
+                    {selectedDrinkIds.length === 0 && selectedCustomIds.length === 0 ? (
+                      <p>No drinks selected</p>
+                    ) : (
+                      <div className="drink-tags">
+                        {selectedDrinkIds.map(id => (
+                          <span key={`sel-std-${id}`} className="drink-tag">
+                            {getDrinkName(id)}
+                            <button onClick={() => removeDrink(id)} className="remove-tag">
+                              <FiX />
+                            </button>
+                          </span>
+                        ))}
+                        {selectedCustomIds.map(id => (
+                          <span key={`sel-cus-${id}`} className="drink-tag">
+                            {getCustomName(id)}
+                            <button onClick={() => removeCustom(id)} className="remove-tag">
+                              <FiX />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="form-group">
                 <label>Invite Code</label>
                 <input
                   type="text"
@@ -669,6 +960,109 @@ const EventsPage: React.FC = () => {
                 disabled={isUpdating}
               >
                 {isUpdating ? (<><span className="spinner-btn"></span>Updating...</>) : 'Update Event'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Drink Picker Modal */}
+      {showDrinkPicker && (
+        <div className="events-modal">
+          <div className="modal-content" style={{ maxWidth: '800px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Select Drinks</h3>
+              <span 
+                className="modal-close" 
+                onClick={() => setShowDrinkPicker(false)}
+              >
+                &times;
+              </span>
+            </div>
+            <div className="modal-body">
+              <div className="drink-picker">
+                <div className="drink-filter">
+                  <input
+                    type="text"
+                    className="modal-input"
+                    placeholder="Search drinks..."
+                    value={drinkSearch}
+                    onChange={(e) => setDrinkSearch(e.target.value)}
+                  />
+                  <select
+                    value={drinkCategory}
+                    onChange={(e) => setDrinkCategory(e.target.value)}
+                    className="category-select"
+                  >
+                    {categories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="drink-list-container">
+                  <h4>Standard Drinks</h4>
+                  <div className="drink-grid">
+                    {filteredDrinks().map(drink => (
+                      <div 
+                        key={drink.id} 
+                        className={`drink-item ${selectedDrinkIds.includes(drink.id) ? 'selected' : ''}`}
+                        onClick={() => {
+                          if (selectedDrinkIds.includes(drink.id)) {
+                            removeDrink(drink.id);
+                          } else {
+                            addDrinkToEvent(drink.id);
+                          }
+                        }}
+                      >
+                        <div className="drink-info">
+                          <div className="drink-name">{drink.name}</div>
+                          <div className="drink-category">{drink.category}</div>
+                        </div>
+                        <div className="drink-action">
+                          {selectedDrinkIds.includes(drink.id) ? '✓' : '+'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <h4>Custom Recipes</h4>
+                  {Object.keys(customRecipes).length > 0 ? (
+                    <div className="drink-grid">
+                      {Object.values(customRecipes).map(recipe => (
+                        <div 
+                          key={recipe.id} 
+                          className={`drink-item ${selectedCustomIds.includes(recipe.id) ? 'selected' : ''}`}
+                          onClick={() => {
+                            if (selectedCustomIds.includes(recipe.id)) {
+                              removeCustom(recipe.id);
+                            } else {
+                              addCustomToEvent(recipe.id);
+                            }
+                          }}
+                        >
+                          <div className="drink-info">
+                            <div className="drink-name">{recipe.name}</div>
+                            <div className="drink-category">Custom</div>
+                          </div>
+                          <div className="drink-action">
+                            {selectedCustomIds.includes(recipe.id) ? '✓' : '+'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p>No custom recipes available</p>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button 
+                className="lb-btn"
+                onClick={() => setShowDrinkPicker(false)}
+              >
+                Done
               </button>
             </div>
           </div>
