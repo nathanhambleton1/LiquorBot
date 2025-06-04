@@ -7,7 +7,16 @@ import {
 } from '@aws-amplify/ui-react';
 import '@aws-amplify/ui-react/styles.css';
 import './App.css';
-import { FiX, FiUser, FiLogOut, FiSettings, FiEdit } from 'react-icons/fi';
+import { 
+  FiX, 
+  FiUser, 
+  FiLogOut, 
+  FiSettings, 
+  FiEdit,
+  FiAlertTriangle,
+  FiAlertCircle,
+  FiChevronDown 
+} from 'react-icons/fi';
 import { Hub } from '@aws-amplify/core';
 import { getCurrentUser, signOut, fetchUserAttributes } from 'aws-amplify/auth';
 import EventsPage from './pages/EventsPage';
@@ -74,6 +83,7 @@ const App: React.FC = () => {
   const [showAuth, setShowAuth] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
 
   const refreshUserAttributes = async () => {
     try {
@@ -85,10 +95,15 @@ const App: React.FC = () => {
     }
   };
 
-  // Define handleShowEditProfile to refresh user attributes and show the edit profile panel
+  // Only allow one panel at a time
   const handleShowEditProfile = async () => {
     await refreshUserAttributes();
+    setShowSettingsPanel(false);
     setShowEditProfile(true);
+  };
+  const handleShowSettingsPanel = () => {
+    setShowEditProfile(false);
+    setShowSettingsPanel(true);
   };
 
   useEffect(() => {
@@ -142,8 +157,9 @@ const App: React.FC = () => {
     onShowAuth: () => void; 
     user: any; 
     signOut: () => void;
-    onShowEditProfile: () => void; // NEW: prop for edit profile
-  }> = ({ onShowAuth, user, signOut, onShowEditProfile }) => {
+    onShowEditProfile: () => void;
+    onShowSettings: () => void;
+  }> = ({ onShowAuth, user, signOut, onShowEditProfile, onShowSettings }) => {
     const location = useLocation();
     const [showDropdown, setShowDropdown] = React.useState(false);
     const avatarRef = React.useRef<HTMLDivElement>(null);
@@ -213,11 +229,13 @@ const App: React.FC = () => {
                 {user ? (
                   <>
                     <button className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
-                      onClick={() => { setShowDropdown(false); onShowEditProfile(); }} // Open edit profile
+                      onClick={() => { setShowDropdown(false); onShowEditProfile(); }} 
                     >
                       <FiEdit /> Edit Profile
                     </button>
-                    <button className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                    <button className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+                      onClick={() => { setShowDropdown(false); onShowSettings(); }}
+                    >
                       <FiSettings /> Settings
                     </button>
                     <button className="profile-dropdown-item" onClick={signOut} style={{ background: 'none', border: 'none', color: '#d9534f', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
@@ -276,6 +294,7 @@ const App: React.FC = () => {
         user={user}
         signOut={signOut}
         onShowEditProfile={handleShowEditProfile}
+        onShowSettings={handleShowSettingsPanel}
       />
       <Routes>
         <Route path="/" element={<HomePage />} />
@@ -291,6 +310,9 @@ const App: React.FC = () => {
       {/* Edit Profile Panel */}
       {showEditProfile && (
         <EditProfilePanel onClose={() => setShowEditProfile(false)} user={user} />
+      )}
+      {showSettingsPanel && (
+        <SettingsPanel onClose={() => setShowSettingsPanel(false)} />
       )}
       {showAuth && (
         <div className="auth-modal">
@@ -453,6 +475,120 @@ const EditProfilePanel: React.FC<{ onClose: () => void; user: any }> = ({ onClos
         .counter { position: absolute; right: 10px; bottom: -18px; color: #4F4F4F; font-size: 12px; }
         .save-btn { background: #CE975E; padding: 12px 25px; border-radius: 10px; margin-right: 10px; color: #DFDCD9; font-size: 16px; font-weight: 600; border: none; }
         .cancel-btn { background: #444; padding: 12px 25px; border-radius: 10px; color: #DFDCD9; fontSize: 16px; fontWeight: 600; border: none; }
+      `}</style>
+    </div>
+  );
+};
+
+const SettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  return (
+    <div className="edit-profile-panel-overlay" onClick={onClose}>
+      <div className="edit-profile-panel" onClick={e => e.stopPropagation()}>
+        <button className="close-btn" onClick={onClose} style={{ position: 'absolute', top: 16, right: 16 }}>
+          <FiX size={24} />
+        </button>
+        <h2>Settings</h2>
+        {/* Sign Out Button */}
+        <div style={{ marginBottom: 24 }}>
+          <button 
+            className="signout-btn"
+            style={{ width: '100%', fontSize: 15, padding: '8px 0', borderRadius: 8, background: '#444', color: '#DFDCD9', border: 'none', fontWeight: 500, marginBottom: 8 }}
+            onClick={() => { signOut(); onClose(); }}
+          >
+            <FiLogOut style={{ marginRight: 8, verticalAlign: 'middle' }} /> Sign Out
+          </button>
+        </div>
+        {/* Danger Zone */}
+        <div className="danger-zone">
+          <h3 style={{ color: '#e74c3c', fontSize: 17, marginBottom: 10 }}>
+            <FiAlertTriangle style={{ marginRight: 8, fontSize: 20, verticalAlign: 'middle' }} /> 
+            Danger Zone
+          </h3>
+          <div className="danger-option">
+            <button 
+              className="delete-btn"
+              style={{
+                fontSize: 14,
+                padding: '10px 0',
+                borderRadius: 8,
+                background: '#d44a4a',
+                color: '#fff',
+                border: 'none',
+                width: '100%',
+                fontWeight: 500,
+                marginBottom: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                transition: 'background 0.15s',
+                paddingLeft: 18,
+                paddingRight: 10,
+              }}
+              onClick={() => setShowDeleteConfirm(v => !v)}
+            >
+              <span style={{ textAlign: 'left', flex: 1 }}>Delete Account</span>
+              <FiChevronDown style={{ fontSize: 24, marginLeft: 8, paddingRight: 6, transform: showDeleteConfirm ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+            </button>
+            {showDeleteConfirm && (
+              <div className="delete-confirm" style={{ marginTop: 14, background: '#2a1818', borderRadius: 8, padding: '16px 10px 12px 10px', boxShadow: '0 2px 8px #0003' }}>
+                <p className="warning-text" style={{ color: '#e74c3c', fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+                  <FiAlertCircle style={{ marginRight: 10, fontSize: 28, verticalAlign: 'middle' }} />
+                  Warning: This action cannot be undone!
+                </p>
+                <p style={{ fontSize: 13, color: '#fff', marginBottom: 16, textAlign: 'center' }}>All your data will be permanently deleted.</p>
+                <div className="delete-actions" style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                  <button 
+                    className="cancel-btn"
+                    style={{ fontSize: 13, padding: '7px 18px', borderRadius: 7, background: '#444', color: '#DFDCD9', border: 'none', fontWeight: 500 }}
+                    onClick={() => setShowDeleteConfirm(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    className="confirm-delete-btn"
+                    style={{ fontSize: 13, padding: '7px 18px', borderRadius: 7, background: '#d9534f', color: '#fff', border: 'none', fontWeight: 600 }}
+                    onClick={() => {
+                      // Implement actual delete functionality here
+                      console.log("Account deletion initiated");
+                    }}
+                  >
+                    Delete Account
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      <style>{`
+        .edit-profile-panel-overlay {
+          position: fixed;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(0,0,0,0.45);
+          z-index: 2000;
+          display: flex;
+          justify-content: flex-end;
+          align-items: stretch;
+          transition: background 0.2s;
+        }
+        .edit-profile-panel {
+          background: #181818;
+          color: #fff;
+          width: 350px;
+          max-width: 100vw;
+          height: 100%;
+          box-shadow: -4px 0 24px #000a;
+          position: relative;
+          padding: 32px 32px 32px 32px;
+          transform: translateX(0);
+          animation: slideInRight 0.3s cubic-bezier(.4,1.4,.6,1) 1;
+          overflow-y: auto;
+        }
+        @keyframes slideInRight {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
       `}</style>
     </div>
   );
