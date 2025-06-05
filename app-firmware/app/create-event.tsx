@@ -10,7 +10,8 @@ import React, {
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView,
   Modal, FlatList, Platform, ActivityIndicator, Dimensions, Alert,
-  LayoutAnimation, UIManager, KeyboardAvoidingView, Keyboard
+  LayoutAnimation, UIManager,
+  KeyboardAvoidingView, // <-- add this import
 } from 'react-native';
 import Ionicons           from '@expo/vector-icons/Ionicons';
 import * as Clipboard      from 'expo-clipboard';
@@ -264,7 +265,6 @@ export default function EventsScreen(){
   const slotsOK=ingredientSet.size<=15;
   const[showSlots,setShowSlots]=useState(false);
   const [showTimeInfo, setShowTimeInfo] = useState(false);
-  const [descInputFocused, setDescInputFocused] = useState(false);
 
   useEffect(() => {
     setSynced(false)
@@ -705,188 +705,177 @@ export default function EventsScreen(){
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 30} // adjust as needed for your header
     >
-    <View style={styles.container}>
-      {/* close */}
-      <TouchableOpacity 
-        style={styles.closeBtn} 
-        onPress={() => router.back()} // Changed from router.push('/')
-      >
-        <Ionicons name="close" size={28} color="#DFDCD9"/>
-      </TouchableOpacity>
+      <View style={styles.container}>
+        {/* close */}
+        <TouchableOpacity 
+          style={styles.closeBtn} 
+          onPress={() => router.back()} // Changed from router.push('/')
+        >
+          <Ionicons name="close" size={28} color="#DFDCD9"/>
+        </TouchableOpacity>
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#CE975E" />
-        </View>
-      ) : (
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Text style={styles.header}>Create Event</Text>
-          <Field label="Event Name" value={name} onChange={setName} ph="e.g. Emma & Liam Wedding"/>
-          <Field label="Location" value={location} onChange={setLocation} ph="Venue or address"/>
-          <Field 
-            label="Description" 
-            value={description} 
-            onChange={setDesc}
-            ph="Optional notes" 
-            multiline
-            onFocus={() => setDescInputFocused(true)}
-            onBlur={() => setDescInputFocused(false)}
-          />
-          {descInputFocused && (
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#CE975E" />
+          </View>
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.header}>Create Event</Text>
+            <Field label="Event Name" value={name} onChange={setName} ph="e.g. Emma & Liam Wedding"/>
+            <Field label="Location" value={location} onChange={setLocation} ph="Venue or address"/>
+            <Field label="Description" value={description} onChange={setDesc}
+                  ph="Optional notes" multiline/>
+
+            {/* ── MULTI‑DAY TOGGLE ── */}
             <TouchableOpacity
-              style={styles.doneButton}
-              onPress={() => { Keyboard.dismiss(); setDescInputFocused(false); }}
-            >
-              <Text style={styles.doneButtonText}>Done</Text>
+              style={[styles.mdToggle, multiDay && styles.mdToggleOn]}
+              onPress={toggleMultiDay}>
+              <Ionicons name={multiDay?'checkbox':'square-outline'} size={22}
+                        color={multiDay?'#CE975E':'#DFDCD9'} />
+              <Text style={styles.mdToggleTxt}>Multi‑day event</Text>
             </TouchableOpacity>
-          )}
 
-          {/* ── MULTI‑DAY TOGGLE ── */}
-          <TouchableOpacity
-            style={[styles.mdToggle, multiDay && styles.mdToggleOn]}
-            onPress={toggleMultiDay}>
-            <Ionicons name={multiDay?'checkbox':'square-outline'} size={22}
-                      color={multiDay?'#CE975E':'#DFDCD9'} />
-            <Text style={styles.mdToggleTxt}>Multi‑day event</Text>
-          </TouchableOpacity>
-
-          {/* dates */}
-          <View style={styles.timeInfoHeader}>
-            <Text style={[styles.label, { marginTop: 10 }]}>Event Time</Text>
-            <TouchableOpacity 
-              onPress={() => setShowTimeInfo(true)}
-              style={styles.infoButton}
-            >
-              <Ionicons name="information-circle-outline" size={18} color="#4f4f4f" />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.dateRow}>
-            <InputDate val={startDate} set={setSD}/>
-            {multiDay&&<InputDate val={endDate} set={setED} />}
-          </View>
-
-          {/* times */}
-          <View style={styles.timeRow}>
-            <TimeBox ref={startRef} tag="START"
-                    label={to12(startTime)} onPress={()=>showWheel('start',startRef)}/>
-            <TimeBox ref={endRef} tag="END"
-                    label={to12(endTime)}   onPress={()=>showWheel('end',endRef)}/>
-          </View>
-
-          {/* drinks */}
-          <View style={styles.menuHead}>
-            <Text style={styles.section}>Drinks Menu</Text>
-            <TouchableOpacity onPress={()=>setPV(true)}>
-              <Ionicons name="add-circle" size={24} color="#CE975E"/>
-            </TouchableOpacity>
-          </View>
-          {menu.map(d=>(
-            <View key={d.id} style={styles.drinkRow}>
-              <Text style={styles.drinkTxt}>{d.name}</Text>
-              <TouchableOpacity onPress={() => removeDrink(d.id)}>
-                <Ionicons name="trash" size={20} color="#D9534F"/>
+            {/* dates */}
+            <View style={styles.timeInfoHeader}>
+              <Text style={[styles.label, { marginTop: 10 }]}>Event Time</Text>
+              <TouchableOpacity 
+                onPress={() => setShowTimeInfo(true)}
+                style={styles.infoButton}
+              >
+                <Ionicons name="information-circle-outline" size={18} color="#4f4f4f" />
               </TouchableOpacity>
             </View>
-          ))}
-
-          {/* slot summary */}
-          <TouchableOpacity onPress={()=>{LayoutAnimation.easeInEaseOut();
-            setShowSlots(!showSlots);}}>
-            <Text style={[styles.slots, !slotsOK && { color: '#D9534F' }]}>
-              {fmtSlots()}
-              {menu.length > 0 && (
-                <Ionicons
-                  name={showSlots ? 'chevron-up' : 'chevron-down'}
-                  size={14}
-                  color="#DFDCD9"
-                  style={{ marginLeft: 0, marginTop: 0 }}
-                />
-              )}
-            </Text>
-          </TouchableOpacity>
-          {showSlots&&(
-            <View style={styles.slotBox}>
-              {[...ingredientSet].sort((a,b)=>a-b).map((id,i)=>{
-                const ing=ingredients.find(x=>x.id===id);
-                return(<Text key={id} style={styles.slotLine}>
-                  Slot {i+1}: {ing?.name||'unknown'}</Text>);
-              })}
+            <View style={styles.dateRow}>
+              <InputDate val={startDate} set={setSD}/>
+              {multiDay&&<InputDate val={endDate} set={setED} />}
             </View>
-          )}
 
-          {/* save */}
-          <TouchableOpacity
-            style={[
-              styles.saveBtn,
-              (!slotsOK || !name.trim() || menu.length === 0 || isDateInPast(startDate) || (multiDay && isDateInPast(endDate))) && { opacity: 0.4 },
-            ]}
-            disabled={!slotsOK || !name.trim() || menu.length === 0 || isDateInPast(startDate) || (multiDay && isDateInPast(endDate))}
-            onPress={save}
-          >
-            <Text style={styles.saveTxt}>Save Event</Text>
-          </TouchableOpacity>
-          <Text style={styles.deviceIdText}>
-            This event will be hosted on LiquorBot: {liquorbotId}
-          </Text>
-        </ScrollView>
-      )}
+            {/* times */}
+            <View style={styles.timeRow}>
+              <TimeBox ref={startRef} tag="START"
+                      label={to12(startTime)} onPress={()=>showWheel('start',startRef)}/>
+              <TimeBox ref={endRef} tag="END"
+                      label={to12(endTime)}   onPress={()=>showWheel('end',endRef)}/>
+            </View>
 
-      {/* drink‑picker modal */}
-      <Modal visible={pickerVis} animationType="slide"
-        onRequestClose={()=>setPV(false)}
-        presentationStyle={Platform.OS==='ios'?'pageSheet':'fullScreen'}>
-        <PickerModal {...{cat,setCat,q,setQ,filtered,loading,addDrink,close:()=>setPV(false)}}/>
-      </Modal>
-      
-      {/* time‑info modal */}
-      <Modal
-        transparent
-        visible={showTimeInfo}
-        onRequestClose={() => setShowTimeInfo(false)}
-      >
-        <TouchableOpacity 
-          style={styles.infoBackdrop}
-          activeOpacity={1}
-          onPress={() => setShowTimeInfo(false)}
+            {/* drinks */}
+            <View style={styles.menuHead}>
+              <Text style={styles.section}>Drinks Menu</Text>
+              <TouchableOpacity onPress={()=>setPV(true)}>
+                <Ionicons name="add-circle" size={24} color="#CE975E"/>
+              </TouchableOpacity>
+            </View>
+            {menu.map(d=>(
+              <View key={d.id} style={styles.drinkRow}>
+                <Text style={styles.drinkTxt}>{d.name}</Text>
+                <TouchableOpacity onPress={() => removeDrink(d.id)}>
+                  <Ionicons name="trash" size={20} color="#D9534F"/>
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            {/* slot summary */}
+            <TouchableOpacity onPress={()=>{LayoutAnimation.easeInEaseOut();
+              setShowSlots(!showSlots);}}>
+              <Text style={[styles.slots, !slotsOK && { color: '#D9534F' }]}>
+                {fmtSlots()}
+                {menu.length > 0 && (
+                  <Ionicons
+                    name={showSlots ? 'chevron-up' : 'chevron-down'}
+                    size={14}
+                    color="#DFDCD9"
+                    style={{ marginLeft: 0, marginTop: 0 }}
+                  />
+                )}
+              </Text>
+            </TouchableOpacity>
+            {showSlots&&(
+              <View style={styles.slotBox}>
+                {[...ingredientSet].sort((a,b)=>a-b).map((id,i)=>{
+                  const ing=ingredients.find(x=>x.id===id);
+                  return(<Text key={id} style={styles.slotLine}>
+                    Slot {i+1}: {ing?.name||'unknown'}</Text>);
+                })}
+              </View>
+            )}
+
+            {/* save */}
+            <TouchableOpacity
+              style={[
+                styles.saveBtn,
+                (!slotsOK || !name.trim() || menu.length === 0 || isDateInPast(startDate) || (multiDay && isDateInPast(endDate))) && { opacity: 0.4 },
+              ]}
+              disabled={!slotsOK || !name.trim() || menu.length === 0 || isDateInPast(startDate) || (multiDay && isDateInPast(endDate))}
+              onPress={save}
+            >
+              <Text style={styles.saveTxt}>Save Event</Text>
+            </TouchableOpacity>
+            <Text style={styles.deviceIdText}>
+              This event will be hosted on LiquorBot: {liquorbotId}
+            </Text>
+          </ScrollView>
+        )}
+
+        {/* drink‑picker modal */}
+        <Modal visible={pickerVis} animationType="slide"
+          onRequestClose={()=>setPV(false)}
+          presentationStyle={Platform.OS==='ios'?'pageSheet':'fullScreen'}>
+          <PickerModal {...{cat,setCat,q,setQ,filtered,loading,addDrink,close:()=>setPV(false)}}/>
+        </Modal>
+        
+        {/* time‑info modal */}
+        <Modal
+          transparent
+          visible={showTimeInfo}
+          onRequestClose={() => setShowTimeInfo(false)}
         >
-          <View style={styles.infoPopup}>
-          <Text style={styles.infoTitle}>Event Timing Information</Text>
-
-          <Text style={styles.infoText}>
-            • <Text style={{ fontWeight: 'bold' }}>Start time</Text> – when LiquorBot unlocks and begins serving.{'\n\n'}
-            • <Text style={{ fontWeight: 'bold' }}>End time</Text> – when it locks again and stops serving.{'\n\n'}
-            If you pick an end-time that is{' '}
-            <Text style={{ fontStyle: 'italic' }}>earlier</Text> than the start-time
-            (for example 6 PM → 1 AM), the app automatically switches the event to{' '}
-            <Text style={{ fontWeight: 'bold' }}>Multi-day</Text> and pre-fills the
-            second date with the following day.{'\n\n'}
-            Turning <Text style={{ fontWeight: 'bold' }}>Multi-day</Text> back off
-            keeps your chosen end-time <Text style={{ fontStyle: 'italic' }}>unless</Text>{' '}
-            it would now be earlier than the start-time—in that case the app safely
-            bumps it to <Text style={{ fontWeight: 'bold' }}>11 : 59 PM</Text>.
-          </Text>
-
-          <TouchableOpacity
-            style={styles.infoClose}
+          <TouchableOpacity 
+            style={styles.infoBackdrop}
+            activeOpacity={1}
             onPress={() => setShowTimeInfo(false)}
           >
-            <Ionicons name="close" size={24} color="#DFDCD9" />
-          </TouchableOpacity>
-        </View>
-        </TouchableOpacity>
-      </Modal>
+            <View style={styles.infoPopup}>
+            <Text style={styles.infoTitle}>Event Timing Information</Text>
 
-      {/* animated time‑picker */}
-      <TimePickerModal
-        visible={!!twTarget}
-        value24={twTarget === 'start' ? startTime : endTime}
-        anchor={twAnchor}
-        onClose={() => { setTWT(null); setTWA(null); }}
-        onPick={(v) => (twTarget === 'start' ? setST(v) : setET(v))}
-      />
-    </View>
+            <Text style={styles.infoText}>
+              • <Text style={{ fontWeight: 'bold' }}>Start time</Text> – when LiquorBot unlocks and begins serving.{'\n\n'}
+              • <Text style={{ fontWeight: 'bold' }}>End time</Text> – when it locks again and stops serving.{'\n\n'}
+              If you pick an end-time that is{' '}
+              <Text style={{ fontStyle: 'italic' }}>earlier</Text> than the start-time
+              (for example 6 PM → 1 AM), the app automatically switches the event to{' '}
+              <Text style={{ fontWeight: 'bold' }}>Multi-day</Text> and pre-fills the
+              second date with the following day.{'\n\n'}
+              Turning <Text style={{ fontWeight: 'bold' }}>Multi-day</Text> back off
+              keeps your chosen end-time <Text style={{ fontStyle: 'italic' }}>unless</Text>{' '}
+              it would now be earlier than the start-time—in that case the app safely
+              bumps it to <Text style={{ fontWeight: 'bold' }}>11 : 59 PM</Text>.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.infoClose}
+              onPress={() => setShowTimeInfo(false)}
+            >
+              <Ionicons name="close" size={24} color="#DFDCD9" />
+            </TouchableOpacity>
+          </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* animated time‑picker */}
+        <TimePickerModal
+          visible={!!twTarget}
+          value24={twTarget === 'start' ? startTime : endTime}
+          anchor={twAnchor}
+          onClose={() => { setTWT(null); setTWA(null); }}
+          onPick={(v) => (twTarget === 'start' ? setST(v) : setET(v))}
+        />
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -898,16 +887,12 @@ const Field = ({
   onChange,
   ph,
   multiline = false,
-  onFocus,
-  onBlur
 }: {
   label: string;
   value: string;
   onChange: (t: string) => void;
   ph: string;
   multiline?: boolean;
-  onFocus?: () => void;
-  onBlur?: () => void;
 }) => {
   const [height, setHeight] = useState(40); // Initial height
 
@@ -929,8 +914,6 @@ const Field = ({
             setHeight(e.nativeEvent.contentSize.height); // Update height based on content
           }
         }}
-        onFocus={onFocus}
-        onBlur={onBlur}
       />
     </View>
   );
@@ -1138,20 +1121,4 @@ const styles = StyleSheet.create({
   backdrop:         { ...StyleSheet.absoluteFillObject, backgroundColor: '#0009' },
   card:             { position: 'absolute', backgroundColor: '#1F1F1F', borderRadius: 16, overflow: 'hidden', justifyContent: 'center' },
   closeIcon:        { position: 'absolute', top: 6, right: 6, padding: 6, zIndex: 10, elevation: 10 },
-  doneButton: {
-    position: 'absolute',
-    right: 20,
-    bottom: Platform.OS === 'ios' ? 320 : 20,
-    backgroundColor: '#CE975E',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    zIndex: 100,
-    alignSelf: 'flex-end',
-  },
-  doneButtonText: {
-    color: '#141414',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
 });
