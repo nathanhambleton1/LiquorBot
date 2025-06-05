@@ -391,9 +391,9 @@ export default function ConnectivitySettings() {
           contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
           ListFooterComponent={
             !isScanning ? (
-              <View style={{ alignItems: 'center', marginTop: 10, flexDirection: 'row', justifyContent: 'center' }}>
+              <View style={{ alignItems: 'center', marginTop: 20, flexDirection: 'row', justifyContent: 'center' }}>
                 <Text style={styles.manualHintText}>
-                  Can’t find your LiquorBot?{' '}
+                  Can't find your LiquorBot? {' '}
                 </Text>
                 <TouchableOpacity onPress={() => setManualModalVisible(true)}>
                   <Text style={styles.manualGoldBtnText}>Enter ID manually</Text>
@@ -640,13 +640,11 @@ const styles = StyleSheet.create({
   manualHintText: {
     color: '#4f4f4f',
     fontSize: 14,
-    marginBottom: 4,
     textAlign: 'center',
     fontWeight: '400',
   },
   manualGoldBtnText: {
     color: '#CE975E',
-    fontWeight: 'bold',
     fontSize: 14,
   },
 });
