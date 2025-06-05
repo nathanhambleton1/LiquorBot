@@ -86,22 +86,8 @@ const GLASS_PLACEHOLDERS = [
   require('../assets/images/glasses/margarita.png'),
 ];
 
-const GARNISH_ASSETS = [
-  require('../assets/images/garnishes/lime.png'),
-  require('../assets/images/garnishes/cherry.png'),
-  require('../assets/images/garnishes/orange.png'),
-  require('../assets/images/garnishes/umbrella.png'),
-];
-
 const PLACEHOLDER_IMAGE = require('../assets/images/glasses/rocks.png');
 const DRINK_COLOURS = ['#d72638', '#f5be41', '#e97451', '#57c84d', '#1e90ff'];
-const GARNISH_PLACEMENTS = [
-  { x: 180, y: 50, width: 50, height: 50 }, // rocks
-  { x: 180, y: 40, width: 50, height: 50 }, // highball
-  { x: 140, y: 10, width: 40, height: 40 }, // martini
-  { x: 160, y: 20, width: 45, height: 45 }, // coupe
-  { x: 140, y:  0, width: 45, height: 45 }, // margarita
-];
 
 /* ═════════════  TYPES  ═════════════ */
 interface Ingredient {
@@ -164,7 +150,6 @@ export default function CreateDrinkScreen() {
   const [builderVisible, setBuilderVisible] = useState(false);
   const [glassIdx,   setGlassIdx]   = useState(0);
   const [colourIdx,  setColourIdx]  = useState(0);
-  const [garnishIdx, setGarnishIdx] = useState<number|null>(null);
   const [imageConfigured, setImageConfigured] = useState(false);
   const [exporting, setExporting]   = useState(false);
 
@@ -176,7 +161,6 @@ export default function CreateDrinkScreen() {
 
   /* ----------- Skia images ----------- */
   const baseImage   = useImage(GLASS_COLOUR_ASSETS[glassIdx][colourIdx]);
-  const garnishImage= useImage(garnishIdx!==null ? GARNISH_ASSETS[garnishIdx] : undefined);
 
   const roundToQuarter = (value: number): number => {
     return Math.round(value * 4) / 4;
@@ -279,17 +263,13 @@ export default function CreateDrinkScreen() {
       ctx.drawImageRect(baseImage,{x:0,y:0,width:baseImage.width(),height:baseImage.height()},
         {x:0,y:0,width:CANVAS_W,height:CANVAS_H},paint);
 
-      if(garnishImage){
-        const gp=GARNISH_PLACEMENTS[glassIdx];
-        ctx.drawImageRect(garnishImage,{x:0,y:0,width:garnishImage.width(),height:garnishImage.height()},gp,paint);
-      }
       const pngBytes=surface.makeImageSnapshot().encodeToBytes();
       const key=`drinkImages/${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
       await uploadData({key,data:new Uint8Array(pngBytes),options:{contentType:'image/png'}}).result;
       return key;
     }catch(e){console.error(e); return null;}
     finally{setExporting(false);}
-  },[baseImage,garnishImage,glassIdx]);
+  },[baseImage]);
 
   /* ═════════════  SAVE  ═════════════ */
   const handleSave = async () => {
@@ -373,7 +353,6 @@ export default function CreateDrinkScreen() {
   const previewCanvas = imageConfigured ? (
     <Canvas style={styles.previewCanvasSmall}>
       {baseImage   && <SkiaImage image={baseImage} x={0} y={0} width={THUMB} height={THUMB}/>}
-      {garnishImage&& <SkiaImage image={garnishImage} x={THUMB*0.6} y={THUMB*0.1} width={THUMB*0.4} height={THUMB*0.4}/>}
     </Canvas>
   ) : existingImageUrl ? (
     <Image source={{uri:existingImageUrl}} style={styles.previewCanvasSmall} resizeMode="contain"/>
@@ -567,12 +546,6 @@ export default function CreateDrinkScreen() {
                 height={CANVAS_H}
               />
             )}
-            {garnishImage && (
-              <SkiaImage
-                image={garnishImage}
-                {...GARNISH_PLACEMENTS[glassIdx]}
-              />
-            )}
           </Canvas>
 
           {/* Combined Selection Boxes */}
@@ -621,35 +594,6 @@ export default function CreateDrinkScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-
-            {/* Garnish picker */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.selectorRow}
-            >
-              {GARNISH_ASSETS.map((src, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  onPress={() => setGarnishIdx(idx)}
-                  style={[
-                    styles.selectorThumb,
-                    garnishIdx === idx && styles.selectedThumb,
-                  ]}
-                >
-                  <Image source={src} style={styles.garnishThumb} />
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity
-                onPress={() => setGarnishIdx(null)}
-                style={[
-                  styles.selectorThumb,
-                  garnishIdx === null && styles.selectedThumb,
-                ]}
-              >
-                <Ionicons name="ban" size={28} color="#4F4F4F" />
-              </TouchableOpacity>
-            </ScrollView>
           </View>
 
           {/* Done */}
@@ -821,7 +765,6 @@ const styles = StyleSheet.create({
   selectorThumb: { width: 50, height: 50, borderRadius: 8, backgroundColor: '#1F1F1F', marginRight: 10, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   selectedThumb: { borderWidth: 2, borderColor: '#CE975E' },
   thumbImage: { width: 40, height: 40, resizeMode: 'contain' },
-  garnishThumb: { width: 40, height: 40, resizeMode: 'contain' },
   colourSwatchContainer: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
   selectedColourSwatchContainer: { borderWidth: 2, borderColor: '#CE975E' },
   colourSwatch: { width: 32, height: 32, borderRadius: 16 },
