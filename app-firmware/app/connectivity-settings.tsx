@@ -110,7 +110,7 @@ export default function ConnectivitySettings() {
         id: device.id, name: device.name!,
       }]));
     });
-    setTimeout(() => { manager.stopDeviceScan(); setIsScanning(false); }, 15000);
+    setTimeout(() => { manager.stopDeviceScan(); setIsScanning(false); }, 10000);
   }, []);
 
   useEffect(() => {
@@ -644,17 +644,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '400',
   },
-  manualGoldBtn: {
-    backgroundColor: '#CE975E',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
   manualGoldBtnText: {
-    color: '#141414',
+    color: '#CE975E',
     fontWeight: 'bold',
     fontSize: 14,
   },
