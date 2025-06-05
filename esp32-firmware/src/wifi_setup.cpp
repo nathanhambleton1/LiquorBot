@@ -17,24 +17,24 @@
 
 static Preferences prefs;  // Add NVS preferences
 
-std::string ssid, pw;
+std::string ssid, password;
 
 // Add init function for NVS
 void initWiFiStorage() {
     prefs.begin("wifi-creds", false);
     ssid = prefs.getString("ssid", "").c_str();
-    pw = prefs.getString("pass", "").c_str();
+    password = prefs.getString("pass", "").c_str();
     prefs.end();
 }
 
-void setWiFiCredentials(const std::string &s, const std::string &p) {
+void setWiFiCredentials(const std::string &s, const std::string &pword) {
     ssid = s;
-    pw = p;
+    password = pword;
     
     // Save to NVS
     prefs.begin("wifi-creds", false);
     prefs.putString("ssid", s.c_str());
-    prefs.putString("pass", p.c_str());
+    prefs.putString("pass", pword.c_str());
     prefs.end();
 }
 
@@ -44,17 +44,17 @@ void clearWiFiCredentials() {
     prefs.remove("pass");
     prefs.end();
     ssid = "";
-    pw = "";
+    password = "";
 }
 
 bool connectToWiFi() {
-    if (ssid.empty() || pw.empty()) {
+    if (ssid.empty() || password.empty()) {
         Serial.println("No WiFi credentials available");
         return false;
     }
 
     WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid.c_str(), pw.c_str());
+    WiFi.begin(ssid.c_str(), password.c_str());
     Serial.print("Connecting to ");
     Serial.print(ssid.c_str());
 
@@ -90,5 +90,5 @@ void disconnectFromWiFi() {
 }
 
 bool attemptSavedWiFiConnection() {
-    return !ssid.empty() && !pw.empty() && connectToWiFi();
+    return !ssid.empty() && !password.empty() && connectToWiFi();
 }
