@@ -412,18 +412,28 @@ export default function EventManager() {
     }
   }, [liquorbotId]);
 
-  // Send event drinkIDs as slot config
+  // Send event ingredient IDs as slot config (like device-settings)
   const handleLoadToDevice = React.useCallback(async (event: Event) => {
     setLoadingDeviceId(event.id);
     setErrorDeviceId(null);
     setSuccessDeviceId(null);
     try {
-      // Collect all ingredient IDs for the event's drinks (standard + custom)
-      // For simplicity, just use drinkIDs as slot config (like explore.tsx uses ingredientIds)
-      // If you want to expand to actual ingredient IDs, you can fetch and flatten them here
-      const padded = Array.from({ length: 15 }, (_, i) =>
-        i < event.drinkIDs.length ? event.drinkIDs[i] : 0
-      );
+      // Gather all unique ingredient IDs from standardDrinks and customRecipes
+      const drinkObjs = [
+        ...event.drinkIDs.map(id => standardDrinks.find(d => d.id === id)),
+        ...((event.customRecipeIDs || []).map(id => customRecipes.find(r => r.id === id)))
+      ].filter(Boolean);
+      // Each drink object should have an 'ingredients' property (string: "id:amt:prio,...")
+      const allIngIds: number[] = [];
+      drinkObjs.forEach((drink: any) => {
+        if (drink && typeof drink.ingredients === 'string') {
+          const ids = drink.ingredients.split(',').map((s: string) => +s.split(':')[0]).filter((id: number) => Number.isFinite(id));
+          ids.forEach((id: number) => { if (!allIngIds.includes(id)) allIngIds.push(id); });
+        }
+      });
+      // Pad to 15 slots
+      const padded = Array.from({ length: 15 }, (_, i) => i < allIngIds.length ? allIngIds[i] : 0);
+      // Send slot config
       await Promise.all(padded.map((ingId, index) =>
         publishSlotMessage({
           action: 'SET_SLOT',
@@ -441,7 +451,7 @@ export default function EventManager() {
     } finally {
       setLoadingDeviceId(null);
     }
-  }, [publishSlotMessage]);
+  }, [publishSlotMessage, standardDrinks, customRecipes]);
 
   // Subscribe to the SLOT_CONFIG_TOPIC to ensure MQTT connection is established
   useEffect(() => {
