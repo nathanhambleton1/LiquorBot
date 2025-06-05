@@ -869,77 +869,58 @@ export default function MenuScreen() {
 
   /* -------- Pull the user’s CustomRecipe items ---------- */
   useEffect(() => {
-    /* fetch whichever custom recipes this device is *allowed* to show         */
-    const targetIds: string[] =
-      (allowedCustom && allowedCustom.length) ? allowedCustom :
-      userID ? [] : [];        // always assign string[]
+   if (!allowedCustom || !allowedCustom.length) return;        // nothing to do
 
-    if (!targetIds.length && !userID) return;   // neither owner nor allowed list
+   (async () => {
+     try {
+       const { data } = await client.graphql({
+         query: LIST_CUSTOM_RECIPES_WITH_ING,
+         // Filter by the specific IDs we’re allowed to show
+         variables: {
+           filter: { id: { in: allowedCustom } },
+           limit : 1000,
+         },
+         authMode: 'apiKey',        // 👈 guests can read via public rule
+       }) as { data: any };
 
-    (async () => {
-      try {
-        const res = await client.graphql({
-          query: LIST_CUSTOM_RECIPES_WITH_ING,
-          authMode: 'userPool',
-        });
+       const items = data.listCustomRecipes.items as any[];
+       const placeholder =
+         'https://d3jj0su0y4d6lr.cloudfront.net/placeholder_drink.png';
 
-        const placeholder =
-          'https://d3jj0su0y4d6lr.cloudfront.net/placeholder_drink.png';
+       const custom: Drink[] = await Promise.all(items.map(async (item, idx) => {
+         const ingredientsString = (item.ingredients ?? [])
+           .map((ri: any) => `${Number(ri.ingredientID)}:${Number(ri.amount)}:${Number(ri.priority ?? 1)}`)
+           .join(',');
 
-        /* Narrow to relevant recipes */
-        const items = (
-          ('data' in res && res.data?.listCustomRecipes?.items) ?? []
-        ).filter((it: any) =>
-          !targetIds.length || targetIds.includes(it.id)
-        );
+         let imageUrl = placeholder;
+         if (item.image) {
+           try { imageUrl = (await getUrl({ key: item.image })).url.toString(); }
+           catch { /* keep placeholder */ }
+         }
 
-        const custom: Drink[] = await Promise.all(
-          items.map(async (item: any, idx: number): Promise<Drink> => {
-            const numericId = 1_000_000 + idx;
+         return {
+           id        : 1_000_000 + idx,   // keep clear of std-drink IDs
+           name      : item.name,
+           category  : 'Custom',
+           description: item.description ?? '',
+           image     : imageUrl,
+           ingredients: ingredientsString,
+           isCustom  : true,
+           recipeId  : item.id,
+           imageKey  : item.image ?? null,
+         };
+       }));
 
-            // turn Array<{ingredientID,amount,priority}> → "id:amt:prio,…"
-            const ingArr: any[] = Array.isArray(item.ingredients)
-              ? item.ingredients
-              : [];                 // safety – but it will be an array
-
-            const ingredientsString = ingArr
-              .map(ri => `${Number(ri.ingredientID)}:${Number(ri.amount)}:${Number(ri.priority ?? 1)}`)
-              .join(',');
-
-            // resolve image key to a URL
-            let imageUrl = placeholder;
-            if (item.image) {
-              try {
-                const { url } = await getUrl({ key: item.image });
-                imageUrl = url.toString();
-              } catch (e) {
-                console.warn('Could not fetch custom drink image', e);
-              }
-            }
-
-            return {
-              id: numericId,
-              name: item.name ?? `Custom #${idx + 1}`,
-              category: 'Custom',
-              description: item.description ?? '',
-              image: imageUrl,
-              ingredients: ingredientsString,
-              isCustom: true,
-              recipeId: item.id,
-              imageKey: item.image ?? null,
-            };
-          }),
-        );
-
-        setDrinks((prev) => {
-          const builtOnly = prev.filter((d) => d.category !== 'Custom');
-          return [...builtOnly, ...custom];
-        });
-      } catch (e) {
-        console.error('Error loading custom drinks', e);
-      }
-    })();
-  }, [userID, refreshCustom]); // Add refreshCustom to dependencies
+       // always merge with the baked-in drinks
+       setDrinks(prev => {
+         const builtIn = prev.filter(d => !d.isCustom);
+         return [...builtIn, ...custom];
+       });
+     } catch (e) {
+      console.error('Error loading custom drinks', e);
+     }
+   })();
+ }, [allowedCustom, refreshCustom]);
 
   // Add refresh on screen focus
   useEffect(() => {
