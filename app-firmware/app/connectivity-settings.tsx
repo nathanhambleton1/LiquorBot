@@ -303,6 +303,22 @@ export default function ConnectivitySettings() {
 
   useEffect(() => { if (wifiModalVisible) loadWifiList(); }, [wifiModalVisible]);
 
+  // ───── Manual LiquorBot ID entry ─────
+  const [manualId, setManualId] = useState('');
+  const [manualError, setManualError] = useState('');
+  const handleManualSubmit = async () => {
+    const id = manualId.trim().toUpperCase();
+    if (!id.match(/^[A-F0-9]{3,}$/)) {
+      setManualError('Enter a valid LiquorBot ID (e.g. 123ABC)');
+      return;
+    }
+    setManualError('');
+    setLiquorbotId(id);
+    reconnect();
+    Alert.alert('Manual Entry', `LiquorBot ID set to ${id}`);
+    setManualId('');
+  };
+
   /*────────────────── UI ──────────────────*/
   const StepRow = ({ n, label }: { n: 1 | 2 | 3; label: string }) => {
     let icon = <ActivityIndicator size="small" color="#CE975E"/>;
@@ -375,6 +391,31 @@ export default function ConnectivitySettings() {
               tintColor="transparent" colors={['transparent']} />
           )}
         />
+
+        {/* Manual entry bar, only when not scanning */}
+        {!isScanning && (
+          <View style={styles.manualBar}>
+            <TextInput
+              style={styles.manualInput}
+              placeholder="Enter LiquorBot ID manually"
+              placeholderTextColor="#4F4F4F"
+              value={manualId}
+              onChangeText={t => { setManualId(t); setManualError(''); }}
+              autoCapitalize="characters"
+              maxLength={12}
+            />
+            <TouchableOpacity
+              style={styles.manualBtn}
+              onPress={handleManualSubmit}
+              disabled={!manualId.trim()}
+            >
+              <Text style={styles.manualBtnText}>Set</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {!!manualError && !isScanning && (
+          <Text style={styles.manualError}>{manualError}</Text>
+        )}
       </Animated.View>
 
       {/* ─── Wi-Fi credentials modal ────────────────────────────── */}
@@ -503,4 +544,44 @@ const styles = StyleSheet.create({
   progressBox:    { backgroundColor: '#1F1F1F', borderRadius: 15, padding: 25, width: '80%' },
   stepRow:        { flexDirection: 'row', alignItems: 'center', marginVertical: 8 },
   stepLabel:      { color: '#DFDCD9', marginLeft: 12, fontSize: 15 },
+
+  /* manual entry bar */
+  manualBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1F1F1F',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  manualInput: {
+    flex: 1,
+    backgroundColor: '#141414',
+    borderRadius: 8,
+    color: '#DFDCD9',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginRight: 10,
+  },
+  manualBtn: {
+    backgroundColor: '#CE975E',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  manualBtnText: {
+    color: '#141414',
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  manualError: {
+    color: '#d44a4a',
+    marginTop: 2,
+    marginLeft: 4,
+    fontSize: 13,
+  },
 });
