@@ -19,6 +19,9 @@ import { deleteEvent, joinEvent, leaveEvent } from '../../src/graphql/mutations'
 import { useLiquorBot }               from '../components/liquorbot-provider';
 import { getUrl }                     from 'aws-amplify/storage';
 import { Hub } from 'aws-amplify/utils';
+import { Amplify } from 'aws-amplify';
+import config from '../../src/amplifyconfiguration.json';
+import { PubSub } from '@aws-amplify/pubsub';
 
 const client = generateClient();
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -47,10 +50,16 @@ interface Event {
   guestOwners?: string[];
 }
 
+Amplify.configure(config);
+const pubsub = new PubSub({
+  region:   'us-east-1',
+  endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt',
+});
+
 export default function EventManager() {
   const router  = useRouter();
   const params  = useLocalSearchParams<{ join?: string }>();
-  const { liquorbotId, temporaryOverrideId, restorePreviousId } = useLiquorBot();
+  const { liquorbotId, temporaryOverrideId, restorePreviousId, isConnected } = useLiquorBot();
 
   /* ---------------- AUTH ---------------- */
   const [currentUser, setCurrentUser] = useState<string | null>(null);
@@ -99,6 +108,11 @@ export default function EventManager() {
   const [customRecipes,   setCustomRecipes]     = useState<Array<{ id:string; name:string }>>([]);
   const [processingEvents,setProcessingEvents]  = useState<string[]>([]);
   const [copiedEventId,   setCopiedEventId]     = useState<string | null>(null);
+
+  /* Load-to-Device state */
+  const [loadingDeviceId, setLoadingDeviceId] = useState<string|null>(null);
+  const [successDeviceId, setSuccessDeviceId] = useState<string|null>(null);
+  const [errorDeviceId, setErrorDeviceId] = useState<string|null>(null);
 
   /* ---------------- GUEST JOIN PARAM ---------------- */
   useEffect(() => {
@@ -385,6 +399,50 @@ export default function EventManager() {
       : `${fd(a)} ${ft(a)} – ${fd(b)} ${ft(b)}`;
   };
 
+  /* ------------------- PUBLISH SLOT MESSAGE ------------------- */
+  // Publish slot config to device (like explore.tsx)
+  const publishSlotMessage = React.useCallback(async (payload: any) => {
+    if (!liquorbotId) return;
+    try {
+      const topic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
+      await pubsub.publish({ topics: [topic], message: payload });
+    } catch (error) {
+      console.error('Publish error:', error);
+      throw error;
+    }
+  }, [liquorbotId]);
+
+  // Send event drinkIDs as slot config
+  const handleLoadToDevice = React.useCallback(async (event: Event) => {
+    setLoadingDeviceId(event.id);
+    setErrorDeviceId(null);
+    setSuccessDeviceId(null);
+    try {
+      // Collect all ingredient IDs for the event's drinks (standard + custom)
+      // For simplicity, just use drinkIDs as slot config (like explore.tsx uses ingredientIds)
+      // If you want to expand to actual ingredient IDs, you can fetch and flatten them here
+      const padded = Array.from({ length: 15 }, (_, i) =>
+        i < event.drinkIDs.length ? event.drinkIDs[i] : 0
+      );
+      await Promise.all(padded.map((ingId, index) =>
+        publishSlotMessage({
+          action: 'SET_SLOT',
+          slot: index + 1,
+          ingredientId: ingId,
+          timestamp: Date.now(),
+        })
+      ));
+      await publishSlotMessage({ action: 'GET_CONFIG' });
+      setSuccessDeviceId(event.id);
+      setTimeout(() => setSuccessDeviceId(null), 2000);
+    } catch (e) {
+      setErrorDeviceId(event.id);
+      setTimeout(() => setErrorDeviceId(null), 2000);
+    } finally {
+      setLoadingDeviceId(null);
+    }
+  }, [publishSlotMessage]);
+
   /* ------------------- RENDER ITEM ------------------- */
   const renderItem = ({ item }: { item: Event }) => {
     const isOwner  = item.owner === currentUser;
@@ -475,6 +533,36 @@ export default function EventManager() {
           </View>
           <Text style={styles.drinks}>{item.drinkIDs.length + (item.customRecipeIDs?.length ?? 0)} drinks</Text>
         </View>
+
+        {/* Load to Device button for event owner, only when expanded */}
+        {isOwner && isExpanded && (
+          <TouchableOpacity
+            style={[styles.applyBtn, (!isConnected || loadingDeviceId === item.id) && { opacity: 0.5, marginTop: 16 }]}
+            onPress={() => handleLoadToDevice(item)}
+            disabled={!isConnected || loadingDeviceId === item.id}
+            activeOpacity={0.8}
+          >
+            {successDeviceId === item.id ? (
+              <Ionicons name="checkmark-circle" size={22} color="#63d44a" />
+            ) : loadingDeviceId === item.id ? (
+              <ActivityIndicator color="#141414" />
+            ) : (
+              <Ionicons name="rocket-outline" size={22} color="#141414" />
+            )}
+            <Text style={styles.applyBtnText}>
+              {successDeviceId === item.id
+                ? 'Loaded!'
+                : loadingDeviceId === item.id
+                  ? 'Sending…'
+                  : !isConnected
+                    ? 'No Device Connected'
+                    : 'Load to Device'}
+            </Text>
+          </TouchableOpacity>
+        )}
+        {errorDeviceId === item.id && (
+          <Text style={{ color: '#D9534F', fontSize: 12, marginTop: 4, textAlign: 'center' }}>Failed to load to device</Text>
+        )}
       </TouchableOpacity>
     );
   };
@@ -686,6 +774,13 @@ const styles = StyleSheet.create({
   inviteRow:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',backgroundColor:'#2F2F2F',borderRadius:8,padding:12},
   inviteLink:{color:'#8F8F8F',fontSize:12,flex:1,marginRight:8},
   deviceId:{color:'#4F4F4F',fontSize:10,textAlign:'right'},
+
+  applyBtn: {
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+    backgroundColor: '#CE975E', borderRadius: 10, paddingVertical: 12,
+    marginTop: 24,
+  },
+  applyBtnText: { color: '#141414', fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
 
   /* guest view */
   centered:{justifyContent:'center',alignItems:'center'},

@@ -298,7 +298,7 @@ const BookModal = ({
               />
             </Animated.View>
             <Text style={styles.applyBtnText}>
-              {applied ? 'Loaded!' : saving ? 'Sending…' : 'Load to Device'}
+              {applied ? 'Loaded!' : saving ? 'Sending…' : 'Load to Connected Device'}
             </Text>
           </TouchableOpacity>
         </View>
