@@ -426,10 +426,23 @@ export default function EventManager() {
         if (drink && 'ingredients' in drink && typeof drink.ingredients === 'string') drinkObjs.push(drink);
       });
       // Custom recipes (ensure we have the full object with ingredients)
-      (event.customRecipeIDs || []).forEach(id => {
-        const recipe = customRecipes.find(r => r.id === id) as any;
-        if (recipe && 'ingredients' in recipe && typeof recipe.ingredients === 'string') drinkObjs.push(recipe);
-      });
+      for (const id of event.customRecipeIDs || []) {
+        let recipe = customRecipes.find(r => r.id === id) as any;
+        // If not found or missing ingredients, try to fetch from backend
+        if (!recipe || !('ingredients' in recipe) || typeof recipe.ingredients !== 'string') {
+          try {
+            const { data } = await client.graphql({
+              query: getCustomRecipe,
+              variables: { id },
+              authMode: 'apiKey',
+            });
+            if (data?.getCustomRecipe && typeof data.getCustomRecipe.ingredients === 'string') {
+              recipe = data.getCustomRecipe;
+            }
+          } catch {}
+        }
+        if (recipe && typeof recipe.ingredients === 'string') drinkObjs.push(recipe);
+      }
       // Each drink object should have an 'ingredients' property (string: "id:amt:prio,...")
       const allIngIds: number[] = [];
       drinkObjs.forEach((drink: any) => {
