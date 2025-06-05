@@ -147,7 +147,7 @@ const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
       
       const drinksWithImages = await Promise.all(
         items.map(async (item: any) => {
-        let imageUrl = '/assets/drinks/placeholder.png';
+          let imageUrl = '/assets/drinks/placeholder.png';
           if (item.image) {
             try {
               const { url } = await getUrl({ key: item.image });
@@ -156,10 +156,13 @@ const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
               console.error('Error loading image:', error);
             }
           }
-          
-          const ingredientsString = item.ingredients
-            .map((ing: any) => `${ing.ingredientID}:${ing.amount}:${ing.priority}`)
-            .join(',');
+
+          let ingredientsString = '';
+          if (Array.isArray(item.ingredients)) {
+            ingredientsString = item.ingredients
+              .map((ri: any) => `${ri.ingredientID}:${ri.amount}:${ri.priority ?? 1}`)
+              .join(',');
+          }
 
           return {
             id: item.id,

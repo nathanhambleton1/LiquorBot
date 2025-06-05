@@ -23,6 +23,12 @@ import EventsPage from './pages/EventsPage';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import { HomePage, HelpPage, ContactPage, DownloadPage, Drinks } from './pages';
 import { Link, Routes, Route, useLocation } from 'react-router-dom';
+import { generateClient } from 'aws-amplify/api';
+import { getUserProfile } from './graphql/queries';
+import { createUserProfile, updateUserProfile } from './graphql/mutations';
+
+// Add after Amplify configuration
+const client = generateClient();
 
 /* -------------------------------------------------------------------------- */
 /*                               THEME OVERRIDE                               */
@@ -92,12 +98,42 @@ const App: React.FC = () => {
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const [language, setLanguage] = React.useState('en');
   const [authInitialState, setAuthInitialState] = React.useState<'signIn' | 'signUp'>('signIn');
+  const [userProfile, setUserProfile] = useState<any>(null);
 
   const refreshUserAttributes = async () => {
     try {
       const currentUser = await getCurrentUser();
       const attributes = await fetchUserAttributes();
       setUser({ ...currentUser, attributes });
+      
+      // NEW: Fetch user profile from GraphQL API
+      try {
+        const profileRes = await client.graphql({
+          query: getUserProfile,
+          variables: { id: currentUser.username }
+        });
+        
+        let profile = profileRes.data?.getUserProfile;
+        if (!profile) {
+          // Create profile if it doesn't exist
+          const createRes = await client.graphql({
+            query: createUserProfile,
+            variables: {
+              input: {
+                id: currentUser.username,
+                username: `${attributes.given_name || ''} ${attributes.family_name || ''}`.trim() || currentUser.username,
+                bio: attributes.bio || '',
+                profilePicture: '',
+                role: 'USER'
+              }
+            }
+          });
+          profile = createRes.data?.createUserProfile;
+        }
+        setUserProfile(profile);
+      } catch (err) {
+        console.error('Error fetching user profile', err);
+      }
     } catch (error) {
       console.error('Error refreshing user attributes', error);
     }
@@ -379,7 +415,12 @@ const App: React.FC = () => {
         <Footer />
         {/* Edit Profile Panel */}
         {showEditProfile && (
-          <EditProfilePanel onClose={() => setShowEditProfile(false)} user={user} />
+          <EditProfilePanel 
+            onClose={() => setShowEditProfile(false)} 
+            user={user} 
+            userProfile={userProfile}
+            refreshProfile={refreshUserAttributes} // Add refresh function
+          />
         )}
         {showSettingsPanel && (
           <SettingsPanel onClose={() => setShowSettingsPanel(false)} />
@@ -509,7 +550,12 @@ export const HelpCTA: React.FC = () => <section className="help-cta-section">
   {/* TODO: Implement Help CTA content */}
 </section>;
 
-const EditProfilePanel: React.FC<{ onClose: () => void; user: any }> = ({ onClose, user }) => {
+const EditProfilePanel: React.FC<{ 
+  onClose: () => void; 
+  user: any;
+  userProfile: any;
+  refreshProfile: () => void;
+}> = ({ onClose, user, userProfile, refreshProfile }) => {
   // Extract user info from attributes
   const registeredUsername = user?.username || '';
   const email = user?.attributes?.email || '';
@@ -519,22 +565,47 @@ const EditProfilePanel: React.FC<{ onClose: () => void; user: any }> = ({ onClos
   const [firstName, setFirstName] = React.useState('');
   const [lastName, setLastName] = React.useState('');
   const [bio, setBio] = React.useState('');
+  const [isSaving, setIsSaving] = React.useState(false); // Add loading state
 
-  // Update form fields when user data changes
+  // Update form fields when user profile changes
   React.useEffect(() => {
-    if (user) {
-      // FIXED: Use correct Cognito attribute names
-      setFirstName(user.attributes?.given_name || '');
-      setLastName(user.attributes?.family_name || '');
-      setBio(user.attributes?.bio || '');
+    if (userProfile) {
+      // Split full name from userProfile
+      const fullName = userProfile.username || '';
+      const nameParts = fullName.split(' ');
+      setFirstName(nameParts[0] || '');
+      setLastName(nameParts.slice(1).join(' ') || '');
+      setBio(userProfile.bio || '');
     }
-  }, [user]);
+  }, [userProfile]);
 
-  // Save handler (implement actual save logic as needed)
-  const handleSave = (e: React.FormEvent) => {
+  // Save handler with API integration
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Save profile changes to backend
-    onClose();
+    setIsSaving(true);
+    
+    try {
+      const fullName = `${firstName} ${lastName}`.trim();
+      await client.graphql({
+        query: updateUserProfile,
+        variables: {
+          input: {
+            id: userProfile.id,
+            username: fullName,
+            bio
+          }
+        }
+      });
+      
+      // Refresh profile data after saving
+      await refreshProfile();
+      onClose();
+    } catch (error) {
+      console.error('Error updating profile', error);
+      alert('Failed to save profile. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (

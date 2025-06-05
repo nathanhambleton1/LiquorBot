@@ -41,6 +41,7 @@ import {
   AttachPolicyCommand,
   ListAttachedPoliciesCommand,
 } from '@aws-sdk/client-iot';
+import NetInfo from '@react-native-community/netinfo';
 
 /* ───────────────  Branding  ─────────────── */
 const APP_NAME   = 'LiquorBot';
@@ -174,6 +175,35 @@ export default function SessionLoading(): ReactElement {
   /* ----------------  MAIN BOOTSTRAP  ---------------- */
   useEffect(() => {
     (async () => {
+      // Check connectivity
+      const { isConnected } = await NetInfo.fetch();
+      // Try loading cached JSON if offline
+      if (!isConnected) {
+        setStatus('Offline mode');
+        try {
+          const [drinksJson, ingJson, eventsJson] = await AsyncStorage.multiGet(['drinksJson','ingredientsJson','cachedEvents']);
+          if (drinksJson[1] && ingJson[1]) {
+            setStatus('Loading cached recipes…');
+            bump(0.35);
+          }
+          if (eventsJson[1]) {
+            setStatus('Loading cached events…');
+            bump(0.10);
+          }
+          setStatus('Loading cached images…');
+          const drinks = drinksJson[1] ? JSON.parse(drinksJson[1]) : [];
+          for (const d of drinks) {
+            if (d.image) {
+              try { await Image.prefetch(d.image); } catch {}
+            }
+          }
+          bump(0.55);
+        } catch {}
+        // finish
+        setPct(1);
+        setTimeout(() => router.replace('/(tabs)'), 350);
+        return;
+      }
       try {
         /* 1️⃣ refresh session */
         setStatus('Refreshing session…');

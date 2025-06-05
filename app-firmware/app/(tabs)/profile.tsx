@@ -17,6 +17,7 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Sub‑popups
 import EditProfilePopup from '../components/profile/EditProfilePopup';
@@ -114,6 +115,20 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (!signedIn) return;
     (async () => {
+      // Load cached profile if available
+      try {
+        const cached = await AsyncStorage.getItem('userProfileData');
+        if (cached) {
+          const p = JSON.parse(cached);
+          setRegisteredUsername(p.registeredUsername || '');
+          setFirstName(p.firstName);
+          setLastName(p.lastName);
+          setBio(p.bio);
+          setUser({ username: p.username, email: p.email, profilePicture: p.profilePicture });
+          setBirthday(p.birthday);
+          setProfileLoaded(true);
+        }
+      } catch {}
       try {
         const cognitoUser = await getCurrentUser();
         const sub = cognitoUser.username;
@@ -146,9 +161,26 @@ export default function ProfileScreen() {
         setUser({ username: profile.username || sub, email: email || 'No email', profilePicture: profile.profilePicture || null });
         setBirthday(bday);
         setProfileLoaded(true);
-      } catch (err) { console.error('init profile error', err); }
+      // Cache fetched profile data
+      try {
+        await AsyncStorage.setItem('userProfileData', JSON.stringify({
+          registeredUsername: sub,
+          username: profile.username || sub,
+          email: email || 'No email',
+          profilePicture: profile.profilePicture || null,
+          firstName,
+          lastName,
+          bio,
+          birthday: bday,
+        }));
+      } catch {}
+      } catch (err) {
+        console.error('init profile error', err);
+      // Ensure loading spinner is dismissed if offline without cache
+      if (!profileLoaded) setProfileLoaded(true);
+      }
     })();
-  }, []);
+  }, [signedIn]);
 
   // drinks JSON from S3
   useEffect(() => {
@@ -339,7 +371,7 @@ export default function ProfileScreen() {
                     signOut();
                     break;
                   case 'My Drinks':
-                    router.push('/components/profile/drink-list');
+                    router.push('./components/profile/DrinkList');
                     break;
                   default:
                     openPopup({ title: b.title });
