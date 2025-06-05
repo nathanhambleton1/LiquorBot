@@ -360,6 +360,11 @@ export default function EventsScreen(){
   /* helpers */
   const fmtSlots=()=>`${ingredientSet.size}/15 unique ingredients`;
   const addDrink=(d:Drink)=>{
+    if (menu.some(drink => drink.id === d.id)) {
+      Alert.alert('Already added', 'This drink is already in the menu.');
+      setPV(false); setQ('');
+      return;
+    }
     const after=new Set([...ingredientSet,...parseIng(d)]);
     if(after.size>15){Alert.alert('Too many ingredients');return;}
     setMenu(m=>[...m,d]);setPV(false);setQ('');
