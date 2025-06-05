@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
   advancedHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},
   dangerZoneContainer:{marginTop:15,padding:15,borderWidth:1,borderColor:'#d44a4a',borderRadius:10},
   dangerZoneHeader:{color:'#d44a4a',fontSize:16,fontWeight:'bold',marginBottom:10,textAlign:'center'},
-  disconnectButton:{backgroundColor:'#d44a4a',borderRadius:10,paddingVertical:12,alignItems:'center', marginBottom:10},
+  disconnectButton:{backgroundColor:'#d44a4a',borderRadius:10,paddingVertical:12,alignItems:'center', marginBottom:10, marginTop: 10},
   disconnectButtonText:{color:'#DFDCD9',fontSize:16,fontWeight:'bold'},
 
   connectPrompt:{position:'absolute',bottom:20,alignSelf:'center',backgroundColor:'#1F1F1F',paddingVertical:10,paddingHorizontal:20,borderRadius:10,borderWidth:1,borderColor:'#CE975E'},
