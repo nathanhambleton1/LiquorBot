@@ -791,10 +791,12 @@ const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
       {/* Edit Drink Modal */}
       {showEditModal && currentDrink && isLoggedIn && (
         <div className="modal-overlay">
-          <div className="drink-modal">
+          <div className={`drink-modal${formShake ? ' shake' : ''}`} style={{ maxWidth: 500, width: '90%' }}>
             <button className="close-modal" onClick={closeModal}>×</button>
             <h2>Edit Drink</h2>
-            
+            {formError && (
+              <div className="modal-error" style={{ marginBottom: 16 }}>{formError}</div>
+            )}
             <div className="form-group">
               <label>Drink Name</label>
               <input
@@ -804,7 +806,6 @@ const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
                 placeholder="Enter drink name"
               />
             </div>
-            
             <div className="form-group">
               <label>Ingredients</label>
               {editIngredients.map((ingredient, index) => (
@@ -815,23 +816,14 @@ const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
                       onClick={() => { setCurrentIngredientIndex(index); setShowIngredientPicker(true); }}
                       style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        background: '#f2f2f2', borderRadius: 12, padding: '0.5rem 1.25rem', minWidth: 180, flex: 1, cursor: 'pointer',
-                        border: '1px solid #e0e0e0', fontWeight: 500
+                        background: '#2c2c2c', borderRadius: 12, padding: '0.5rem 1.25rem', minWidth: 180, flex: 1, cursor: 'pointer', fontWeight: 500
                       }}
                     >
                       <span className="ingredient-name" style={{ color: ingredient.id ? '#fff' : '#8f8f8f' }}>{ingredient.id ? getIngredientName(ingredient.id) : 'Select Ingredient'}</span>
-                      <button
-                        className="ingredient-plus-btn"
-                        onClick={e => { e.stopPropagation(); setCurrentIngredientIndex(index); setShowIngredientPicker(true); }}
-                        style={{ background: '#393939', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: 12, cursor: 'pointer' }}
-                        aria-label="Select Ingredient"
-                        type="button"
-                      >
-                        <FiPlus style={{ color: '#f5be41', fontSize: 18 }} />
-                      </button>
+                      <FiPlus className="selector-icon" style={{ marginLeft: 12, color: '#ce975e', fontSize: 20 }} />
                     </div>
                     <button
-                      className="control-btn remove-btn"
+                      className="remove-btn"
                       onClick={() => removeIngredientRow(index)}
                       disabled={editIngredients.length <= 1}
                       aria-label="Remove ingredient"
@@ -840,66 +832,87 @@ const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
                       <FiTrash2 size={18} />
                     </button>
                   </div>
-                  <div className="stepper-group" style={{ display: 'flex', alignItems: 'flex-end', gap: 40, marginTop: 12, justifyContent: 'flex-start', position: 'relative' }}>
+                  <div className="stepper-group" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, marginTop: 12, justifyContent: 'flex-start' }}>
                     {/* Volume Stepper */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 90 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <button className="stepper-btn" onClick={() => handleIngredientChange(index, 'amount', Math.max(0.25, ingredient.amount - 0.25))} style={{ background: '#f2f2f2', borderRadius: 8, border: 'none', width: 32, height: 32, fontSize: 20, color: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
-                        <span style={{ background: '#f2f2f2', color: '#333', borderRadius: 8, minWidth: 38, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 16, border: '1px solid #e0e0e0' }}>{ingredient.amount.toFixed(2)}</span>
-                        <button className="stepper-btn" onClick={() => handleIngredientChange(index, 'amount', ingredient.amount + 0.25)} style={{ background: '#f2f2f2', borderRadius: 8, border: 'none', width: 32, height: 32, fontSize: 20, color: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                        <button className="stepper-btn" onClick={() => handleIngredientChange(index, 'amount', Math.max(0.25, ingredient.amount - 0.25))} style={{ background: '#2c2c2c', color: '#fff', borderRadius: 8, minWidth: 38, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 16, }}>-</button>
+                        <span style={{ background: '#2c2c2c', color: '#fff', borderRadius: 8, minWidth: 38, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 16,}}>{ingredient.amount.toFixed(2)}</span>
+                        <button className="stepper-btn" onClick={() => handleIngredientChange(index, 'amount', ingredient.amount + 0.25)} style={{ background: '#2c2c2c', color: '#fff', borderRadius: 8, minWidth: 38, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 16, }}>+</button>
                       </div>
-                      <span style={{ fontSize: 12, color: '#888', marginTop: 4, marginLeft: 4 }}>Volume</span>
+                      <span style={{ fontSize: 12, color: '#888', marginTop: 4, marginLeft: 4 }}>Volume (oz)</span>
                     </div>
                     {/* Priority Stepper */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 90 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <button className="stepper-btn" onClick={() => handleIngredientChange(index, 'priority', Math.max(1, ingredient.priority - 1))} style={{ background: '#f2f2f2', borderRadius: 8, border: 'none', width: 32, height: 32, fontSize: 20, color: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
-                        <span style={{ background: '#f2f2f2', color: '#333', borderRadius: 8, minWidth: 38, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 16, border: '1px solid #e0e0e0' }}>{ingredient.priority}</span>
-                        <button className="stepper-btn" onClick={() => handleIngredientChange(index, 'priority', Math.min(9, ingredient.priority + 1))} style={{ background: '#f2f2f2', borderRadius: 8, border: 'none', width: 32, height: 32, fontSize: 20, color: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                        <button className="stepper-btn" onClick={() => handleIngredientChange(index, 'priority', Math.max(1, ingredient.priority - 1))} style={{ background: '#2c2c2c', color: '#fff', borderRadius: 8, minWidth: 38, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 16, }}>-</button>
+                        <span style={{ background: '#2c2c2c', color: '#fff', borderRadius: 8, minWidth: 38, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 16, }}>{ingredient.priority}</span>
+                        <button className="stepper-btn" onClick={() => handleIngredientChange(index, 'priority', Math.min(9, ingredient.priority + 1))} style={{ background: '#2c2c2c', color: '#fff', borderRadius: 8, minWidth: 38, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 16, }}>+</button>
+                        {/* Info Button - inline after priority plus */}
+                        <button
+                          type="button"
+                          aria-label="Info"
+                          onClick={() => setShowInfoIndex(index)}
+                          style={{
+                            background: 'none', border: 'none', color: '#444', marginLeft: 8, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22
+                          }}
+                        >
+                          <FiInfo />
+                        </button>
                       </div>
                       <span style={{ fontSize: 12, color: '#888', marginTop: 4, marginLeft: 4 }}>Priority</span>
                     </div>
-                    {/* Info Button */}
-                    <button
-                      className="info-btn"
-                      onClick={() => setShowInfoIndex(index)}
-                      style={{ position: 'absolute', right: 0, top: 0, background: 'none', border: 'none', color: '#f5be41', fontSize: 22, cursor: 'pointer', padding: 4 }}
-                      aria-label="Info about volume and priority"
-                      type="button"
-                    >
-                      <FiInfo />
-                    </button>
-                    {showInfoIndex === index && (
-                      <div style={{ position: 'absolute', right: 0, top: 36, background: '#232323', color: '#fff', borderRadius: 10, boxShadow: '0 2px 12px #0008', padding: '1rem', zIndex: 10, minWidth: 260 }}>
-                        <div style={{ fontWeight: 600, marginBottom: 6, color: '#f5be41' }}>How does this work?</div>
-                        <div style={{ fontSize: 15, marginBottom: 8 }}><b>Volume</b> is the amount in ounces for each ingredient.</div>
-                        <div style={{ fontSize: 15 }}><b>Priority</b> controls the pouring order (1 = first, 9 = last). Lower numbers are poured first.</div>
-                        <button onClick={() => setShowInfoIndex(null)} style={{ marginTop: 10, background: '#393939', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 14px', cursor: 'pointer', fontWeight: 600 }}>Close</button>
-                      </div>
-                    )}
                   </div>
+                  {/* Info Modal Overlay */}
+                  {showInfoIndex === index && (
+                    <div className="modal-overlay" style={{ zIndex: 1000 }}>
+                      <div className="drink-modal" style={{ maxWidth: 360, width: '90%', textAlign: 'left', padding: '2rem 2rem 1.5rem 2rem', position: 'relative' }}>
+                        <button className="close-modal" onClick={() => setShowInfoIndex(null)} style={{ position: 'absolute', right: 16, top: 12, fontSize: 22 }}>×</button>
+                        <div style={{ fontWeight: 600, fontSize: 18, color: '#ce975e', marginBottom: 10 }}>Ingredient Info</div>
+                        <div style={{ fontSize: 15, lineHeight: 1.7, marginBottom: 10 }}>
+                          <b>Volume</b>: Represents the amount of each ingredient, in increments of 0.25 ounces. All measurements are in ounces (oz).
+                          <br /><br />
+                          <b>Priority</b>: Determines the pour order. Higher priority (1) pours first, while higher numbers pour later.
+                        </div>
+                        <div style={{ fontSize: 13, color: '#aaa', marginTop: 6, lineHeight: 1.6 }}>
+                          <b>Example:</b> In a Tequila Sunrise, grenadine is given higher priority (1) so it's poured first, creating a lovely gradient as orange juice (2) is added on top.
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               
-              <button className="add-ingredient-btn" onClick={addIngredientRow} style={{ background: 'none', border: 'none', color: '#f5be41', fontWeight: 600, fontSize: 16, padding: 0, marginTop: 8, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <FiPlus style={{ color: '#f5be41' }} /> Add Ingredient
+              <button className="add-ingredient-btn" onClick={addIngredientRow} style={{ background: 'none', border: 'none', color: '#ce975e', fontWeight: 600, fontSize: 16, padding: 0, marginTop: 8, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <FiPlus style={{ color: '#ce975e' }} /> Add Ingredient
               </button>
             </div>
             
             <div className="form-group">
               <label>Drink Image</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageChange}
-              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <label htmlFor="drink-image-upload-edit" style={{
+                  background: '#232323', color: '#ce975e', borderRadius: 8, padding: '8px 18px', cursor: 'pointer', fontWeight: 600, fontSize: 15, border: '1px solid #444', display: 'inline-block',
+                }}>
+                  {imageFile ? 'Change Image' : 'Choose Image'}
+                </label>
+                <input
+                  id="drink-image-upload-edit"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  style={{ display: 'none' }}
+                />
+                <span style={{ color: '#aaa', fontSize: 14, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {imageFile ? imageFile.name : 'No file chosen'}
+                </span>
+              </div>
               {(imagePreview || currentDrink.image) && (
                 <div className="image-preview">
                   <img src={imagePreview || currentDrink.image} alt="Preview" />
                 </div>
               )}
             </div>
-            
             <div className="modal-actions">
               <button className="cancel-btn" onClick={closeModal} disabled={saving}>
                 Cancel
@@ -914,7 +927,7 @@ const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
                     <span className="spinner"></span> Saving...
                   </>
                 ) : (
-                  'Create Drink'
+                  'Save Changes'
                 )}
               </button>
             </div>
