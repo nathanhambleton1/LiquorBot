@@ -124,6 +124,19 @@
   position: relative;
 }
 
+.hero-img-responsive {
+  display: none;
+}
+
+@media (max-width: 899px) {
+  .hero-img-responsive {
+    display: block;
+    margin: 1.5rem 0;
+    width: 100%;
+    max-width: 340px;
+  }
+}
+
 .hero-inner h1 {
   font-size: clamp(2rem, 5vw, 3.5rem);
   margin: 0 0 1.5rem;
@@ -558,7 +571,7 @@
 }
 
 /* Responsive */
-@media (max-width: 900px) {
+@media (max-width: 899px) {
   .hero-inner {
     flex-direction: column;
     gap: 3rem;

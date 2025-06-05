@@ -271,7 +271,7 @@ const policySections = [
 				<p>
 					Privacy Policy URL:{' '}
 					<a
-						href="https://liquorbot-storage-8cb6bcd8a9244-dev.s3.us-east-1.amazonaws.com/public/privacyPolicy.html"
+						href="https://main.dxqquq649m247.amplifyapp.com/privacy"
 						target="_blank"
 						rel="noopener noreferrer"
 					>
@@ -298,10 +298,11 @@ const PrivacyPolicy: React.FC = () => {
 		<div
 			className="lb-container"
 			style={{
-				padding: '3rem 0',
+				padding: '3rem 1.2rem', // Add horizontal padding for all screens
 				maxWidth: 700,
 				margin: '0 auto',
 				minHeight: '60vh',
+				boxSizing: 'border-box',
 			}}
 		>
 			<h1 style={{ marginBottom: 0, color: '#fff' }}>LiquorBot Privacy Policy</h1>
@@ -374,9 +375,13 @@ const PrivacyPolicy: React.FC = () => {
 									fontSize: '1.04rem',
 									lineHeight: 1.7,
 									transition: 'max-height 0.35s cubic-bezier(.4,2,.6,1), opacity 0.25s',
-									maxHeight: openSections.includes(idx) ? 800 : 0,
+									maxHeight: 'none', // Allow content to grow as needed
 									opacity: openSections.includes(idx) ? 1 : 0,
 									overflow: 'hidden',
+									boxSizing: 'border-box',
+									width: '100%',
+									// Responsive padding for mobile
+									...(window.innerWidth < 600 ? { padding: '1rem 0.7rem 1.1rem 1.2rem' } : {}),
 								}}
 							>
 								{section.content}

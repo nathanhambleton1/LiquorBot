@@ -454,8 +454,14 @@ const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
                 placeholder="Search ingredients..."
                 value={ingredientSearch}
                 onChange={e => setIngredientSearch(e.target.value)}
-                autoFocus={true}
+                // Remove autoFocus to prevent keyboard from opening when clicking category
+                // autoFocus={true}
                 style={{ paddingRight: '40px', width: '100%' }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === 'Return') {
+                    (e.target as HTMLInputElement).blur(); // Close keyboard
+                  }
+                }}
               />
               <FiSearch style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', color: '#888' }} />
             </div>

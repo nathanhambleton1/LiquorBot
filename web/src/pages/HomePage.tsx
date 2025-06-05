@@ -202,9 +202,16 @@ const Hero: React.FC = () => (
         <h1>
           Your Personal&nbsp;<span className="accent">Robotic Bartender</span>
         </h1>
+        {/* Show placeholder image only on screens < 900px */}
+        <img 
+          src="/assets/apppreview_still.png" 
+          alt="App Preview Still"
+          className="hero-img-responsive"
+          style={{ margin: '1.5rem auto', width: '100%', maxWidth: 340 }}
+        />
         <p>
           LiquorBot mixes perfect cocktails on demand, tracks your favorites and
-          keeps the party flowing — all from the convenience of our companion app.
+          keeps the party flowing all from the convenience of our companion app.
         </p>
 
         <div className="cta-row">

@@ -1176,15 +1176,6 @@ const EventsPage: React.FC = () => {
                   <IngredientSlots />
                 </div>
               </div>
-              <div className="form-group">
-                <label>Invite Code</label>
-                <input
-                  type="text"
-                  className="modal-input"
-                  value={currentEvent.inviteCode}
-                  readOnly
-                />
-              </div>
             </div>
             <div className="modal-footer">
               <button 
@@ -1361,6 +1352,19 @@ const EventsPage: React.FC = () => {
           </div>
         </div>
       )}
+      <style>{`
+        @media (max-width: 600px) {
+          .modal-content .form-row {
+            flex-direction: column !important;
+            gap: 0 !important;
+          }
+          .modal-content .form-row .form-group {
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };

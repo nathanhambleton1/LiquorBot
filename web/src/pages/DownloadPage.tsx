@@ -2,7 +2,7 @@ import React from 'react';
 import './styles/DownloadPage.css';
 
 const DownloadPage: React.FC = () => (
-  <div className="download-page lb-container" style={{padding: '4rem 0', textAlign: 'center'}}>
+  <div className="download-page lb-container" style={{padding: '4rem 0', textAlign: 'center', paddingLeft: '1rem', paddingRight: '1rem'}}>
     <h1>Download LiquorBot App</h1>
     <p className="subtitle">Get the official LiquorBot app for your device</p>
     <div className="download-buttons" style={{display: 'flex', justifyContent: 'center', gap: '2rem', margin: '2rem 0'}}>

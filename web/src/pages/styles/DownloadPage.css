@@ -6,6 +6,25 @@
   margin: 3rem auto 2rem auto;
   box-shadow: 0 8px 40px 0 rgba(0,0,0,0.18);
   max-width: 1100px;
+  /* Add responsive horizontal padding */
+  padding-left: 2rem;
+  padding-right: 2rem;
+}
+
+@media (max-width: 900px) {
+  .download-page {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+@media (max-width: 600px) {
+  .download-page {
+    border-radius: 0;
+    box-shadow: none;
+    margin: 1.2rem 0 1rem 0;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
 }
 .download-hero {
   display: flex;
