@@ -192,7 +192,15 @@ export default function EventManager() {
             variables: { id },
             authMode: 'apiKey',
           });
-          if (data?.getCustomRecipe) fetched.push(data.getCustomRecipe);
+          if (data?.getCustomRecipe) {
+            const r = data.getCustomRecipe;
+            fetched.push({
+              id:   r.id,
+              name: r.name,
+              // keep the rich array so we can parse it later
+              ingredients: r.ingredients ?? [],     // 👈 NEW
+            });
+          }
         } catch {
           fetched.push({ id, name: `Custom Drink (${id.slice(0,6)})` });
         }
@@ -441,16 +449,47 @@ export default function EventManager() {
             }
           } catch {}
         }
-        if (recipe && typeof recipe.ingredients === 'string') drinkObjs.push(recipe);
-      }
-      // Each drink object should have an 'ingredients' property (string: "id:amt:prio,...")
-      const allIngIds: number[] = [];
-      drinkObjs.forEach((drink: any) => {
-        if (drink && typeof drink.ingredients === 'string') {
-          const ids = drink.ingredients.split(',').map((s: string) => +s.split(':')[0]).filter((id: number) => Number.isFinite(id));
-          ids.forEach((id: number) => { if (!allIngIds.includes(id)) allIngIds.push(id); });
+        if (
+            recipe &&
+            (typeof recipe.ingredients === 'string' || Array.isArray(recipe.ingredients))
+        ) {
+            drinkObjs.push(recipe);               // 👈 now allowed
         }
-      });
+      }
+
+      // --- accept BOTH stock-drink strings and custom-recipe arrays -------------
+      const allIngIds: number[] = [];
+
+      const extractIds = (d: any): number[] => {
+        if (!d) return [];
+        /* stock-drink format */
+        if (typeof d.ingredients === 'string') {
+          return d.ingredients
+            .split(',')
+            .map((s: string) => +s.split(':')[0])
+            .filter(Number.isFinite);
+        }
+        /* custom-recipe format (array of RecipeIngredient) */
+        if (Array.isArray(d.ingredients)) {
+          return d.ingredients
+            .map((ri: any) => Number(ri.ingredientID))
+            .filter(Number.isFinite);
+        }
+        /* legacy ingArr field (just in case) */
+        if (Array.isArray(d.ingArr)) {
+          return d.ingArr
+            .map((ri: any) => Number(ri.ingredientID))
+            .filter(Number.isFinite);
+        }
+        return [];
+      };
+
+      drinkObjs.forEach(drink =>
+        extractIds(drink).forEach(id => {
+          if (!allIngIds.includes(id)) allIngIds.push(id);
+        }),
+      );
+
       // Pad to 15 slots
       const padded = Array.from({ length: 15 }, (_, i) => i < allIngIds.length ? allIngIds[i] : 0);
       // Send slot config
@@ -599,7 +638,7 @@ export default function EventManager() {
                   ? 'Sending…'
                   : !isConnected
                     ? 'No Device Connected'
-                    : 'Load to Device'}
+                    : 'Load Ingredients to Device'}
             </Text>
           </TouchableOpacity>
         )}
