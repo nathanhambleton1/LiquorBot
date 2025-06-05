@@ -778,7 +778,7 @@ const styles = StyleSheet.create({
   searchRow:{flexDirection:'row',alignItems:'center',backgroundColor:'#1F1F1F',borderRadius:10,paddingHorizontal:15,marginHorizontal:20,marginBottom:20},
   search:{flex:1,color:'#DFDCD9',fontSize:16,paddingVertical:10},
 
-  list:{paddingHorizontal:20,paddingBottom:220},
+  list:{paddingHorizontal:20,paddingBottom:180},
   card:{backgroundColor:'#1F1F1F',borderRadius:12,padding:16,marginBottom:12},
   head:{flexDirection:'row',justifyContent:'space-between',marginBottom:6},
   name:{color:'#DFDCD9',fontSize:18,fontWeight:'600',flexShrink:1},
