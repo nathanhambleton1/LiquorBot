@@ -443,6 +443,19 @@ export default function EventManager() {
     }
   }, [publishSlotMessage]);
 
+  // Subscribe to the SLOT_CONFIG_TOPIC to ensure MQTT connection is established
+  useEffect(() => {
+    if (!liquorbotId) return;
+    const topic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
+    // Subscribe with a no-op handler
+    const subscription = pubsub.subscribe({ topics: [topic] }).subscribe({
+      next: () => {},
+      error: (error) => console.error('Subscription error:', error),
+      complete: () => {},
+    });
+    return () => subscription.unsubscribe();
+  }, [liquorbotId]);
+
   /* ------------------- RENDER ITEM ------------------- */
   const renderItem = ({ item }: { item: Event }) => {
     const isOwner  = item.owner === currentUser;
