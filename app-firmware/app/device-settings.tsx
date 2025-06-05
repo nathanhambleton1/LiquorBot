@@ -41,6 +41,7 @@ export default function DeviceSettings() {
     isAdmin,            // determines access
     isConnected,        // online/offline flag
     liquorbotId,        // 3-digit ID string
+    setLiquorbotId,      // function to set the LiquorBot ID
   } = useLiquorBot();
 
   /*────────── State ──────────*/
@@ -360,6 +361,14 @@ export default function DeviceSettings() {
             {!isAdvancedCollapsed&&(
               <View style={styles.dangerZoneContainer}>
                 <Text style={styles.dangerZoneHeader}>Danger Zone</Text>
+                {/* Disconnect from Device button */}
+                <TouchableOpacity style={styles.disconnectButton} onPress={() => {
+                  setLiquorbotId('000');
+                  Alert.alert('Disconnected', 'You have disconnected from the device.');
+                }}>
+                  <Text style={styles.disconnectButtonText}>Disconnect from Device</Text>
+                </TouchableOpacity>
+                {/* Disconnect from Wi-Fi button */}
                 <TouchableOpacity style={styles.disconnectButton} onPress={()=>confirmDisconnect()}>
                   <Text style={styles.disconnectButtonText}>Disconnect from Wi-Fi</Text>
                 </TouchableOpacity>

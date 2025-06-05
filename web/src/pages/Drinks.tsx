@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import './styles/Drinks.css';
 import { getUrl } from 'aws-amplify/storage';
 import { FiSearch, FiChevronDown } from 'react-icons/fi';
+import { Hub } from '@aws-amplify/core';
+import { getCurrentUser } from 'aws-amplify/auth';
 
 // Types
 type Drink = {
@@ -27,6 +29,16 @@ const Drinks: React.FC = () => {
   const [expandedDrinkId, setExpandedDrinkId] = useState<string | null>(null);
   const [ingredientsList, setIngredientsList] = useState<any[]>([]);
   const [search, setSearch] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+
+  // Check authentication state
+  useEffect(() => {
+    let mounted = true;
+    getCurrentUser()
+      .then(() => { if (mounted) setIsAuthenticated(true); })
+      .catch(() => { if (mounted) setIsAuthenticated(false); });
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     const fetchStandardDrinks = async () => {
@@ -55,6 +67,19 @@ const Drinks: React.FC = () => {
     fetchStandardDrinks();
   }, []);
 
+  // Reload page on sign in/sign out
+  useEffect(() => {
+    const listener = (data: any) => {
+      if (data?.payload?.event === 'signIn' || data?.payload?.event === 'signOut') {
+        window.location.reload();
+      }
+    };
+    const remove = Hub.listen('auth', listener);
+    return () => {
+      remove();
+    };
+  }, []);
+
   // Get ingredient name by ID
   const getIngredientName = (id: number) => {
     const ingredient = ingredientsList.find((i: any) => i.id === id);
@@ -76,6 +101,25 @@ const Drinks: React.FC = () => {
       setExpandedDrinkId(id);
     }
   };
+
+  if (isAuthenticated === false) {
+    return (
+      <div className="drinks-page lb-container" style={{textAlign: 'center', marginTop: '4rem'}}>
+        <h1>Discover Cocktails</h1>
+        <p className="subtitle">Explore popular recipes for your LiquorBot</p>
+        <div style={{marginTop: '5rem', fontSize: '1rem'}}>
+          Please{' '}
+          <span
+            style={{ color: '#ce975e', cursor: 'pointer', fontWeight: 600, textDecoration: 'underline' }}
+            onClick={() => window.dispatchEvent(new Event('show-signin-modal'))}
+          >
+            sign in
+          </span>{' '}
+          to view the drink menu.
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

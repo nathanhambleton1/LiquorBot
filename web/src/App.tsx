@@ -169,11 +169,11 @@ const App: React.FC = () => {
         case 'signedIn':
           await checkAuth();
           setShowAuth(false);
-          // REMOVED: window.location.reload();
+          window.location.reload(); // Reload after sign in
           break;
         case 'signedOut':
           setUser(null);
-          // REMOVED: window.location.reload();
+          window.location.reload(); // Reload after sign out
           break;
       }
     });
@@ -407,7 +407,7 @@ const App: React.FC = () => {
           <Route path="/events" element={<EventsPage />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/downloads" element={<DownloadPage />} />
-          <Route path="/drinks" element={<Drinks onShowAuth={() => setShowAuth(true)} />} />
+          <Route path="/drinks" element={<Drinks />} />
           <Route path="/help" element={<HelpPage />} />
           <Route path="/contact" element={<ContactPage />} />
           {/* Add more routes as needed */}
@@ -650,8 +650,15 @@ const EditProfilePanel: React.FC<{
             <div className="counter" style={{ position: 'absolute', right: 10, bottom: -18, color: '#4F4F4F', fontSize: 12 }}>{bio.length}/100</div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'row', marginTop: 30 }}>
-            <button type="submit" className="save-btn" style={{ background: '#CE975E', padding: '12px 25px', borderRadius: 10, marginRight: 10, color: '#DFDCD9', fontSize: 16, fontWeight: 600, border: 'none' }}>Save</button>
-            <button type="button" className="cancel-btn" style={{ background: '#444', padding: '12px 25px', borderRadius: 10, color: '#DFDCD9', fontSize: 16, fontWeight: 600, border: 'none' }} onClick={onClose}>Cancel</button>
+            <button
+              type="submit"
+              className="save-btn"
+              style={{ background: '#CE975E', padding: '12px 25px', borderRadius: 10, marginRight: 10, color: '#DFDCD9', fontSize: 16, fontWeight: 600, border: 'none', opacity: isSaving ? 0.7 : 1, cursor: isSaving ? 'not-allowed' : 'pointer' }}
+              disabled={isSaving}
+            >
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+            <button type="button" className="cancel-btn" style={{ background: '#444', padding: '12px 25px', borderRadius: 10, color: '#DFDCD9', fontSize: 16, fontWeight: 600, border: 'none' }} onClick={onClose} disabled={isSaving}>Cancel</button>
           </div>
         </form>
       </div>
