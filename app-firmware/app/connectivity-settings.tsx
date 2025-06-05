@@ -386,33 +386,34 @@ export default function ConnectivitySettings() {
             </TouchableOpacity>
           )}
           contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
+          ListFooterComponent={
+            !isScanning ? (
+              <View style={styles.deviceRow}>
+                <TextInput
+                  style={[styles.deviceName, styles.manualDeviceInput]}
+                  placeholder="Enter LiquorBot ID manually"
+                  placeholderTextColor="#4F4F4F"
+                  value={manualId}
+                  onChangeText={t => { setManualId(t); setManualError(''); }}
+                  autoCapitalize="characters"
+                  maxLength={12}
+                  editable={!isScanning}
+                />
+                <TouchableOpacity
+                  style={[styles.manualBtn, { marginLeft: 8 }]}
+                  onPress={handleManualSubmit}
+                  disabled={!manualId.trim()}
+                >
+                  <Text style={styles.manualBtnText}>Set</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null
+          }
           refreshControl={(
             <RefreshControl refreshing={false} onRefresh={scanForDevices}
               tintColor="transparent" colors={['transparent']} />
           )}
         />
-
-        {/* Manual entry bar, only when not scanning */}
-        {!isScanning && (
-          <View style={styles.manualBar}>
-            <TextInput
-              style={styles.manualInput}
-              placeholder="Enter LiquorBot ID manually"
-              placeholderTextColor="#4F4F4F"
-              value={manualId}
-              onChangeText={t => { setManualId(t); setManualError(''); }}
-              autoCapitalize="characters"
-              maxLength={12}
-            />
-            <TouchableOpacity
-              style={styles.manualBtn}
-              onPress={handleManualSubmit}
-              disabled={!manualId.trim()}
-            >
-              <Text style={styles.manualBtnText}>Set</Text>
-            </TouchableOpacity>
-          </View>
-        )}
         {!!manualError && !isScanning && (
           <Text style={styles.manualError}>{manualError}</Text>
         )}
@@ -577,6 +578,16 @@ const styles = StyleSheet.create({
     color: '#141414',
     fontWeight: 'bold',
     fontSize: 15,
+  },
+  manualDeviceInput: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    marginRight: 0,
+    fontSize: 16,
+    color: '#DFDCD9',
   },
   manualError: {
     color: '#d44a4a',
