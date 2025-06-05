@@ -391,11 +391,14 @@ export default function ConnectivitySettings() {
           contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
           ListFooterComponent={
             !isScanning ? (
-              <TouchableOpacity onPress={() => setManualModalVisible(true)} style={{ alignItems: 'center', marginTop: 10 }}>
-                <Text style={{ color: '#CE975E', textDecorationLine: 'underline', fontSize: 15 }}>
-                  Can’t find your LiquorBot? Enter ID manually
+              <View style={{ alignItems: 'center', marginTop: 10 }}>
+                <Text style={styles.manualHintText}>
+                  Can’t find your LiquorBot?
                 </Text>
-              </TouchableOpacity>
+                <TouchableOpacity onPress={() => setManualModalVisible(true)} style={styles.manualGoldBtn}>
+                  <Text style={styles.manualGoldBtnText}>Enter ID manually</Text>
+                </TouchableOpacity>
+              </View>
             ) : null
           }
           refreshControl={(
@@ -633,5 +636,28 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginLeft: 4,
     fontSize: 13,
+  },
+
+  /* new styles for manual ID entry hint and button */
+  manualHintText: {
+    color: '#B0B0B0', // lighter gray
+    fontSize: 14,    // smaller text
+    marginBottom: 4,
+    textAlign: 'center',
+    fontWeight: '400',
+  },
+  manualGoldBtn: {
+    backgroundColor: '#CE975E',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  manualGoldBtnText: {
+    color: '#141414',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
 });
