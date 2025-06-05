@@ -89,6 +89,7 @@ const EventsPage: React.FC = () => {
   const [eventDeviceId, setEventDeviceId] = useState('');
   const [selectedDrinkIds, setSelectedDrinkIds] = useState<number[]>([]);
   const [selectedCustomIds, setSelectedCustomIds] = useState<string[]>([]);
+  const [isJoining, setIsJoining] = useState(false);
 
   const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey', 'Gin', 'Brandy', 'Liqueur', 'Custom'];
 
@@ -190,7 +191,7 @@ const EventsPage: React.FC = () => {
           }
         } catch (error) {
           console.error(`Error fetching custom recipe ${id}:`, error);
-          newRecipes[id] = { id, name: `Custom Drink (${id.slice(0, 6)})` };
+          newRecipes[id] = { id, name: `Custom Drink (${id.slice(0, 1)})` };
         }
       }
     }
@@ -212,7 +213,7 @@ const EventsPage: React.FC = () => {
 
   const handleJoinEvent = async () => {
     if (!inviteCode.trim()) return;
-    
+    setIsJoining(true);
     try {
       await client.graphql({
         query: joinEvent,
@@ -226,6 +227,8 @@ const EventsPage: React.FC = () => {
     } catch (error) {
       console.error('Error joining event:', error);
       alert('Could not join event. Please check the invite code.');
+    } finally {
+      setIsJoining(false);
     }
   };
 
@@ -315,8 +318,8 @@ const EventsPage: React.FC = () => {
       setTimeout(() => { setFormShake(false); }, 500);
       return;
     }
-    if (!/^\d{1}$/.test(eventDeviceId.trim())) {
-      setFormError('Device ID must be a 6-digit number');
+    if (!/^\d{1,6}$/.test(eventDeviceId.trim()) || eventDeviceId.trim().length > 6) {
+      setFormError('Device ID must be 6 digits');
       setFormShake(true);
       setTimeout(() => { setFormShake(false); }, 500);
       return;
@@ -339,7 +342,11 @@ const EventsPage: React.FC = () => {
             startTime: new Date(eventStartTime).toISOString(),
             endTime: new Date(eventEndTime).toISOString(),
             liquorbotId: parseInt(eventDeviceId, 10),
-            inviteCode: Math.random().toString(36).substring(2, 10).toUpperCase(),
+            // Generate a 6-digit numeric invite code
+            inviteCode: Array.from({length: 6}, () => {
+              const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+              return chars.charAt(Math.floor(Math.random() * chars.length));
+            }).join(''),
             owner: currentUser || '',
             drinkIDs: selectedDrinkIds,
             customRecipeIDs: selectedCustomIds
@@ -372,8 +379,8 @@ const EventsPage: React.FC = () => {
       setTimeout(() => { setFormShake(false); }, 500);
       return;
     }
-    if (!/^\d{1}$/.test(eventDeviceId.trim())) {
-      setFormError('Device ID must be a 6-digit number');
+    if (!/^\d{1,6}$/.test(eventDeviceId.trim()) || eventDeviceId.trim().length > 6) {
+      setFormError('Device ID must be 1 to 6 digits');
       setFormShake(true);
       setTimeout(() => { setFormShake(false); }, 500);
       return;
@@ -546,7 +553,7 @@ const EventsPage: React.FC = () => {
   };
 
   const getCustomName = (id: string) => {
-    return customRecipes[id]?.name || `Custom Recipe #${id.slice(0, 6)}`;
+    return customRecipes[id]?.name || `Custom Recipe #${id.slice(0, 1)}`;
   };
 
   // Fetch ingredients list
@@ -876,24 +883,42 @@ const EventsPage: React.FC = () => {
                 className="modal-input"
                 placeholder="Enter invite code"
                 value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value)}
+                onChange={(e) => {
+                  // Only allow alphanumeric and auto-uppercase
+                  const val = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                  setInviteCode(val);
+                }}
+                disabled={isJoining}
               />
             </div>
             <div className="modal-footer">
               <button 
                 className="lb-btn secondary"
                 onClick={() => setShowJoinModal(false)}
+                disabled={isJoining}
               >
                 Cancel
               </button>
               <button 
                 className="lb-btn"
                 onClick={handleJoinEvent}
+                disabled={isJoining}
+                style={{ position: 'relative', minWidth: 120 }}
               >
-                Join Event
+                {isJoining ? (
+                  <span style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 24 }}>
+                    <span className="spinner" style={{ width: 24, height: 24, border: '3px solid #eee', borderTop: '3px solid #ce975e', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                  </span>
+                ) : 'Join Event'}
               </button>
             </div>
           </div>
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
         </div>
       )}
 

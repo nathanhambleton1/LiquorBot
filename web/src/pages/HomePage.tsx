@@ -328,15 +328,15 @@ const AppPreviews: React.FC = () => {
 
 const HelpCTA: React.FC = () => (
   <section id="help" className="lb-help">
-    <div className="lb-container">
-      <div className="help-content">
-        <h2>Need a Hand?</h2>
-        <p>
+    <div className="lb-container" style={{ display: 'flex', justifyContent: 'center' }}>
+      <div className="help-content" style={{ maxWidth: 580, width: '100%', textAlign: 'center', margin: '0 auto' }}>
+        <h2 style={{ textAlign: 'center' }}>Need a Hand?</h2>
+        <p style={{ textAlign: 'center' }}>
           The&nbsp;<strong>LiquorBot Help Center</strong> walks you through setup,
           troubleshooting and pro-level tips.
         </p>
-        <a href="/help" className="lb-btn secondary">
-          View Help&nbsp;→
+        <a href="/help" className="lb-btn secondary" style={{ display: 'block', margin: '1.5rem auto 0', textAlign: 'center', width: 'fit-content', minWidth: 300 }}>
+          View Help
         </a>
       </div>
     </div>

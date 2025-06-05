@@ -91,6 +91,7 @@ const App: React.FC = () => {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const [language, setLanguage] = React.useState('en');
+  const [authInitialState, setAuthInitialState] = React.useState<'signIn' | 'signUp'>('signIn');
 
   const refreshUserAttributes = async () => {
     try {
@@ -215,13 +216,24 @@ const App: React.FC = () => {
     // Dropdown menu content (for mobile and desktop)
     const dropdownMenu = (
       <div className="profile-dropdown" style={{ position: 'absolute', right: 0, top: 48, background: '#232323', borderRadius: 10, boxShadow: '0 4px 16px #0008', minWidth: 200, zIndex: 100, padding: '0.5rem 0', display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {/* Navigation links */}
-        <Link to="/downloads" className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textDecoration: 'none' }} onClick={() => setShowDropdown(false)}>Download</Link>
-        <Link to="/events" className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textDecoration: 'none' }} onClick={() => setShowDropdown(false)}>Events</Link>
-        <Link to="/drinks" className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textDecoration: 'none' }} onClick={() => setShowDropdown(false)}>Drinks</Link>
-        <Link to="/help" className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textDecoration: 'none' }} onClick={() => setShowDropdown(false)}>Help</Link>
-        <Link to="/contact" className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textDecoration: 'none' }} onClick={() => setShowDropdown(false)}>Contact</Link>
-        <div style={{ borderTop: '1px solid #333', margin: '8px 0' }} />
+        {/* User info segment (only if signed in) */}
+        {user && user.attributes && (
+          <div style={{ padding: '8px 18px 4px 18px', borderBottom: '1px solid #333', marginBottom: 4 }}>
+            <div style={{ color: '#aaa', fontSize: 13, fontWeight: 500, marginBottom: 2 }}>{user.username}</div>
+            <div style={{ color: '#666', fontSize: 12 }}>{user.attributes.email}</div>
+          </div>
+        )}
+        {/* Navigation links (only on mobile) */}
+        {isMobile && (
+          <>
+            <Link to="/downloads" className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textDecoration: 'none' }} onClick={() => setShowDropdown(false)}>Download</Link>
+            <Link to="/events" className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textDecoration: 'none' }} onClick={() => setShowDropdown(false)}>Events</Link>
+            <Link to="/drinks" className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textDecoration: 'none' }} onClick={() => setShowDropdown(false)}>Drinks</Link>
+            <Link to="/help" className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textDecoration: 'none' }} onClick={() => setShowDropdown(false)}>Help</Link>
+            <Link to="/contact" className="profile-dropdown-item" style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textDecoration: 'none' }} onClick={() => setShowDropdown(false)}>Contact</Link>
+            <div style={{ borderTop: '1px solid #333', margin: '8px 0' }} />
+          </>
+        )}
         {/* Profile actions */}
         {user ? (
           <>
@@ -240,9 +252,14 @@ const App: React.FC = () => {
             </button>
           </>
         ) : (
-          <button className="profile-dropdown-item" onClick={onShowAuth} style={{ background: 'none', border: 'none', color: '#ce975e', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-            <FiUser /> Sign In
-          </button>
+          <>
+            <button className="profile-dropdown-item" onClick={() => { setAuthInitialState('signIn'); onShowAuth(); }} style={{ background: 'none', border: 'none', color: '#ce975e', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+              <FiUser /> Sign In
+            </button>
+            <button className="profile-dropdown-item" onClick={() => { setAuthInitialState('signUp'); setShowDropdown(false); setShowAuth(true); }} style={{ background: 'none', border: 'none', color: '#cecece', textAlign: 'left', padding: '10px 18px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+              <FiUser style={{ opacity: 0.7 }} /> Sign Up
+            </button>
+          </>
         )}
       </div>
     );
@@ -328,6 +345,17 @@ const App: React.FC = () => {
     </footer>
   );
 
+  // Cookie/localStorage consent banner state
+  const [showCookieBanner, setShowCookieBanner] = React.useState(() => {
+    // Only show if not previously accepted
+    return !localStorage.getItem('liquorbot_cookie_consent');
+  });
+
+  const handleAcceptCookies = () => {
+    localStorage.setItem('liquorbot_cookie_consent', 'true');
+    setShowCookieBanner(false);
+  };
+
   return (
     <LanguageContext.Provider value={{ language, setLanguage }}>
       <ThemeProvider theme={liquorTheme}>
@@ -368,6 +396,7 @@ const App: React.FC = () => {
               components={authComponents}
               variation="modal"
               hideSignUp={false}
+              initialState={authInitialState}
               loginMechanisms={['username']}
               formFields={{
                 signIn: {
@@ -379,9 +408,83 @@ const App: React.FC = () => {
                   },
                 },
               }}
+              className="custom-auth-amplify"
             >
               {() => <></>}
             </Authenticator>
+          </div>
+        )}
+        {/* Cookie/localStorage consent banner */}
+        {showCookieBanner && (
+          <div style={{
+            position: 'fixed',
+            bottom: 24,
+            left: 24,
+            zIndex: 3000,
+            display: 'flex',
+            justifyContent: 'flex-start',
+            pointerEvents: 'none',
+            width: '100%',
+          }}>
+            <div
+              style={{
+                background: '#232323',
+                color: '#DFDCD9',
+                borderRadius: 14,
+                boxShadow: '0 4px 24px #0008',
+                padding: '14px 32px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 22,
+                maxWidth: 650,
+                width: '99vw',
+                fontSize: 15,
+                pointerEvents: 'auto',
+                flexWrap: 'wrap',
+              }}
+            >
+              {/* Cookie image */}
+              <img src="/assets/cookie.png" alt="Cookie" style={{ width: 38, height: 38, objectFit: 'contain', marginRight: 10, background: 'none', borderRadius: 0, padding: 0 }} />
+              <span style={{ flex: 1, minWidth: 120 }}>
+                This site uses cookies. By continuing, you accept our use of cookies.
+              </span>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={handleAcceptCookies}
+                  style={{
+                    background: '#CE975E',
+                    color: '#232323',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '8px 18px',
+                    fontWeight: 600,
+                    fontSize: 15,
+                    cursor: 'pointer',
+                    transition: 'background 0.15s',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Accept
+                </button>
+                <button
+                  onClick={() => setShowCookieBanner(false)}
+                  style={{
+                    background: 'transparent',
+                    color: '#aaa',
+                    border: '1px solid #444',
+                    borderRadius: 8,
+                    padding: '8px 18px',
+                    fontWeight: 500,
+                    fontSize: 15,
+                    cursor: 'pointer',
+                    transition: 'background 0.15s',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Decline
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </ThemeProvider>
@@ -753,6 +856,18 @@ const SettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           padding: 14px 16px 10px 16px;
           margin-top: 2px;
           margin-bottom: 2px;
+        }
+        .custom-auth-amplify .amplify-button,
+        .custom-auth-amplify .amplify-button--primary {
+          background-color: #ce975e !important;
+          color: #232323 !important;
+          border: none !important;
+          font-weight: 600;
+          transition: background 0.15s;
+        }
+        .custom-auth-amplify .amplify-button:hover,
+        .custom-auth-amplify .amplify-button--primary:hover {
+          background-color: #b8864b !important;
         }
       `}</style>
     </div>
