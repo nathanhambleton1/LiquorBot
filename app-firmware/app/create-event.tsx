@@ -703,11 +703,11 @@ export default function EventsScreen(){
   /* UI */
   return(
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
+      style={{ flex: 1, backgroundColor: '#141414' }} // Set background color to match app
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 30} // adjust as needed for your header
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 30}
     >
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: '#141414', flex: 1 }]}> // Ensure container also has background
         {/* close */}
         <TouchableOpacity 
           style={styles.closeBtn} 
@@ -902,7 +902,7 @@ const Field = ({
       <TextInput
         style={[
           styles.input,
-          multiline && { height: Math.max(40, height) }, // Adjust height dynamically
+          multiline && { height: Math.max(40, height), textAlignVertical: 'top' }, // Ensure text starts at the top
         ]}
         multiline={multiline}
         placeholder={ph}
@@ -911,9 +911,11 @@ const Field = ({
         onChangeText={onChange}
         onContentSizeChange={(e) => {
           if (multiline) {
-            setHeight(e.nativeEvent.contentSize.height); // Update height based on content
+            setHeight(e.nativeEvent.contentSize.height);
           }
         }}
+        blurOnSubmit={!multiline}
+        returnKeyType={multiline ? (Platform.OS === 'ios' ? 'default' : 'none') : 'done'}
       />
     </View>
   );
