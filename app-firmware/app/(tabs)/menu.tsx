@@ -34,7 +34,7 @@ import { PubSub }    from '@aws-amplify/pubsub';
 import config        from '../../src/amplifyconfiguration.json';
 
 // GraphQL & Auth
-import { generateClient } from 'aws-amplify/api';
+import { generateClient, GraphQLResult } from 'aws-amplify/api';
 import { createLikedDrink, deleteLikedDrink, createPouredDrink } from '../../src/graphql/mutations';
 import { listLikedDrinks } from '../../src/graphql/queries';
 import { getCurrentUser }  from 'aws-amplify/auth';
@@ -530,6 +530,8 @@ export default function MenuScreen() {
 
   /* ------------------------- STATE ------------------------- */
   const [drinks, setDrinks] = useState<Drink[]>([]);
+  const [allowedStd,   setAllowedStd]   = useState<number[] | null>(null);   // 🛠
+  const [allowedCustom,setAllowedCustom]= useState<string[] | null>(null);
   const [allIngredients, setAllIngredients] = useState<BaseIngredient[]>([]);
   const [loading, setLoading] = useState(true);
   const lastFocusedTime = useRef<number>(0);
@@ -595,6 +597,29 @@ export default function MenuScreen() {
     }
   }, [liquorbotId, isConnected]);
 
+  useEffect(() => {
+    if (!liquorbotId) return;
+    const topic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
+
+    const sub = pubsub.subscribe({ topics:[topic] }).subscribe({
+      next: async ({ value }) => {
+        if ((value as { action?: string })?.action !== 'MENU_UPDATE') return;
+        const v = value as { drinkIDs?: number[]; customRecipeIDs?: string[] };
+        setAllowedStd(v.drinkIDs ?? []);
+        setAllowedCustom(v.customRecipeIDs ?? []);
+        await AsyncStorage.setItem(
+          `allowedDrinks-${liquorbotId}`,
+          JSON.stringify({
+            drinkIDs: v.drinkIDs, customRecipeIDs: v.customRecipeIDs,
+            updatedAt: Date.now(),
+          }),
+        );
+      },
+      error: console.error,
+    });
+    return () => sub.unsubscribe();
+  }, [liquorbotId]);
+
   // Automatically re-request config when screen is focused
   useEffect(() => {
     if (!isFocused) return;
@@ -612,10 +637,6 @@ export default function MenuScreen() {
     
     return () => clearTimeout(retryTimer);
   }, [isFocused]);
-
-  /* ------------------------------------------------------------------ */
-  /*                      existing logic continues …                    */
-  /* ------------------------------------------------------------------ */
 
   useEffect(() => {
     (async () => {
@@ -637,6 +658,77 @@ export default function MenuScreen() {
       }
     })();
   }, []);
+
+  /* ------------------ live refresh of allowed drinks ------------------ */
+  useEffect(() => {
+    if (!isFocused || !liquorbotId) return;
+
+    (async () => {
+      try {
+        /* 1. ask the GraphQL API for *my* event that matches this LiquorBot-ID   */
+        const response = (await client.graphql({
+          query: /* GraphQL */ `
+            query MyCurrentEvent($id:Int!) {
+              listEvents(filter:{
+                liquorbotId:{eq:$id},
+                or:[
+                  {owner:{eq:"$ctx.identity.username"}},
+                  {guestOwners:{contains:"$ctx.identity.username"}}
+                ]
+              }) { items { id drinkIDs customRecipeIDs updatedAt } }
+            }`,
+          variables: { id: Number(liquorbotId) },
+          authMode: 'userPool',
+        })) as GraphQLResult<{
+          listEvents: {
+            items: {
+              id: number;
+              drinkIDs: number[];
+              customRecipeIDs: string[];
+              updatedAt: string;
+            }[];
+          };
+        }>;
+        const data = response.data;
+
+        const ev = data?.listEvents?.items?.[0];
+        if (!ev) return;                           // nothing found (unlikely)
+
+        /* 2. update state + cache only if something actually changed            */
+        const needsUpdate =
+          JSON.stringify(ev.drinkIDs)        !== JSON.stringify(allowedStd)   ||
+          JSON.stringify(ev.customRecipeIDs) !== JSON.stringify(allowedCustom);
+
+        if (needsUpdate) {
+          setAllowedStd(ev.drinkIDs        ?? []);
+          setAllowedCustom(ev.customRecipeIDs ?? []);
+          await AsyncStorage.setItem(
+            `allowedDrinks-${liquorbotId}`,
+            JSON.stringify({
+              drinkIDs:        ev.drinkIDs        ?? [],
+              customRecipeIDs: ev.customRecipeIDs ?? [],
+              updatedAt:       ev.updatedAt,
+            }),
+          );
+        }
+      } catch (e) {
+        console.warn('[Menu] live refresh failed – using local cache', e);
+      }
+    })();
+  }, [isFocused, liquorbotId]);
+
+  useEffect(() => {
+    if (!liquorbotId) { setAllowedStd(null); setAllowedCustom(null); return; }
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(`allowedDrinks-${liquorbotId}`);
+        if (!raw) { setAllowedStd(null); setAllowedCustom(null); return; }
+        const { drinkIDs = [], customRecipeIDs = [] } = JSON.parse(raw);
+        setAllowedStd(drinkIDs);
+        setAllowedCustom(customRecipeIDs);
+      } catch { /* ignore */ }
+    })();
+  }, [liquorbotId, isFocused]);
 
   useEffect(() => {
     if (!isAdmin) setOnlyMakeable(true);   // force ON once we know the role
@@ -777,7 +869,12 @@ export default function MenuScreen() {
 
   /* -------- Pull the user’s CustomRecipe items ---------- */
   useEffect(() => {
-    if (!userID) return;
+    /* fetch whichever custom recipes this device is *allowed* to show         */
+    const targetIds: string[] =
+      (allowedCustom && allowedCustom.length) ? allowedCustom :
+      userID ? [] : [];        // always assign string[]
+
+    if (!targetIds.length && !userID) return;   // neither owner nor allowed list
 
     (async () => {
       try {
@@ -789,7 +886,12 @@ export default function MenuScreen() {
         const placeholder =
           'https://d3jj0su0y4d6lr.cloudfront.net/placeholder_drink.png';
 
-        const items = ('data' in res && res.data?.listCustomRecipes?.items) ?? [];
+        /* Narrow to relevant recipes */
+        const items = (
+          ('data' in res && res.data?.listCustomRecipes?.items) ?? []
+        ).filter((it: any) =>
+          !targetIds.length || targetIds.includes(it.id)
+        );
 
         const custom: Drink[] = await Promise.all(
           items.map(async (item: any, idx: number): Promise<Drink> => {
@@ -889,7 +991,16 @@ export default function MenuScreen() {
   const canMake = (drink: Drink) =>
     onlyMakeable ? isDrinkMakeable(drink) : true;
 
-  let filteredDrinks = drinks.filter(
+  const inAllowed = (d: Drink) => {
+    if (!allowedStd && !allowedCustom) return true;      // owner / admin
+    return d.isCustom
+      ? allowedCustom?.includes(d.recipeId ?? '') ?? false
+      : allowedStd?.includes(d.id) ?? false;
+  };
+
+  let filteredDrinks = drinks
+    .filter(inAllowed)           // 🛠  NEW first pass
+    .filter(
     (d) =>
       (!onlyCustom || d.category === 'Custom') &&
       (selectedCategory === 'All' || d.category === selectedCategory) &&

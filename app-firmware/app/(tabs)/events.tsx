@@ -16,6 +16,7 @@ import { fetchAuthSession }           from '@aws-amplify/auth';
 import * as Clipboard                 from 'expo-clipboard';
 import { listEvents, eventsByCode, getCustomRecipe } from '../../src/graphql/queries';
 import { deleteEvent, joinEvent, leaveEvent } from '../../src/graphql/mutations';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLiquorBot }               from '../components/liquorbot-provider';
 import { getUrl }                     from 'aws-amplify/storage';
 import { Hub } from 'aws-amplify/utils';
@@ -353,6 +354,14 @@ export default function EventManager() {
       }) as { data: { joinEvent: Event } };
 
       setEvents(prev => prev.some(e => e.inviteCode === code) ? prev : [...prev, data.joinEvent]);
+      /* 🛠  make the same cache write for guests  */
+      await AsyncStorage.setItem(
+        `allowedDrinks-${data.joinEvent.liquorbotId}`,
+        JSON.stringify({
+          drinkIDs:        data.joinEvent.drinkIDs        ?? [],
+          customRecipeIDs: data.joinEvent.customRecipeIDs ?? [],
+        }),
+      );
       setJoinModalVisible(false);
       setInviteCodeInput('');
     } catch (err: any) {
@@ -453,7 +462,7 @@ export default function EventManager() {
             recipe &&
             (typeof recipe.ingredients === 'string' || Array.isArray(recipe.ingredients))
         ) {
-            drinkObjs.push(recipe);               // 👈 now allowed
+            drinkObjs.push(recipe);
         }
       }
 
@@ -502,6 +511,22 @@ export default function EventManager() {
         })
       ));
       await publishSlotMessage({ action: 'GET_CONFIG' });
+      await pubsub.publish({
+        topics:[`liquorbot/liquorbot${event.liquorbotId}/slot-config`],
+        message:{
+          action:'MENU_UPDATE',
+          drinkIDs:        event.drinkIDs        ?? [],
+          customRecipeIDs: event.customRecipeIDs ?? [],
+        },
+      });
+      /* 🛠  store the canonical drink list so every guest device can read it */
+      await AsyncStorage.setItem(
+        `allowedDrinks-${event.liquorbotId}`,
+        JSON.stringify({
+          drinkIDs:        event.drinkIDs        ?? [],
+          customRecipeIDs: event.customRecipeIDs ?? [],
+        }),
+      );
       setSuccessDeviceId(event.id);
       setTimeout(() => setSuccessDeviceId(null), 2000);
     } catch (e) {
