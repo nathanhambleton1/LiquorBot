@@ -60,6 +60,11 @@ export default function ConnectivitySettings() {
   const [progressVisible, setProgressVisible] = useState(false);
   const [progressStep, setProgressStep]       = useState<0 | 1 | 2 | 3>(0); // 0 = hidden
 
+  /*──────── Manual ID Entry modal ─────*/
+  const [manualModalVisible, setManualModalVisible] = useState(false);
+  const [manualId, setManualId]                 = useState('');
+  const [manualError, setManualError]           = useState('');
+
   /*──────── Managers / refs ─────*/
   const managerRef            = useRef<BleManager | null>(null);
   const getManager            = () => (managerRef.current ||= new BleManager());
@@ -304,8 +309,6 @@ export default function ConnectivitySettings() {
   useEffect(() => { if (wifiModalVisible) loadWifiList(); }, [wifiModalVisible]);
 
   // ───── Manual LiquorBot ID entry ─────
-  const [manualId, setManualId] = useState('');
-  const [manualError, setManualError] = useState('');
   const handleManualSubmit = async () => {
     const id = manualId.trim().toUpperCase();
     if (!id.match(/^[A-F0-9]{3,}$/)) {
@@ -388,25 +391,11 @@ export default function ConnectivitySettings() {
           contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
           ListFooterComponent={
             !isScanning ? (
-              <View style={styles.deviceRow}>
-                <TextInput
-                  style={[styles.deviceName, styles.manualDeviceInput]}
-                  placeholder="Enter LiquorBot ID manually"
-                  placeholderTextColor="#4F4F4F"
-                  value={manualId}
-                  onChangeText={t => { setManualId(t); setManualError(''); }}
-                  autoCapitalize="characters"
-                  maxLength={12}
-                  editable={!isScanning}
-                />
-                <TouchableOpacity
-                  style={[styles.manualBtn, { marginLeft: 8 }]}
-                  onPress={handleManualSubmit}
-                  disabled={!manualId.trim()}
-                >
-                  <Text style={styles.manualBtnText}>Set</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity onPress={() => setManualModalVisible(true)} style={{ alignItems: 'center', marginTop: 10 }}>
+                <Text style={{ color: '#CE975E', textDecorationLine: 'underline', fontSize: 15 }}>
+                  Can’t find your LiquorBot? Enter ID manually
+                </Text>
+              </TouchableOpacity>
             ) : null
           }
           refreshControl={(
@@ -414,6 +403,56 @@ export default function ConnectivitySettings() {
               tintColor="transparent" colors={['transparent']} />
           )}
         />
+
+        {/* Manual ID Entry Modal */}
+        <Modal
+          visible={manualModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setManualModalVisible(false)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalBox}>
+              <TouchableOpacity style={styles.modalClose} onPress={() => setManualModalVisible(false)}>
+                <Ionicons name="close" size={22} color="#DFDCD9" />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Enter LiquorBot ID</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. 123ABC"
+                placeholderTextColor="#4F4F4F"
+                value={manualId}
+                onChangeText={t => { setManualId(t); setManualError(''); }}
+                autoCapitalize="characters"
+                maxLength={12}
+                editable={!isScanning}
+              />
+              {!!manualError && (
+                <Text style={styles.manualError}>{manualError}</Text>
+              )}
+              <TouchableOpacity
+                style={[styles.modalBtn, { marginTop: 10 }]}
+                onPress={async () => {
+                  const id = manualId.trim().toUpperCase();
+                  if (!id.match(/^[A-F0-9]{3,}$/)) {
+                    setManualError('Enter a valid LiquorBot ID (e.g. 123ABC)');
+                    return;
+                  }
+                  setManualError('');
+                  setLiquorbotId(id);
+                  reconnect();
+                  Alert.alert('Manual Entry', `LiquorBot ID set to ${id}`);
+                  setManualId('');
+                  setManualModalVisible(false);
+                }}
+                disabled={!manualId.trim()}
+              >
+                <Text style={styles.modalBtnText}>Set</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
         {!!manualError && !isScanning && (
           <Text style={styles.manualError}>{manualError}</Text>
         )}
