@@ -602,11 +602,7 @@ const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
               
               <div className="drink-info">
                 <h3>{drink.name}</h3>
-                {/* Only show description preview if it exists, and do not show dot dot dot for empty description */}
-                {drink.description && (
-                  <p className="description-preview">{drink.description.substring(0, 60)}{drink.description.length > 60 ? '...' : ''}</p>
-                )}
-                {/* Show ingredients preview for custom drinks in the card header, if desired (currently omitted as per user request) */}
+                <p className="description-preview">{drink.description?.substring(0, 60)}...</p>
               </div>
               
               <div className="expand-icon" style={{transition: 'transform 0.25s'}}>
