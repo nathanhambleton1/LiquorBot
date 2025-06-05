@@ -419,10 +419,17 @@ export default function EventManager() {
     setSuccessDeviceId(null);
     try {
       // Gather all unique ingredient IDs from standardDrinks and customRecipes
-      const drinkObjs = [
-        ...event.drinkIDs.map(id => standardDrinks.find(d => d.id === id)),
-        ...((event.customRecipeIDs || []).map(id => customRecipes.find(r => r.id === id)))
-      ].filter(Boolean);
+      const drinkObjs: any[] = [];
+      // Standard drinks
+      event.drinkIDs.forEach(id => {
+        const drink = standardDrinks.find(d => d.id === id) as any;
+        if (drink && 'ingredients' in drink && typeof drink.ingredients === 'string') drinkObjs.push(drink);
+      });
+      // Custom recipes (ensure we have the full object with ingredients)
+      (event.customRecipeIDs || []).forEach(id => {
+        const recipe = customRecipes.find(r => r.id === id) as any;
+        if (recipe && 'ingredients' in recipe && typeof recipe.ingredients === 'string') drinkObjs.push(recipe);
+      });
       // Each drink object should have an 'ingredients' property (string: "id:amt:prio,...")
       const allIngIds: number[] = [];
       drinkObjs.forEach((drink: any) => {
