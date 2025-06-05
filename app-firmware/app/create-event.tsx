@@ -707,7 +707,8 @@ export default function EventsScreen(){
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 30}
     >
-      <View style={[styles.container, { backgroundColor: '#141414', flex: 1 }]}> // Ensure container also has background
+      {/* Ensure container also has background */}
+      <View style={[styles.container, { backgroundColor: '#141414', flex: 1 }]}> 
         {/* close */}
         <TouchableOpacity 
           style={styles.closeBtn} 
