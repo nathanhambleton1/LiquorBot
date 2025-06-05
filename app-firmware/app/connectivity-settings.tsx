@@ -577,7 +577,7 @@ const styles = StyleSheet.create({
   manualBtnText: {
     color: '#141414',
     fontWeight: 'bold',
-    fontSize: 15,
+    fontSize: 12,
   },
   manualDeviceInput: {
     flex: 1,
