@@ -218,30 +218,43 @@ export default function EventManager() {
   /* ---------------- FILTER / SEARCH MEMO ---------------- */
   const filteredEvents = useMemo(() => {
     const now = new Date();
+    let list: Event[] = [];
 
-    const currentEvents  = events.filter(e => {
-      const s = new Date(e.startTime);
-      const e2= new Date(e.endTime);
-      return s <= now && e2 >= now;
-    });
-
-    const upcomingEvents = events.filter(e => new Date(e.startTime) >  now)
-                                 .sort((a,b)=>+new Date(a.startTime)-+new Date(b.startTime));
-
-    const pastEvents     = events.filter(e => new Date(e.endTime)   <  now)
-                                 .sort((a,b)=>+new Date(b.endTime) -+new Date(a.endTime));
-
-    let list = [...currentEvents, ...upcomingEvents, ...pastEvents];
+    if (filter === 'current') {
+      list = events.filter(e => {
+        const s = new Date(e.startTime);
+        const e2 = new Date(e.endTime);
+        return s <= now && e2 >= now;
+      });
+    } else if (filter === 'upcoming') {
+      list = events.filter(e => new Date(e.startTime) > now)
+                   .sort((a, b) => +new Date(a.startTime) - +new Date(b.startTime));
+    } else if (filter === 'past') {
+      list = events.filter(e => new Date(e.endTime) < now)
+                   .sort((a, b) => +new Date(b.endTime) - +new Date(a.endTime));
+    } else {
+      // 'all': current, then upcoming, then past
+      const currentEvents = events.filter(e => {
+        const s = new Date(e.startTime);
+        const e2 = new Date(e.endTime);
+        return s <= now && e2 >= now;
+      });
+      const upcomingEvents = events.filter(e => new Date(e.startTime) > now)
+                                   .sort((a, b) => +new Date(a.startTime) - +new Date(b.startTime));
+      const pastEvents = events.filter(e => new Date(e.endTime) < now)
+                               .sort((a, b) => +new Date(b.endTime) - +new Date(a.endTime));
+      list = [...currentEvents, ...upcomingEvents, ...pastEvents];
+    }
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       list = list.filter(e => e.name.toLowerCase().includes(q));
     }
     if (alphabetical) {
-      list.sort((a, b) => a.name.localeCompare(b.name));
+      list = [...list].sort((a, b) => a.name.localeCompare(b.name));
     }
     return list;
-  }, [events, searchQuery, alphabetical]);
+  }, [events, searchQuery, alphabetical, filter]);
 
   /* ------------------- HANDLERS (delete / leave / join) ------------------- */
   const confirmDelete = (ev: Event) =>
