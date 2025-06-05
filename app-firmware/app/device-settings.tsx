@@ -157,6 +157,7 @@ export default function DeviceSettings() {
     catch(err){ console.error('Slot publish error:',err); }
   };
   useEffect(() => {
+    if (liquorbotId === '000') return; // Don't subscribe or fetch config if disconnected
     const sub = pubsub.subscribe({ topics:[slotTopic] }).subscribe({
       next:(d)=>{
         const msg = (d as any).value ?? d;
@@ -171,7 +172,7 @@ export default function DeviceSettings() {
       },
       error:(err)=>console.error('slot-config sub error:',err),
     });
-    if (isConnected) {
+    if (isConnected && liquorbotId !== '000') {
       fetchCurrentConfig();
       retryIntervalRef.current = setInterval(()=>publishSlot({action:'GET_CONFIG'}),1500);
     }
@@ -180,7 +181,11 @@ export default function DeviceSettings() {
       if (retryIntervalRef.current) { clearInterval(retryIntervalRef.current); retryIntervalRef.current=null; }
     };
   },[isConnected, liquorbotId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const fetchCurrentConfig = () => { if (!isConnected) return; setConfigLoading(true); publishSlot({action:'GET_CONFIG'}); };
+  const fetchCurrentConfig = () => {
+    if (!isConnected || liquorbotId === '000') return;
+    setConfigLoading(true);
+    publishSlot({action:'GET_CONFIG'});
+  };
   const handleClearAll = () => bumpIfDisconnected(()=>{ publishSlot({action:'CLEAR_CONFIG'}); setSlots(Array(15).fill(0)); });
   const handleSetSlot = (idx:number,id:number) => publishSlot({action:'SET_SLOT',slot:idx+1,ingredientId:id});
 
@@ -364,6 +369,7 @@ export default function DeviceSettings() {
                 {/* Disconnect from Device button */}
                 <TouchableOpacity style={styles.disconnectButton} onPress={() => {
                   setLiquorbotId('000');
+                  setConfigLoading(false); // Stop config loading spinner
                   Alert.alert('Disconnected', 'You have disconnected from the device.');
                 }}>
                   <Text style={styles.disconnectButtonText}>Disconnect from Device</Text>
@@ -494,7 +500,7 @@ const styles = StyleSheet.create({
   advancedHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},
   dangerZoneContainer:{marginTop:15,padding:15,borderWidth:1,borderColor:'#d44a4a',borderRadius:10},
   dangerZoneHeader:{color:'#d44a4a',fontSize:16,fontWeight:'bold',marginBottom:10,textAlign:'center'},
-  disconnectButton:{backgroundColor:'#d44a4a',borderRadius:10,paddingVertical:12,alignItems:'center', marginBottom:10, marginTop: 10},
+  disconnectButton:{backgroundColor:'#d44a4a',borderRadius:10,paddingVertical:12,alignItems:'center', marginTop: 10},
   disconnectButtonText:{color:'#DFDCD9',fontSize:16,fontWeight:'bold'},
 
   connectPrompt:{position:'absolute',bottom:20,alignSelf:'center',backgroundColor:'#1F1F1F',paddingVertical:10,paddingHorizontal:20,borderRadius:10,borderWidth:1,borderColor:'#CE975E'},
