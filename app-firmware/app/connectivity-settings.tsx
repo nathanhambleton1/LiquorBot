@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
 
   /* new styles for manual ID entry hint and button */
   manualHintText: {
-    color: '#B0B0B0', // lighter gray
+    color: '#4f4f4f', // lighter gray
     fontSize: 14,    // smaller text
     marginBottom: 4,
     textAlign: 'center',
