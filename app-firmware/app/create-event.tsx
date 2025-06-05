@@ -10,7 +10,7 @@ import React, {
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView,
   Modal, FlatList, Platform, ActivityIndicator, Dimensions, Alert,
-  LayoutAnimation, UIManager,
+  LayoutAnimation, UIManager, KeyboardAvoidingView, Keyboard
 } from 'react-native';
 import Ionicons           from '@expo/vector-icons/Ionicons';
 import * as Clipboard      from 'expo-clipboard';
@@ -264,6 +264,7 @@ export default function EventsScreen(){
   const slotsOK=ingredientSet.size<=15;
   const[showSlots,setShowSlots]=useState(false);
   const [showTimeInfo, setShowTimeInfo] = useState(false);
+  const [descInputFocused, setDescInputFocused] = useState(false);
 
   useEffect(() => {
     setSynced(false)
@@ -701,6 +702,11 @@ export default function EventsScreen(){
 
   /* UI */
   return(
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+    >
     <View style={styles.container}>
       {/* close */}
       <TouchableOpacity 
@@ -715,12 +721,27 @@ export default function EventsScreen(){
           <ActivityIndicator size="large" color="#CE975E" />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.header}>Create Event</Text>
           <Field label="Event Name" value={name} onChange={setName} ph="e.g. Emma & Liam Wedding"/>
           <Field label="Location" value={location} onChange={setLocation} ph="Venue or address"/>
-          <Field label="Description" value={description} onChange={setDesc}
-                ph="Optional notes" multiline/>
+          <Field 
+            label="Description" 
+            value={description} 
+            onChange={setDesc}
+            ph="Optional notes" 
+            multiline
+            onFocus={() => setDescInputFocused(true)}
+            onBlur={() => setDescInputFocused(false)}
+          />
+          {descInputFocused && (
+            <TouchableOpacity
+              style={styles.doneButton}
+              onPress={() => { Keyboard.dismiss(); setDescInputFocused(false); }}
+            >
+              <Text style={styles.doneButtonText}>Done</Text>
+            </TouchableOpacity>
+          )}
 
           {/* ── MULTI‑DAY TOGGLE ── */}
           <TouchableOpacity
@@ -866,6 +887,7 @@ export default function EventsScreen(){
         onPick={(v) => (twTarget === 'start' ? setST(v) : setET(v))}
       />
     </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -876,12 +898,16 @@ const Field = ({
   onChange,
   ph,
   multiline = false,
+  onFocus,
+  onBlur
 }: {
   label: string;
   value: string;
   onChange: (t: string) => void;
   ph: string;
   multiline?: boolean;
+  onFocus?: () => void;
+  onBlur?: () => void;
 }) => {
   const [height, setHeight] = useState(40); // Initial height
 
@@ -903,6 +929,8 @@ const Field = ({
             setHeight(e.nativeEvent.contentSize.height); // Update height based on content
           }
         }}
+        onFocus={onFocus}
+        onBlur={onBlur}
       />
     </View>
   );
@@ -1110,4 +1138,20 @@ const styles = StyleSheet.create({
   backdrop:         { ...StyleSheet.absoluteFillObject, backgroundColor: '#0009' },
   card:             { position: 'absolute', backgroundColor: '#1F1F1F', borderRadius: 16, overflow: 'hidden', justifyContent: 'center' },
   closeIcon:        { position: 'absolute', top: 6, right: 6, padding: 6, zIndex: 10, elevation: 10 },
+  doneButton: {
+    position: 'absolute',
+    right: 20,
+    bottom: Platform.OS === 'ios' ? 320 : 20,
+    backgroundColor: '#CE975E',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    zIndex: 100,
+    alignSelf: 'flex-end',
+  },
+  doneButtonText: {
+    color: '#141414',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
 });

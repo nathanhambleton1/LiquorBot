@@ -7,7 +7,7 @@ import { Amplify } from 'aws-amplify';
 import config from '../amplifyconfiguration.json';
 import { createCustomRecipe, updateCustomRecipe, deleteCustomRecipe } from '../graphql/mutations';
 import { listCustomRecipes } from '../graphql/queries';
-import { FiSearch, FiChevronDown, FiPlus, FiInfo, FiTrash2 } from 'react-icons/fi';
+import { FiSearch, FiChevronDown, FiPlus, FiInfo, FiTrash2, FiEdit } from 'react-icons/fi';
 
 // Configure Amplify
 Amplify.configure(config);
@@ -566,7 +566,29 @@ const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
           <div 
             className={`drink-card ${drink.isCustom ? 'custom' : ''} ${expandedDrinkId === drink.id ? 'expanded' : ''}`}
             key={drink.id}
+            style={{ position: 'relative' }}
           >
+            {/* Edit/Delete icons for custom drinks */}
+            {drink.isCustom && isLoggedIn && (
+              <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 2, display: 'flex', gap: 10 }}>
+                <button 
+                  className="icon-btn"
+                  title="Edit"
+                  onClick={e => { e.stopPropagation(); openEditModal(drink as CustomDrink); }}
+                  style={{ background: 'none', border: 'none', padding: 4, borderRadius: '50%', cursor: 'pointer', color: '#ce975e', transition: 'background 0.2s' }}
+                >
+                  <FiEdit size={20} />
+                </button>
+                <button 
+                  className="icon-btn"
+                  title="Delete"
+                  onClick={e => { e.stopPropagation(); handleDelete(drink as CustomDrink); }}
+                  style={{ background: 'none', border: 'none', padding: 4, borderRadius: '50%', cursor: 'pointer', color: '#d72638', transition: 'background 0.2s' }}
+                >
+                  <FiTrash2 size={20} />
+                </button>
+              </div>
+            )}
             <div 
               className="drink-card-header"
               onClick={() => toggleExpand(drink.id)}
@@ -580,7 +602,11 @@ const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
               
               <div className="drink-info">
                 <h3>{drink.name}</h3>
-                <p className="description-preview">{drink.description?.substring(0, 60)}...</p>
+                {/* Only show description preview if it exists, and do not show dot dot dot for empty description */}
+                {drink.description && (
+                  <p className="description-preview">{drink.description.substring(0, 60)}{drink.description.length > 60 ? '...' : ''}</p>
+                )}
+                {/* Show ingredients preview for custom drinks in the card header, if desired (currently omitted as per user request) */}
               </div>
               
               <div className="expand-icon" style={{transition: 'transform 0.25s'}}>
@@ -610,28 +636,7 @@ const Drinks: React.FC<DrinksProps> = ({ onShowAuth }) => {
                   </div>
                 )}
                 
-                {drink.isCustom && isLoggedIn && (
-                  <div className="drink-actions">
-                    <button 
-                      className="edit-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditModal(drink as CustomDrink);
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button 
-                      className="delete-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(drink as CustomDrink);
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
+                {/* Removed drink-actions edit/delete buttons here */}
               </div>
             )}
           </div>
