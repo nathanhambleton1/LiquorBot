@@ -23,18 +23,7 @@
 }
 
 .create-drink-btn {
-  background-color: #ce975e;
-  color: white;
-  border: none;
-  padding: 0.8rem 1.5rem;
-  border-radius: 30px;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: background-color 0.3s;
-}
-
-.create-drink-btn:hover {
-  background-color: #b8834d;
+  display: none;
 }
 
 .drinks-grid {
@@ -55,7 +44,7 @@
 }
 
 .drink-card.custom {
-  border: 2px solid #ce975e;
+  border: none;
 }
 
 .drink-card.expanded {
@@ -89,16 +78,7 @@
 }
 
 .custom-badge {
-  position: absolute;
-  top: -30px;
-  left: -30px;
-  background: #ce975e;
-  color: white;
-  padding: 0.3rem 0.8rem;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  font-weight: bold;
-  z-index: 1;
+  display: none;
 }
 
 .drink-info {
@@ -193,18 +173,7 @@
 }
 
 .auth-prompt {
-  text-align: center;
-  margin-top: 3rem;
-  color: #9e9e9e;
-}
-
-.auth-prompt a {
-  color: #ce975e;
-  text-decoration: none;
-}
-
-.auth-prompt a:hover {
-  text-decoration: underline;
+  display: none;
 }
 
 /* Modal Styles */
@@ -366,63 +335,12 @@
 }
 
 /* iOS Toggle Switch */
-.ios-toggle {
-  background: none;
-  border: none;
-  outline: none;
-  cursor: pointer;
-  padding: 0;
-  margin: 0;
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-}
-
-.ios-toggle-track {
-  width: 48px;
-  height: 28px;
-  background: #444;
-  border-radius: 14px;
-  position: relative;
-  transition: background 0.2s;
-  display: flex;
-  align-items: center;
-}
-
-.ios-toggle.checked .ios-toggle-track {
-  background: var(--accent, #ce975e);
-}
-
-.ios-toggle-thumb {
-  width: 22px;
-  height: 22px;
-  background: #fff;
-  border-radius: 50%;
-  position: absolute;
-  left: 3px;
-  top: 3px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
-  transition: left 0.2s;
-}
-
+.ios-toggle,
+.ios-toggle-track,
+.ios-toggle.checked .ios-toggle-track,
+.ios-toggle-thumb,
 .ios-toggle.checked .ios-toggle-thumb {
-  left: 23px;
-}
-
-@media (max-width: 900px) {
-  .drink-modal {
-    max-width: 98vw;
-    width: 99%;
-    padding: 1.2rem;
-  }
-}
-
-@media (max-width: 600px) {
-  .drink-modal {
-    max-width: 99vw;
-    width: 100%;
-    padding: 1rem;
-  }
+  display: none !important;
 }
 
 .volume-controls,

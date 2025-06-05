@@ -552,9 +552,11 @@ export default function EventManager() {
           <Ionicons name="log-in-outline" size={24} color="#141414"/>
           <Text style={styles.joinTxt}>Join Event</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.newBtn} onPress={()=>router.push('/create-event')}>
-          <Ionicons name="add" size={28} color="#141414"/>
-        </TouchableOpacity>
+        {isAdmin && (
+          <TouchableOpacity style={styles.newBtn} onPress={()=>router.push('/create-event')}>
+            <Ionicons name="add" size={28} color="#141414"/>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* filter modal */}
