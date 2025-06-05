@@ -538,3 +538,120 @@
   pointer-events: none;
   z-index: 10;
 }
+
+/* --- Join Event Modal Styles --- */
+.join-modal-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 340px;
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 36px 32px 28px 32px;
+  border-radius: 18px;
+  background: #181818;
+  box-shadow: none;
+}
+.join-modal-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+.join-modal-title {
+  width: 100%;
+  text-align: center;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #ce975e;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+.join-modal-body {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 24px;
+}
+.join-label {
+  font-size: 1.1rem;
+  color: #cecece;
+  margin-bottom: 18px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+.join-input {
+  letter-spacing: 0.35em;
+  font-size: 28px;
+  text-align: center;
+  font-weight: 600;
+  padding: 18px 0;
+  border-radius: 10px;
+  border: 2px solid #ce975e;
+  background: #232323;
+  color: #fff;
+  margin: 0 auto;
+  width: 80%;
+  max-width: 320px;
+  box-shadow: none;
+  margin-bottom: 0;
+  outline: none;
+  transition: border 0.2s;
+}
+.join-modal-footer {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 10px;
+}
+.join-btn {
+  background: linear-gradient(90deg, #ce975e 0%, #b07d4a 100%);
+  color: #fff;
+  font-weight: 600;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  box-shadow: 0 2px 8px rgba(206,151,94,0.10);
+  border: none;
+  transition: background 0.2s, box-shadow 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 140px;
+  gap: 8px;
+}
+.join-btn:disabled {
+  background: #b07d4a;
+  opacity: 0.7;
+}
+.join-cancel-btn {
+  background: #232323;
+  color: #cecece;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  border: 1.5px solid #ce975e;
+  font-weight: 500;
+  transition: background 0.2s, color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.join-cancel-btn:hover:not(:disabled) {
+  background: #2d2d2d;
+  color: #fff;
+}
+@media (max-width: 600px) {
+  .join-modal-content {
+    min-width: 90vw;
+    max-width: 98vw;
+    padding: 24px 8vw 18px 8vw;
+  }
+  .join-input {
+    font-size: 22px !important;
+    padding: 14px 0 !important;
+  }
+}

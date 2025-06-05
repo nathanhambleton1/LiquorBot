@@ -6,7 +6,7 @@ import { deleteEvent, joinEvent, createEvent, updateEvent, leaveEvent } from '..
 import { fetchAuthSession } from '@aws-amplify/auth';
 import { getUrl } from 'aws-amplify/storage';
 import './styles/EventsPage.css';
-import { FiEdit2, FiTrash2, FiLogOut, FiPlus, FiX, FiCalendar } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiLogOut, FiPlus, FiX, FiCalendar, FiLogIn } from 'react-icons/fi';
 
 const client = generateClient();
 
@@ -475,6 +475,22 @@ const EventsPage: React.FC = () => {
     });
   };
 
+  // Helper to format time range in 12-hour format with AM/PM
+  function formatTimeRange(start: string, end: string) {
+    if (!start || !end) return '';
+    const format = (dt: string) => {
+      const d = new Date(dt);
+      let hours = d.getHours();
+      const minutes = d.getMinutes();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12; // 0 should be 12
+      const mins = minutes < 10 ? `0${minutes}` : minutes;
+      return `${hours}:${mins} ${ampm}`;
+    };
+    return `${format(start)} - ${format(end)}`;
+  }
+
   const toggleExpand = (id: string) => {
     if (expandedEventId === id) {
       setExpandedEventId(null);
@@ -737,6 +753,12 @@ const EventsPage: React.FC = () => {
                     <span>{formatDate(event.startTime)}</span>
                     {event.location && <span> • {event.location}</span>}
                   </div>
+                  {/* Show event time (start - end) in 12-hour format on a new line, styled like the date */}
+                  {event.startTime && event.endTime && (
+                    <div className="event-meta">
+                      <span>{formatTimeRange(event.startTime, event.endTime)}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="event-card-actions" style={{ display: 'flex', gap: 8 }} onClick={e => e.stopPropagation()}>
                   {event.owner === currentUser ? (
@@ -867,9 +889,11 @@ const EventsPage: React.FC = () => {
       {/* Join Event Modal */}
       {showJoinModal && (
         <div className="events-modal">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 className="modal-title">Join an Event</h3>
+          <div className="modal-content join-modal-content">
+            <div className="modal-header join-modal-header">
+              <h3 className="modal-title join-modal-title">
+                Join an Event
+              </h3>
               <span 
                 className="modal-close" 
                 onClick={() => setShowJoinModal(false)}
@@ -877,11 +901,13 @@ const EventsPage: React.FC = () => {
                 &times;
               </span>
             </div>
-            <div className="modal-body">
+            <div className="modal-body join-modal-body">
+              <label htmlFor="invite-code-input" className="join-label">Enter Invite Code</label>
               <input
+                id="invite-code-input"
                 type="text"
-                className="modal-input"
-                placeholder="Enter invite code"
+                className="modal-input join-input"
+                placeholder="ABC123"
                 value={inviteCode}
                 onChange={(e) => {
                   // Only allow alphanumeric and auto-uppercase
@@ -889,36 +915,36 @@ const EventsPage: React.FC = () => {
                   setInviteCode(val);
                 }}
                 disabled={isJoining}
+                maxLength={6}
+                autoFocus
               />
             </div>
-            <div className="modal-footer">
+            <div className="modal-footer join-modal-footer">
               <button 
-                className="lb-btn secondary"
+                className="lb-btn secondary join-cancel-btn"
                 onClick={() => setShowJoinModal(false)}
                 disabled={isJoining}
               >
-                Cancel
+                <FiX style={{ fontSize: 18 }} /> Cancel
               </button>
               <button 
-                className="lb-btn"
+                className="lb-btn join-btn"
                 onClick={handleJoinEvent}
                 disabled={isJoining}
-                style={{ position: 'relative', minWidth: 120 }}
               >
                 {isJoining ? (
                   <span style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 24 }}>
                     <span className="spinner" style={{ width: 24, height: 24, border: '3px solid #eee', borderTop: '3px solid #ce975e', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
                   </span>
-                ) : 'Join Event'}
+                ) : (
+                  <>
+                    <FiLogIn style={{ fontSize: 18 }} />
+                    Join Event
+                  </>
+                )}
               </button>
             </div>
           </div>
-          <style>{`
-            @keyframes spin {
-              0% { transform: rotate(0deg); }
-              100% { transform: rotate(360deg); }
-            }
-          `}</style>
         </div>
       )}
 
