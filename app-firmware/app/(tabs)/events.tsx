@@ -669,7 +669,7 @@ export default function EventManager() {
         )}
         {isOwner && isExpanded && isPast && (
           <Text style={{ color: '#8F8F8F', fontSize: 12, marginTop: 16, textAlign: 'center' }}>
-            Unable to change events that have passed.
+            You are unable to make any changes events that have already ended. Please create a new event for future changes.
           </Text>
         )}
         {errorDeviceId === item.id && (
