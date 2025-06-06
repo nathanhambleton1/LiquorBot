@@ -49,6 +49,7 @@ export default function LikedDrinksPopup({ drinks: external = [] }: Props) {
   const [drinks,   setDrinks]   = useState<Drink[]>(external);
   const [loading,  setLoading]  = useState(external.length === 0);
   const [error,    setError]    = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<number | null>(null);
 
   // Refetch logic extracted for reuse
   const fetchLikedDrinks = React.useCallback(async () => {
@@ -157,6 +158,7 @@ export default function LikedDrinksPopup({ drinks: external = [] }: Props) {
   );
 
   async function removeLiked(drinkId: number) {
+    setRemovingId(drinkId);
     try {
       const user = await getCurrentUser();
       const res  = await client.graphql({
@@ -175,6 +177,8 @@ export default function LikedDrinksPopup({ drinks: external = [] }: Props) {
       }
     } catch (e) {
       console.error('Failed to remove like', e);
+    } finally {
+      setRemovingId(null);
     }
   }
 
@@ -203,12 +207,16 @@ export default function LikedDrinksPopup({ drinks: external = [] }: Props) {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Ionicons name="heart" size={24} color="#CE975E" style={{ marginRight: 6 }} />
-            <Ionicons
-              name="close"
-              size={22}
-              color="#8A8A8A"
-              onPress={() => removeLiked(d.id)}
-            />
+            {removingId === d.id ? (
+              <ActivityIndicator size="small" color="#8A8A8A" style={{ width: 22, height: 22 }} />
+            ) : (
+              <Ionicons
+                name="close"
+                size={22}
+                color="#8A8A8A"
+                onPress={() => removeLiked(d.id)}
+              />
+            )}
           </View>
         </View>
       ))}
