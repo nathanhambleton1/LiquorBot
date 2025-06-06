@@ -873,6 +873,26 @@ export default function MenuScreen() {
     })();
   }, [userID]);
 
+  // Efficiently refresh liked drinks on focus
+  useEffect(() => {
+    if (!userID) return;
+    if (!isFocused) return;
+    (async () => {
+      try {
+        const res = await client.graphql({
+          query: listLikedDrinks,
+          variables: { filter: { userID: { eq: userID } } },
+          authMode: 'userPool',
+        });
+        setLikedDrinks(
+          res.data?.listLikedDrinks?.items.map((i: any) => i.drinkID) || [],
+        );
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, [userID, isFocused]);
+
   /* -------- Pull the user’s CustomRecipe items ---------- */
   useEffect(() => {
    if (!allowedCustom || !allowedCustom.length) return;        // nothing to do
