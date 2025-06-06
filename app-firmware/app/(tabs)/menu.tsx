@@ -69,6 +69,7 @@ const LIST_CUSTOM_RECIPES_WITH_ING = /* GraphQL */ `
         name
         description
         image
+        owner
         ingredients { ingredientID amount priority }
         createdAt
       }
@@ -87,6 +88,7 @@ type Drink = {
   isCustom?: boolean;
   recipeId?: string;
   imageKey?: string | null;
+  owner?: string | null;
 };
 
 type BaseIngredient = { id: number; name: string; type: string };
@@ -134,6 +136,7 @@ interface DrinkItemProps {
     width: number;
     height: number;
   }) => void;
+  currentUserId: string | null;
 }
 
 // ────────────────────────── helpers ──────────────────────────
@@ -175,6 +178,7 @@ function DrinkItem({
   onCollapse,
   allIngredients,
   onExpandedLayout,
+  currentUserId,
 }: DrinkItemProps) {
   const [animValue] = useState(new Animated.Value(isExpanded ? 1 : 0));
   const [quantity, setQuantity] = useState(1);
@@ -335,6 +339,7 @@ function DrinkItem({
   }, [logging, liquorbotId]);
 
   const handleToggleLike = () => toggleFavorite(drink.id);
+  const canEdit = drink.isCustom && currentUserId && currentUserId === drink.owner;
 
   /* ---------------------------- RENDER --------------------------- */
   if (isExpanded) {
@@ -371,10 +376,9 @@ function DrinkItem({
           />
         </TouchableOpacity>
 
-        {drink.isCustom && (
+        {canEdit && (
           <TouchableOpacity
-            onPress={() =>
-              router.push({
+            onPress={() => router.push({
                 pathname: '/create-drink',
                 params: {
                   edit: '1',
@@ -908,6 +912,7 @@ export default function MenuScreen() {
            isCustom  : true,
            recipeId  : item.id,
            imageKey  : item.image ?? null,
+           owner     : item.owner ?? null,
          };
        }));
 
@@ -1151,6 +1156,7 @@ export default function MenuScreen() {
                   scrollViewRef.current?.scrollTo({ y: layout.y, animated: true })
                 }
                 isMakeable={isDrinkMakeable(drink)}
+                currentUserId={userID}
               />
             ))}
           </View>

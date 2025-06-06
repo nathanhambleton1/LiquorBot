@@ -86,9 +86,6 @@ const GLASS_PLACEHOLDERS = [
   require('../assets/images/glasses/margarita.png'),
 ];
 
-const GLASS_NAMES  = ['rocks', 'highball', 'martini', 'coupe', 'margarita'];
-const COLOUR_NAMES = ['white', 'amber', 'red', 'green', 'blue'];
-
 const PLACEHOLDER_IMAGE = require('../assets/images/glasses/rocks.png');
 // Update drink color names and values
 const DRINK_COLOURS = [
@@ -151,8 +148,6 @@ export default function CreateDrinkScreen() {
   const [searchQuery, setSearchQuery]     = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'All'|'Alcohol'|'Mixer'|'Sour'|'Sweet'|'Misc'>('All');
   const categories = ['All','Alcohol','Mixer','Sour','Sweet','Misc'] as const;
-  const [initialGlassIdx,  setInitialGlassIdx]  = useState(0);
-  const [initialColourIdx, setInitialColourIdx] = useState(0);
 
   /* ----------- state: priority bubble ----------- */
   const [showPriorityInfoIndex, setShowPriorityInfoIndex] = useState<number|null>(null);
@@ -168,51 +163,6 @@ export default function CreateDrinkScreen() {
     isEditing && params.imageKey ? String(params.imageKey) : null
   );
   const [existingImageUrl, setExistingImageUrl] = useState<string|null>(null);
-
-  // Auto-select glass and color in edit mode based on imageKey
-  useEffect(() => {
-    if (!isEditing || !params.imageKey) return;
-    // Parse imageKey, e.g. drinkImages/rocks_red_...png
-    const match = params.imageKey.match(/([a-z]+)_([a-z]+)\.png$/i) || params.imageKey.match(/([a-z]+)_([a-z]+)_/i);
-    if (match) {
-      const glassName = match[1].toLowerCase();
-      const colorName = match[2].toLowerCase();
-      // Find glassIdx
-      const glassIdxFound = GLASS_COLOUR_ASSETS.findIndex((arr, idx) => {
-        // Use placeholder asset name for matching
-        const placeholder = GLASS_PLACEHOLDERS[idx];
-        return placeholder && placeholder.toString().toLowerCase().includes(glassName);
-      });
-      // Find colourIdx by color order
-      const colorOrder = ['white','amber','red','green','blue'];
-      const colourIdxFound = colorOrder.indexOf(colorName);
-      if (glassIdxFound !== -1) setGlassIdx(glassIdxFound);
-      if (colourIdxFound !== -1) setColourIdx(colourIdxFound);
-    }
-  }, [isEditing, params.imageKey]);
-
-  // Auto-select the correct glass & colour when we open an existing drink
-  useEffect(() => {
-    if (!isEditing || !params.imageKey) return;
-
-    //  e.g.  drinkImages/rocks_red_1717525522.png   →  ["rocks", "red"]
-    const match = params.imageKey.match(
-      /(rocks|highball|martini|coupe|margarita)_(white|amber|red|green|blue)/i
-    );
-    if (!match) return;
-
-    const gIdx = GLASS_NAMES.indexOf(match[1].toLowerCase());
-    const cIdx = COLOUR_NAMES.indexOf(match[2].toLowerCase());
-
-    if (gIdx !== -1) {
-      setGlassIdx(gIdx);
-      setInitialGlassIdx(gIdx);      // remember the original choice
-    }
-    if (cIdx !== -1) {
-      setColourIdx(cIdx);
-      setInitialColourIdx(cIdx);     // remember the original choice
-    }
-  }, [isEditing, params.imageKey]);
 
   /* ----------- Skia images ----------- */
   const baseImage   = useImage(GLASS_COLOUR_ASSETS[glassIdx][colourIdx]);
@@ -338,9 +288,7 @@ export default function CreateDrinkScreen() {
 
     /* decide image */
     let imageKey: string | null = null;
-    const isCustomImage = isEditing
-      ? (glassIdx !== initialGlassIdx || colourIdx !== initialColourIdx) // only if user changed something
-      : (glassIdx !== 0 || colourIdx !== 0); // default is rocks white
+    const isCustomImage = glassIdx !== 0 || colourIdx !== 0;
     if (isCustomImage) {
       imageKey = await exportAndUploadImage();
     } else if (existingImageKey) {
