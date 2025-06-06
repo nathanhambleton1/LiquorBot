@@ -669,6 +669,41 @@ export default function MenuScreen() {
     })();
   }, []);
 
+
+  useEffect(() => {
+    if (!isConnected || !liquorbotId) return;
+
+    // immediate request
+    requestSlotConfig();
+
+    // keep pinging until at least one slot is populated
+    const interval = setInterval(() => {
+      if (slots.every(id => id === 0)) {
+        requestSlotConfig();
+      } else {
+        clearInterval(interval);      // we’re good – stop the watchdog
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [isConnected, liquorbotId, slots, requestSlotConfig]);
+
+  // If the grid is empty for >5 s, prod both config & event refresh
+  useEffect(() => {
+    if (!isFocused) return;
+
+    // only care when nothing is showing
+    if (drinks.length === 0) return;
+
+    const t = setTimeout(() => {
+      requestSlotConfig();            // MQTT side
+      setRefreshCustom(p => !p);      // GraphQL / Custom side
+    }, 5000);
+
+    return () => clearTimeout(t);
+  }, [isFocused, drinks.length, requestSlotConfig]);
+
+
   /* ------------------ live refresh of allowed drinks ------------------ */
   useEffect(() => {
     if (!isFocused || !liquorbotId) return;
