@@ -655,9 +655,13 @@ export default function MenuScreen() {
         const ingredientsStr  = iJson?.[1] ?? null;
 
         if (drinksStr && ingredientsStr) {
-          setDrinks(JSON.parse(drinksStr));
+          const builtIn = JSON.parse(drinksStr);
+          setDrinks(prev => {
+            const customs = prev.filter(d => d.isCustom);           // keep any that
+            return [...builtIn, ...customs];                        // already loaded
+          });
           setAllIngredients(JSON.parse(ingredientsStr));
-          setLoading(false);           // initial UI ready instantly
+          setLoading(false);
         }
       } catch (e) {
         console.warn('Cache read error', e);
@@ -832,7 +836,10 @@ export default function MenuScreen() {
           ['ingredientsJson',  iText],
         ]);
 
-        setDrinks(JSON.parse(dText));
+        setDrinks(prev => {
+          const customs = prev.filter(d => d.isCustom);
+          return [...JSON.parse(dText), ...customs];
+        });
         setAllIngredients(JSON.parse(iText));
       } catch (err) {
         console.error(err);
