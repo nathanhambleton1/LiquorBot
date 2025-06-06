@@ -196,7 +196,7 @@ export default function LikedDrinksPopup({ drinks: external = [] }: Props) {
   if (drinks.length === 0)
     return (
       <View style={styles.center}>
-        <Ionicons name="heart-outline" size={48} color="#CE975E" style={{ marginBottom: 16 }} />
+        <Ionicons name="heart-outline" size={48} color="#CE975E" style={{ marginTop: 30 }} />
         <Text style={styles.emptyText}>You haven’t liked any drinks yet.</Text>
         <Text style={styles.emptySubText}>
           Explore the menu and tap the heart icon on your favorite drinks. They’ll show up here!
