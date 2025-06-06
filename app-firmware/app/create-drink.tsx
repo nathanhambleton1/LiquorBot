@@ -42,39 +42,39 @@ const client = generateClient();
 /* ═════════════  STATIC ASSETS  ═════════════ */
 const GLASS_COLOUR_ASSETS: any[][] = [
   [ // rocks
-    require('../assets/images/glasses/rocks_red.png'),
-    require('../assets/images/glasses/rocks_yellow.png'),
-    require('../assets/images/glasses/rocks_orange.png'),
-    require('../assets/images/glasses/rocks_green.png'),
-    require('../assets/images/glasses/rocks_blue.png'),
+    require('../assets/images/glasses/rocks_amber.png'),  // amber
+    require('../assets/images/glasses/rocks_blue.png'),   // blue
+    require('../assets/images/glasses/rocks_green.png'),  // green
+    require('../assets/images/glasses/rocks_red.png'),    // red
+    require('../assets/images/glasses/rocks_white.png'),  // white
   ],
   [ // highball
-    require('../assets/images/glasses/highball_red.png'),
-    require('../assets/images/glasses/highball_yellow.png'),
-    require('../assets/images/glasses/highball_orange.png'),
-    require('../assets/images/glasses/highball_green.png'),
+    require('../assets/images/glasses/highball_amber.png'),
     require('../assets/images/glasses/highball_blue.png'),
+    require('../assets/images/glasses/highball_green.png'),
+    require('../assets/images/glasses/highball_red.png'),
+    require('../assets/images/glasses/highball_white.png'),
   ],
   [ // martini
-    require('../assets/images/glasses/martini_red.png'),
-    require('../assets/images/glasses/martini_yellow.png'),
-    require('../assets/images/glasses/martini_orange.png'),
-    require('../assets/images/glasses/martini_green.png'),
+    require('../assets/images/glasses/martini_amber.png'),
     require('../assets/images/glasses/martini_blue.png'),
+    require('../assets/images/glasses/martini_green.png'),
+    require('../assets/images/glasses/martini_red.png'),
+    require('../assets/images/glasses/martini_white.png'),
   ],
   [ // coupe
-    require('../assets/images/glasses/coupe_red.png'),
-    require('../assets/images/glasses/coupe_yellow.png'),
-    require('../assets/images/glasses/coupe_orange.png'),
-    require('../assets/images/glasses/coupe_green.png'),
+    require('../assets/images/glasses/coupe_amber.png'),
     require('../assets/images/glasses/coupe_blue.png'),
+    require('../assets/images/glasses/coupe_green.png'),
+    require('../assets/images/glasses/coupe_red.png'),
+    require('../assets/images/glasses/coupe_white.png'),
   ],
   [ // margarita
-    require('../assets/images/glasses/margarita_red.png'),
-    require('../assets/images/glasses/margarita_yellow.png'),
-    require('../assets/images/glasses/margarita_orange.png'),
-    require('../assets/images/glasses/margarita_green.png'),
+    require('../assets/images/glasses/margarita_amber.png'),
     require('../assets/images/glasses/margarita_blue.png'),
+    require('../assets/images/glasses/margarita_green.png'),
+    require('../assets/images/glasses/margarita_red.png'),
+    require('../assets/images/glasses/margarita_white.png'),
   ],
 ];
 
@@ -87,7 +87,14 @@ const GLASS_PLACEHOLDERS = [
 ];
 
 const PLACEHOLDER_IMAGE = require('../assets/images/glasses/rocks.png');
-const DRINK_COLOURS = ['#d72638', '#f5be41', '#e97451', '#57c84d', '#1e90ff'];
+// Update drink color names and values
+const DRINK_COLOURS = [
+  '#FFD580', // amber
+  '#1e90ff', // blue
+  '#57c84d', // green
+  '#d72638', // red
+  '#FFFFFF', // white
+];
 
 /* ═════════════  TYPES  ═════════════ */
 interface Ingredient {
