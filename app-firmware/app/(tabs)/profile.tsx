@@ -18,6 +18,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
 // Sub‑popups
 import EditProfilePopup from '../components/profile/EditProfilePopup';
@@ -47,7 +48,8 @@ const client = generateClient();
 export interface UserState {
   username: string;
   email: string;
-  profilePicture: string | null;
+  /** S3 key, e.g. "public/profilePictures/<cognitoSub>.jpg" */
+  profilePictureKey: string | null;
 }
 export interface Drink {
   id: number;
@@ -73,13 +75,21 @@ interface PopupMeta { title: string; content?: string; }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+const freshAvatarUrl = async (key: string | null) => {
+  if (!key) return null;
+  try {
+    const { url } = await getUrl({ key, options: { expiresIn: 3600 } });
+    return url.toString();
+  } catch { return null; }
+};
+
 // ---------------------------------------------------------------------------
 // COMPONENT
 // ---------------------------------------------------------------------------
 export default function ProfileScreen() {
   // ───────────────────────── STATE ─────────────────────────────────────────
   const { isAdmin } = useLiquorBot();   
-  const [user, setUser] = useState<UserState>({ username: 'Loading…', email: 'Loading…', profilePicture: null });
+  const [user, setUser] = useState<UserState>({ username: 'Loading…', email: 'Loading…', profilePictureKey: null });
   const [registeredUsername, setRegisteredUsername] = useState('');
   const [userProfileId, setUserProfileId] = useState('');
   const [profileLoaded, setProfileLoaded] = useState(false);
@@ -98,6 +108,8 @@ export default function ProfileScreen() {
     ctx.user,
   ]);
   const signedIn = authStatus === 'authenticated';
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [avatarLoading, setAvatarLoading] = useState(false);
 
   // Popup control
   const [popup, setPopup] = useState<PopupMeta | null>(null);
@@ -110,6 +122,15 @@ export default function ProfileScreen() {
       setPopup(null); // Close any open popup
     }, [])
   );
+
+  useEffect(() => {
+    (async () => {
+      if (!user.profilePictureKey) { setAvatarUri(null); return; }
+      setAvatarLoading(true);
+      setAvatarUri(await freshAvatarUrl(user.profilePictureKey));
+      setAvatarLoading(false);
+    })();
+  }, [user.profilePictureKey]);
 
   // ─────────────────────── INITIAL LOAD ────────────────────────────────────
   useEffect(() => {
@@ -124,7 +145,8 @@ export default function ProfileScreen() {
           setFirstName(p.firstName);
           setLastName(p.lastName);
           setBio(p.bio);
-          setUser({ username: p.username, email: p.email, profilePicture: p.profilePicture });
+          // Use p.registeredUsername as fallback for sub
+          setUser({ username: p.username || p.registeredUsername || '', email: p.email || 'No email', profilePictureKey: p.profilePicture || null });
           setBirthday(p.birthday);
           setProfileLoaded(true);
         }
@@ -158,7 +180,7 @@ export default function ProfileScreen() {
         setLastName(profile.username.split(' ').slice(1).join(' ') ?? '');
         setBio(profile.bio ?? '');
 
-        setUser({ username: profile.username || sub, email: email || 'No email', profilePicture: profile.profilePicture || null });
+        setUser({ username: profile.username || sub, email: email || 'No email', profilePictureKey: profile.profilePicture || null });
         setBirthday(bday);
         setProfileLoaded(true);
       // Cache fetched profile data
@@ -260,15 +282,24 @@ export default function ProfileScreen() {
         quality: 1,
       });
       if (picker.canceled) return;
-      const localUri = picker.assets[0].uri;
-      const blob = await (await fetch(localUri)).blob();
-      const s3Path = `public/profilePictures/${userProfileId}.jpg`;
 
-      await uploadData({ path: s3Path, data: blob });
-      const { url } = await getUrl({ path: s3Path });
-      await client.graphql({ query: updateUserProfile, variables: { input: { id: userProfileId, profilePicture: url.toString() } } });
-      setUser((p) => ({ ...p, profilePicture: url.toString() }));
-    } catch (err) { console.error('profile pic upload error', err); }
+      const resized = await manipulateAsync(
+        picker.assets[0].uri,
+        [{ resize: { width: 512 } }],
+        { compress: 0.7, format: SaveFormat.JPEG }
+      );
+
+      const blob = await (await fetch(resized.uri)).blob();
+      const key  = `public/profilePictures/${userProfileId}.jpg`;
+
+      await uploadData({ path: key, data: blob, options: { contentType: 'image/jpeg' }});
+      // save KEY, not URL
+      await client.graphql({ query: updateUserProfile, variables: { input: { id: userProfileId, profilePicture: key } } });
+
+      setUser((p) => ({ ...p, profilePictureKey: key }));
+    } catch (err) {
+      console.error('profile pic upload error', err);
+    }
   };
 
   // ─────────────────── BUTTON DEFINITIONS ──────────────────────────────────
@@ -347,12 +378,16 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       {/* header banner */}
       <View style={styles.userInfoContainer}>
-        <View style={styles.profilePictureContainer}>
-          <Image
-            source={user.profilePicture ? { uri: user.profilePicture } : require('../../assets/images/default-profile.png')}
-            style={styles.profilePicture}
-            onError={() => setUser((p) => ({ ...p, profilePicture: null }))}
-          />
+       <View style={styles.profilePictureContainer}>
+          {avatarLoading ? (
+            <ActivityIndicator style={styles.profilePicture} size="small" color="#CE975E" />
+          ) : (
+            <Image
+              source={avatarUri ? { uri: avatarUri } : require('../../assets/images/default-profile.png')}
+              style={styles.profilePicture}
+              onError={() => setAvatarUri(null)}
+            />
+          )}
         </View>
         <Text style={styles.usernameText}>{user.username}</Text>
         <Text style={styles.emailText}>{user.email}</Text>
