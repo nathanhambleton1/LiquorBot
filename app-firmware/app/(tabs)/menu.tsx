@@ -117,6 +117,9 @@ function parseIngredientString(
   });
 }
 
+const toNumericId = (uuid: string) =>
+  2_000_000 + parseInt(uuid.slice(-6), 36);
+
 /* -------------------------------------------------------------------------- */
 /*                              SINGLE DRINK CARD                             */
 /* -------------------------------------------------------------------------- */
@@ -556,7 +559,6 @@ export default function MenuScreen() {
   const [expandedDrink, setExpandedDrink] = useState<number | null>(null);
   const [userID, setUserID] = useState<string | null>(null);
   const [likedDrinks, setLikedDrinks] = useState<number[]>([]);
-  const [customFetched, setCustomFetched] = useState(false);
 
   /* ------------------------------------------------------------------ */
   /*                       NEW: sign-in prompt helper                    */
@@ -902,8 +904,10 @@ export default function MenuScreen() {
            catch { /* keep placeholder */ }
          }
 
+         const numericId = toNumericId(item.id);
+
          return {
-           id        : 1_000_000 + idx,   // keep clear of std-drink IDs
+           id        : numericId,   // keep clear of std-drink IDs
            name      : item.name,
            category  : 'Custom',
            description: item.description ?? '',

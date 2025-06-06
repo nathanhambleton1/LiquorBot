@@ -12,6 +12,7 @@ import { generateClient } from 'aws-amplify/api';
 import { listLikedDrinks, listCustomRecipes } from '../../../src/graphql/queries';
 import { getCurrentUser } from 'aws-amplify/auth';
 import { getUrl } from 'aws-amplify/storage';
+import { deleteLikedDrink } from '../../../src/graphql/mutations';
 
 export type Drink = {
   id: number;
@@ -31,6 +32,11 @@ type Props = {
       If none supplied (or empty) the component will fetch everything itself. */
   drinks?: Drink[];
 };
+
+/* ──────────────────────────── HELPERS ──────────────────────────── */
+// Converts a UUID to a numeric ID for CustomRecipe items
+const toNumericId = (uuid: string) =>
+  2_000_000 + parseInt(uuid.slice(-6), 36);
 
 /* ---------------------------------------------------------------------------
    This version is fully backward-compatible:
@@ -67,56 +73,74 @@ export default function LikedDrinksPopup({ drinks: external = [] }: Props) {
         const stockUrl  = await getUrl({ key: 'drinkMenu/drinks.json' });
         const stock: Drink[] = await (await fetch(stockUrl.url)).json();
 
-        /* 3️⃣ pull this user’s CustomRecipe items */
-        const customRes = await client.graphql({
-          query: listCustomRecipes,
-          authMode: 'userPool',          // owner-based auth → only their recipes
-        });
+        /* 3️⃣ pull *all* CustomRecipes that correspond to my liked IDs
+           (public read via the apiKey rule you added) */
+        const likedCustomIds = likedIds.filter(id => id >= 2_000_000);
+        let custom: Drink[] = [];
 
-        const placeholder =
-          'https://d3jj0su0y4d6lr.cloudfront.net/placeholder_drink.png';
+        if (likedCustomIds.length) {
+          const { data } = await client.graphql({
+            query: listCustomRecipes,
+            variables: { limit: 1000 },         // small dataset – one shot
+            authMode : 'apiKey',                // public read
+          }) as { data: any };
 
-        const custom: Drink[] = await Promise.all(
-          (customRes.data?.listCustomRecipes?.items ?? []).map(
-            async (item: any, idx: number): Promise<Drink> => {
-              const numericId = 1_000_000 + idx;   // ✨ same mapping used in menu.tsx
+          const placeholder =
+            'https://d3jj0su0y4d6lr.cloudfront.net/placeholder_drink.png';
 
-              const ingStr = Array.isArray(item.ingredients)
-                ? item.ingredients
-                    .map(
-                      (ri: any) =>
-                        `${Number(ri.ingredientID)}:${Number(ri.amount)}:${Number(
-                          ri.priority ?? 1,
-                        )}`,
-                    )
-                    .join(',')
-                : '';
+          custom = await Promise.all(
+            (data.listCustomRecipes.items as any[])
+              .filter((item: any) => likedCustomIds.includes(toNumericId(item.id)))
+              .map(async (item: any): Promise<Drink> => {
+                const ingStr = Array.isArray(item.ingredients)
+                  ? item.ingredients
+                      .map((ri: any) =>
+                        `${ri.ingredientID}:${ri.amount}:${ri.priority ?? 1}`,
+                      )
+                      .join(',')
+                  : '';
 
-              let imageUrl = placeholder;
-              if (item.image) {
-                try {
-                  const { url } = await getUrl({ key: item.image });
-                  imageUrl = url.toString();
-                } catch {}
-              }
+                let imageUrl = placeholder;
+                if (item.image) {
+                  try { imageUrl = (await getUrl({ key: item.image })).url.toString(); }
+                  catch {}
+                }
 
-              return {
-                id: numericId,
-                name: item.name ?? `Custom #${idx + 1}`,
-                category: 'Custom',
-                description: item.description ?? '',
-                image: imageUrl,
-                ingredients: ingStr,
-              };
-            },
-          ),
-        );
+                return {
+                  id         : toNumericId(item.id),
+                  name       : item.name,
+                  category   : 'Custom',
+                  description: item.description ?? '',
+                  image      : imageUrl,
+                  ingredients: ingStr,
+                };
+              }),
+          );
+        }
 
         /* 4️⃣ merge → pick only the liked ones */
         const catalogue  = [...stock, ...custom];
         const liked      = catalogue.filter(d => likedIds.includes(d.id));
 
         setDrinks(liked);
+
+        /* 5️⃣ clean up likes that no longer exist */
+        const orphanIds = likedIds.filter(id => !liked.some(d => d.id === id));
+        for (const oid of orphanIds) {
+          try {
+            const res = await client.graphql({
+              query: listLikedDrinks,
+              variables: { filter: { userID: { eq: user.username }, drinkID: { eq: oid } } },
+              authMode: 'userPool',
+            });
+            const rec = res.data?.listLikedDrinks?.items?.[0];
+            rec && await client.graphql({
+              query: deleteLikedDrink,
+              variables: { input: { id: rec.id } },
+              authMode: 'userPool',
+            });
+          } catch { /* ignore */ }
+        }
       } catch (e: any) {
         console.error(e);
         setError('Couldn’t load liked drinks.');
@@ -125,6 +149,28 @@ export default function LikedDrinksPopup({ drinks: external = [] }: Props) {
       }
     })();
   }, [external]);
+
+  async function removeLiked(drinkId: number) {
+    try {
+      const user = await getCurrentUser();
+      const res  = await client.graphql({
+        query: listLikedDrinks,
+        variables: { filter: { userID: { eq: user.username }, drinkID: { eq: drinkId } } },
+        authMode: 'userPool',
+      });
+      const rec = res.data?.listLikedDrinks?.items?.[0];
+      if (rec) {
+        await client.graphql({
+          query: deleteLikedDrink,
+          variables: { input: { id: rec.id } },
+          authMode: 'userPool',
+        });
+        setDrinks(prev => prev.filter(d => d.id !== drinkId));
+      }
+    } catch (e) {
+      console.error('Failed to remove like', e);
+    }
+  }
 
   /* ─────────────────────────── RENDER ─────────────────────────── */
   if (loading)
@@ -149,7 +195,15 @@ export default function LikedDrinksPopup({ drinks: external = [] }: Props) {
             <Text style={styles.name}>{d.name}</Text>
             <Text style={styles.cat}>{d.category}</Text>
           </View>
-          <Ionicons name="heart" size={24} color="#CE975E" style={{ marginRight: 10 }} />
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="heart" size={24} color="#CE975E" style={{ marginRight: 6 }} />
+            <Ionicons
+              name="close"
+              size={22}
+              color="#8A8A8A"
+              onPress={() => removeLiked(d.id)}
+            />
+          </View>
         </View>
       ))}
     </ScrollView>
