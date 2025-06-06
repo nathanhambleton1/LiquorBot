@@ -32,6 +32,7 @@ import { PubSub }      from '@aws-amplify/pubsub';
 import { generateClient }     from 'aws-amplify/api';
 import { listEvents }         from '../src/graphql/queries';
 import { deleteEvent }        from '../src/graphql/mutations';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 const client = generateClient();
 Amplify.configure(config);
 const pubsub = new PubSub({
@@ -522,7 +523,7 @@ export default function DeviceSettings() {
                   if (isOverridden) {
                     Alert.alert(
                       'In Event Mode',
-                      'LiquorBot is currently running an event. You can wait until the event ends (you’ll be disconnected automatically), delete the event and disconnect now (removes the event and disconnects all guests), or cancel to stay connected.',
+                      'LiquorBot is currently running an event. You can wait until the event ends (you’ll be disconnected afterwards), delete the event and disconnect now (removes the event and disconnects all guests), or cancel to stay connected.',
                       [
                         {
                           text: 'Delete Event & Disconnect',
@@ -539,8 +540,14 @@ export default function DeviceSettings() {
                             } catch (err) {
                               console.warn('Event deletion failed (continuing disconnect):', err);
                             } finally {
-                              restorePreviousId();      // drops override and restores (→ '000')
-                              setLiquorbotId('000');    // ensure immediate disconnect
+                              // Clear all device info and storage
+                              await AsyncStorage.multiRemove([
+                                'liquorbotId',
+                                'allowedDrinks-' + liquorbotId,
+                                'userGroups',
+                              ]);
+                              restorePreviousId();
+                              setLiquorbotId('000');
                               setConfigLoading(false);
                               Alert.alert('Disconnected', 'Event deleted and device fully disconnected.');
                             }
@@ -558,12 +565,17 @@ export default function DeviceSettings() {
                     );
                   } else {
                     // simple disconnect if no override
+                    await AsyncStorage.multiRemove([
+                      'liquorbotId',
+                      'allowedDrinks-' + liquorbotId,
+                      'userGroups',
+                    ]);
                     setLiquorbotId('000');
                     setConfigLoading(false);
                     Alert.alert('Disconnected', 'You have disconnected from the device.');
                   }
                 }}
-                                  >
+                >
                   <Text style={styles.disconnectButtonText}>Disconnect from Device</Text>
                 </TouchableOpacity>
 
