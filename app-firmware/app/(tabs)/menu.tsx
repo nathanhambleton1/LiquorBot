@@ -948,7 +948,7 @@ export default function MenuScreen() {
 
   /* -------- Pull the user’s CustomRecipe items ---------- */
   useEffect(() => {
-   if (!allowedCustom || !allowedCustom.length) return;        // nothing to do
+   if (!isAdmin && (!allowedCustom || !allowedCustom.length)) return;
 
    (async () => {
      try {
@@ -1002,7 +1002,7 @@ export default function MenuScreen() {
       console.error('Error loading custom drinks', e);
      }
    })();
- }, [allowedCustom, refreshCustom]);
+ }, [allowedCustom, refreshCustom, isAdmin, userID]);
 
   // Add refresh on screen focus
   useEffect(() => {
