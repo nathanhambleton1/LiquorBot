@@ -29,6 +29,10 @@ import { getUrl }      from 'aws-amplify/storage';
 import { Amplify }     from 'aws-amplify';
 import config          from '../src/amplifyconfiguration.json';
 import { PubSub }      from '@aws-amplify/pubsub';
+import { generateClient }     from 'aws-amplify/api';
+import { listEvents }         from '../src/graphql/queries';
+import { deleteEvent }        from '../src/graphql/mutations';
+const client = generateClient();
 Amplify.configure(config);
 const pubsub = new PubSub({
   region:   'us-east-1',
@@ -76,14 +80,37 @@ export default function DeviceSettings() {
   const [configLoading, setConfigLoading] = useState(false);
   const [showConnectPrompt, setShowConnectPrompt] = useState(false);
 
-  /*────────── Redirect non-admins after first render ──────────
-  useEffect(() => {
-    if (isAdmin === false) router.replace('/');
-  }, [isAdmin, router]);
+  /*────────── Active-event helper ──────────*/
+  const [activeEventId, setActiveEventId] = useState<string | null>(null);
 
-  // Show blank screen while redirecting / until context resolves
-  if (isAdmin === false) return null;
-  */
+  useEffect(() => {
+    if (!isOverridden || liquorbotId === '000') {      // nothing to track
+      setActiveEventId(null);
+      return;
+    }
+    (async () => {
+      try {
+        const nowISO = new Date().toISOString();
+        const { data } = await client.graphql({
+          query: listEvents,
+          variables: {
+            filter: {
+              liquorbotId: { eq: Number(liquorbotId) },
+              startTime:   { le: nowISO },              // has started
+              endTime:     { ge: nowISO },              // not finished
+            },
+          },
+          authMode: 'userPool',
+        }) as { data: any };
+
+        const ev = data?.listEvents?.items?.[0];
+        setActiveEventId(ev?.id ?? null);
+      } catch (e) {
+        console.warn('Could not fetch active event', e);
+        setActiveEventId(null);
+      }
+    })();
+  }, [isOverridden, liquorbotId]);
 
   /*────────── Animations ──────────*/
   const toggleMaintenance = () => {
@@ -490,37 +517,46 @@ export default function DeviceSettings() {
                 {/* Disconnect from Device button */}
                 <TouchableOpacity
                   style={styles.disconnectButton}
-                  onPress={() => {
+                  onPress={async () => {
                     if (isOverridden) {
-                      // If in an event override, ask user to leave event first
                       Alert.alert(
-                        'In Event Mode',
-                        'You are currently joined to an event. That event will automatically reconnect to its assigned device. To fully disconnect, you need to leave the event first.',
+                        'Delete event or wait?',
+                        'You’re currently running an event. “Delete Event & Disconnect” will remove the event (all guests will be kicked off) and disconnect LiquorBot. You can also wait until the event ends automatically.',
                         [
-                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Wait until event ends', style: 'cancel' },
+
                           {
-                            text: 'Leave & Disconnect',
+                            text: 'Delete Event & Disconnect',
                             style: 'destructive',
-                            onPress: () => {
-                              // 1) End override
-                              restorePreviousId();
-                              // 2) Fully clear ID & backup
-                              setTimeout(() => {
-                                setLiquorbotId('000');
-                                Alert.alert('Disconnected', 'You have left the event and disconnected from the device.');
-                              }, 200);
+                            onPress: async () => {
+                              try {
+                                if (activeEventId) {
+                                  await client.graphql({
+                                    query: deleteEvent,
+                                    variables: { input: { id: activeEventId } },
+                                    authMode: 'userPool',
+                                  });
+                                }
+                              } catch (err) {
+                                console.warn('Event deletion failed (continuing disconnect):', err);
+                              } finally {
+                                restorePreviousId();           // drop the override
+                                setLiquorbotId('000');         // clear device
+                                setConfigLoading(false);
+                                Alert.alert('Disconnected', 'Event deleted and device fully disconnected.');
+                              }
                             },
                           },
-                        ]
+                        ],
                       );
                     } else {
-                      // Simple disconnect if no override active
+                      // regular disconnect (unchanged)
                       setLiquorbotId('000');
                       setConfigLoading(false);
                       Alert.alert('Disconnected', 'You have disconnected from the device.');
                     }
                   }}
-                >
+                                  >
                   <Text style={styles.disconnectButtonText}>Disconnect from Device</Text>
                 </TouchableOpacity>
 
