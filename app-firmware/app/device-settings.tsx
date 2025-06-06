@@ -523,8 +523,7 @@ export default function DeviceSettings() {
                         'Delete event or wait?',
                         'You’re currently running an event. “Delete Event & Disconnect” will remove the event (all guests will be kicked off) and disconnect LiquorBot. You can also wait until the event ends automatically.',
                         [
-                          { text: 'Wait until event ends', style: 'cancel' },
-
+                          { text: 'Wait until event ends', style: 'default' },
                           {
                             text: 'Delete Event & Disconnect',
                             style: 'destructive',
@@ -547,6 +546,7 @@ export default function DeviceSettings() {
                               }
                             },
                           },
+                          { text: 'Cancel', style: 'cancel' },
                         ],
                       );
                     } else {
