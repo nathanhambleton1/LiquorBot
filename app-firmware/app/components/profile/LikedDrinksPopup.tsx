@@ -194,7 +194,15 @@ export default function LikedDrinksPopup({ drinks: external = [] }: Props) {
     return <Text style={styles.emptyText}>{error}</Text>;
 
   if (drinks.length === 0)
-    return <Text style={styles.emptyText}>You haven’t liked any drinks yet.</Text>;
+    return (
+      <View style={styles.center}>
+        <Ionicons name="heart-outline" size={48} color="#CE975E" style={{ marginBottom: 16 }} />
+        <Text style={styles.emptyText}>You haven’t liked any drinks yet.</Text>
+        <Text style={styles.emptySubText}>
+          Explore the menu and tap the heart icon on your favorite drinks. They’ll show up here!
+        </Text>
+      </View>
+    );
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 70 }}>
@@ -228,6 +236,7 @@ export default function LikedDrinksPopup({ drinks: external = [] }: Props) {
 const styles = StyleSheet.create({
   center:     { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyText:  { color: '#DFDCD9', fontSize: 16, textAlign: 'center', marginTop: 30 },
+  emptySubText: { color: '#B0AFAE', fontSize: 14, textAlign: 'center', marginTop: 10, maxWidth: 260 },
   item:       { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F',
                 borderRadius: 10, marginBottom: 10, padding: 10 },
   img:        { width: 60, height: 60, borderRadius: 8 },
