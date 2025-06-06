@@ -1002,7 +1002,12 @@ export default function MenuScreen() {
     onlyMakeable ? isDrinkMakeable(drink) : true;
 
   const inAllowed = (d: Drink) => {
-    if (!allowedStd && !allowedCustom) return true;      // owner / admin
+    /* Admins can see EVERYTHING when “Show only makeable drinks” is OFF */
+    if (isAdmin && !onlyMakeable) return true;
+
+    /* Guests – or admins who enabled that toggle – keep the event limits */
+    if (!allowedStd && !allowedCustom) return true;
+
     return d.isCustom
       ? allowedCustom?.includes(d.recipeId ?? '') ?? false
       : allowedStd?.includes(d.id) ?? false;
@@ -1019,6 +1024,25 @@ export default function MenuScreen() {
   );
   if (alphabetical) {
     filteredDrinks.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /* ---------- Admin quality-of-life: show event drinks first ---------- */
+  if (isAdmin && !onlyMakeable && (allowedStd || allowedCustom)) {
+    const isEventDrink = (drink: Drink) =>
+      drink.isCustom
+        ? allowedCustom?.includes(drink.recipeId ?? '') ?? false
+        : allowedStd?.includes(drink.id) ?? false;
+
+    const eventDrinks = filteredDrinks.filter(isEventDrink);
+    const otherDrinks = filteredDrinks.filter(d => !isEventDrink(d));
+
+    /* keep alphabetical order *within* each bucket if that toggle is on */
+    if (alphabetical) {
+      eventDrinks.sort((a, b) => a.name.localeCompare(b.name));
+      otherDrinks.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    filteredDrinks = [...eventDrinks, ...otherDrinks];  // <— re-order
   }
 
   // keep expanded card on left column
