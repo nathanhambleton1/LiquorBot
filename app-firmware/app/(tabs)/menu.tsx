@@ -671,21 +671,23 @@ export default function MenuScreen() {
 
 
   useEffect(() => {
-    if (!isConnected || !liquorbotId) return;
+    let interval: ReturnType<typeof setInterval> | undefined;
 
-    // immediate request
-    requestSlotConfig();
+    if (isConnected && liquorbotId && slots.every(id => id === 0)) {
+      requestSlotConfig(); // first (and only) kick-off
 
-    // keep pinging until at least one slot is populated
-    const interval = setInterval(() => {
-      if (slots.every(id => id === 0)) {
-        requestSlotConfig();
-      } else {
-        clearInterval(interval);      // we’re good – stop the watchdog
-      }
-    }, 4000);
+      interval = setInterval(() => {
+        if (slots.every(id => id === 0)) {
+          requestSlotConfig(); // still empty? ask again
+        } else if (interval) {
+          clearInterval(interval); // got something – stop
+        }
+      }, 4000);
+    }
 
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [isConnected, liquorbotId, slots, requestSlotConfig]);
 
   // If the grid is empty for >5 s, prod both config & event refresh
@@ -693,7 +695,7 @@ export default function MenuScreen() {
     if (!isFocused) return;
 
     // only care when nothing is showing
-    if (drinks.length === 0) return;
+    if (renderedDrinks.length) return;
 
     const t = setTimeout(() => {
       requestSlotConfig();            // MQTT side
