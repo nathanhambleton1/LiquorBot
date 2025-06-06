@@ -346,6 +346,9 @@ function DrinkItem({
 
   /* ---------------------------- RENDER --------------------------- */
   if (isExpanded) {
+    // Gray effect for non-makeable drinks (expanded)
+    const grayStyle = !isMakeable ? { opacity: 0.4 } : {};
+    const grayIconStyle = !isMakeable ? { opacity: 0.4 } : {};
     return (
       <Animated.View
         onLayout={(e) => onExpandedLayout?.(e.nativeEvent.layout)}
@@ -376,6 +379,7 @@ function DrinkItem({
             name={isLiked ? 'heart' : 'heart-outline'}
             size={24}
             color={isLiked ? '#CE975E' : '#4F4F4F'}
+            style={grayIconStyle}
           />
         </TouchableOpacity>
 
@@ -402,15 +406,15 @@ function DrinkItem({
         {/* content */}
         <View style={styles.expandedContent}>
           <View style={styles.expandedTitleContainer}>
-            <Text style={styles.expandedboxText}>{drink.name}</Text>
-            <Text style={styles.expandedcategoryText}>{drink.category}</Text>
+            <Text style={[styles.expandedboxText, grayStyle]}>{drink.name}</Text>
+            <Text style={[styles.expandedcategoryText, grayStyle]}>{drink.category}</Text>
           </View>
-          <Image source={{ uri: drink.image }} style={styles.expandedImage} />
+          <Image source={{ uri: drink.image }} style={[styles.expandedImage, grayStyle]} />
         </View>
 
         <View style={styles.expandeddetailContainer}>
           {parsedIngredients.length === 0 ? (
-            <Text style={styles.expandeddescriptionText}>
+            <Text style={[styles.expandeddescriptionText, grayStyle]}>
               No ingredients found.
             </Text>
           ) : (
@@ -500,6 +504,9 @@ function DrinkItem({
   }
 
   /* ---------------------- collapsed card ----------------------- */
+  // Gray effect for non-makeable drinks (collapsed)
+  const grayStyle = !isDrinkMakeable(drink) ? { opacity: 0.4 } : {};
+  const grayIconStyle = !isDrinkMakeable(drink) ? { opacity: 0.4 } : {};
   return (
     <TouchableOpacity
       activeOpacity={0.9}
@@ -511,22 +518,20 @@ function DrinkItem({
       }
       style={styles.box}
     >
-      <TouchableOpacity onPress={handleToggleLike} style={styles.favoriteButton}>
-        <Ionicons
-          name={isLiked ? 'heart' : 'heart-outline'}
-          size={24}
-          color={isLiked ? '#CE975E' : '#4F4F4F'}
-        />
-      </TouchableOpacity>
+    <TouchableOpacity onPress={handleToggleLike} style={styles.favoriteButton}>
+      <Ionicons
+        name={isLiked ? 'heart' : 'heart-outline'}
+        size={24}
+        color={isLiked ? '#CE975E' : '#4F4F4F'}
+        style={grayIconStyle}
+      />
+    </TouchableOpacity>
       <Image
         source={{ uri: drink.image }}
-        style={[
-          styles.image,
-          !isDrinkMakeable(drink) && { opacity: 0.4 }
-        ]}
+        style={[styles.image, grayStyle]}
       />
-      <Text style={styles.boxText}>{drink.name}</Text>
-      <Text style={styles.categoryText}>{drink.category}</Text>
+      <Text style={[styles.boxText, grayStyle]}>{drink.name}</Text>
+      <Text style={[styles.categoryText, grayStyle]}>{drink.category}</Text>
     </TouchableOpacity>
   );
 }
