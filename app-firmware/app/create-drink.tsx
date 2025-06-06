@@ -360,7 +360,7 @@ export default function CreateDrinkScreen() {
 const { width: SCREEN_W } = Dimensions.get('window');
 const GLASS_COUNT = GLASS_COLOUR_ASSETS.length;
 const COLOUR_COUNT = DRINK_COLOURS.length;
-const H_PADDING = 40; // total horizontal padding/margin
+const H_PADDING = 80; // total horizontal padding/margin
 const PREVIEW_SIZE = Math.min(180, Math.max(100, Math.floor(SCREEN_W * 0.22)));
 const SELECTOR_ROW_WIDTH = SCREEN_W - PREVIEW_SIZE - H_PADDING;
 const SELECTOR_THUMB = Math.floor((SELECTOR_ROW_WIDTH - (GLASS_COUNT - 1) * 12) / GLASS_COUNT);
