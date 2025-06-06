@@ -364,7 +364,7 @@ export default function DeviceSettings() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         {/* close */}
-        <TouchableOpacity style={styles.closeButton} onPress={() => router.push('/')}>
+        <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
           <Ionicons name="close" size={30} color="#DFDCD9" />
         </TouchableOpacity>
 
