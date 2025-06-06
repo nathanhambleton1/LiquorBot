@@ -642,7 +642,7 @@ export default function EventManager() {
         </View>
 
         {/* Load to Device button for event owner, only when expanded */}
-        {isOwner && isExpanded && (
+        {isOwner && isExpanded && !isPast && (
           <TouchableOpacity
             style={[styles.applyBtn, (!isConnected || loadingDeviceId === item.id) && { opacity: 0.5, marginTop: 16 }]}
             onPress={() => handleLoadToDevice(item)}
@@ -666,6 +666,11 @@ export default function EventManager() {
                     : 'Load Ingredients to Device'}
             </Text>
           </TouchableOpacity>
+        )}
+        {isOwner && isExpanded && isPast && (
+          <Text style={{ color: '#8F8F8F', fontSize: 12, marginTop: 16, textAlign: 'center' }}>
+            Unable to change events that have passed.
+          </Text>
         )}
         {errorDeviceId === item.id && (
           <Text style={{ color: '#D9534F', fontSize: 12, marginTop: 4, textAlign: 'center' }}>Failed to load to device</Text>
