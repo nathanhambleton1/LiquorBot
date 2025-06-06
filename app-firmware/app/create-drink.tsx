@@ -164,6 +164,28 @@ export default function CreateDrinkScreen() {
   );
   const [existingImageUrl, setExistingImageUrl] = useState<string|null>(null);
 
+  // Auto-select glass and color in edit mode based on imageKey
+  useEffect(() => {
+    if (!isEditing || !params.imageKey) return;
+    // Parse imageKey, e.g. drinkImages/rocks_red_...png
+    const match = params.imageKey.match(/([a-z]+)_([a-z]+)\.png$/i) || params.imageKey.match(/([a-z]+)_([a-z]+)_/i);
+    if (match) {
+      const glassName = match[1].toLowerCase();
+      const colorName = match[2].toLowerCase();
+      // Find glassIdx
+      const glassIdxFound = GLASS_COLOUR_ASSETS.findIndex((arr, idx) => {
+        // Use placeholder asset name for matching
+        const placeholder = GLASS_PLACEHOLDERS[idx];
+        return placeholder && placeholder.toString().toLowerCase().includes(glassName);
+      });
+      // Find colourIdx by color order
+      const colorOrder = ['white','amber','red','green','blue'];
+      const colourIdxFound = colorOrder.indexOf(colorName);
+      if (glassIdxFound !== -1) setGlassIdx(glassIdxFound);
+      if (colourIdxFound !== -1) setColourIdx(colourIdxFound);
+    }
+  }, [isEditing, params.imageKey]);
+
   /* ----------- Skia images ----------- */
   const baseImage   = useImage(GLASS_COLOUR_ASSETS[glassIdx][colourIdx]);
 
@@ -360,7 +382,7 @@ export default function CreateDrinkScreen() {
 const { width: SCREEN_W } = Dimensions.get('window');
 const GLASS_COUNT = GLASS_COLOUR_ASSETS.length;
 const COLOUR_COUNT = DRINK_COLOURS.length;
-const H_PADDING = 70; // total horizontal padding/margin
+const H_PADDING = 60; // total horizontal padding/margin
 const PREVIEW_SIZE = Math.min(180, Math.max(100, Math.floor(SCREEN_W * 0.22)));
 const SELECTOR_ROW_WIDTH = SCREEN_W - PREVIEW_SIZE - H_PADDING;
 const SELECTOR_THUMB = Math.floor((SELECTOR_ROW_WIDTH - (GLASS_COUNT - 1) * 12) / GLASS_COUNT);
