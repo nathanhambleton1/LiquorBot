@@ -13,7 +13,7 @@
  * (expo-router will merge this into the underlying native-stack options)
  */
 export const unstable_settings = {
-  gesturesEnabled: false,
+  gestureEnabled: false,
 };
 
 import React from 'react';
