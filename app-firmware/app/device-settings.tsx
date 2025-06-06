@@ -521,7 +521,7 @@ export default function DeviceSettings() {
                   onPress={async () => {
                   if (isOverridden) {
                     Alert.alert(
-                      'In Event Mode?',
+                      'In Event Mode',
                       'LiquorBot is currently running an event. You can wait until the event ends (you’ll be disconnected automatically), delete the event and disconnect now (removes the event and disconnects all guests), or cancel to stay connected.',
                       [
                         {
