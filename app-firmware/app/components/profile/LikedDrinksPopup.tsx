@@ -143,12 +143,6 @@ export default function LikedDrinksPopup({ drinks: external = [] }: Props) {
     }
   }, []);
 
-  // Use effect for initial load (if not provided by parent)
-  useEffect(() => {
-    if (external.length > 0) return;
-    fetchLikedDrinks();
-  }, [external, fetchLikedDrinks]);
-
   // Refetch on page focus
   useFocusEffect(
     React.useCallback(() => {
