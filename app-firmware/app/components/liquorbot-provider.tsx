@@ -49,6 +49,7 @@ interface LiquorBotContextValue {
   temporaryOverrideId: (id: string, revertAt: Date) => void;
   restorePreviousId  : () => void;
   isOverridden       : boolean;
+  clearPrevLiquorbotId: () => void;
 }
 
 const LiquorBotContext = createContext<LiquorBotContextValue>({} as any);
@@ -290,6 +291,10 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
   /* ───────── event-override helpers ───────── */
   const [prevLiquorbotId, setPrevLiquorbotId] = useState<string | null>(null);
 
+  const clearPrevLiquorbotId = useCallback(() => {
+    setPrevLiquorbotId('000');
+  }, []);
+
   const restorePreviousId = useCallback(() => {
     if (prevLiquorbotId) {
       setIdState(prevLiquorbotId);
@@ -327,6 +332,7 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
       temporaryOverrideId,
       restorePreviousId,
       isOverridden,
+      clearPrevLiquorbotId,
     }),
     [
       isConnected,
@@ -341,6 +347,7 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
       temporaryOverrideId,
       restorePreviousId,
       isOverridden,
+      clearPrevLiquorbotId,
     ]
   );
 

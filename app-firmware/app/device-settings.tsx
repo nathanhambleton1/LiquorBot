@@ -61,6 +61,7 @@ export default function DeviceSettings() {
     setLiquorbotId,     // function to set the LiquorBot ID
     isOverridden,       // true if user is currently in an event override
     restorePreviousId,  // to end the override
+    clearPrevLiquorbotId,
   } = useLiquorBot();
 
   /*────────── State ──────────*/
@@ -518,44 +519,50 @@ export default function DeviceSettings() {
                 <TouchableOpacity
                   style={styles.disconnectButton}
                   onPress={async () => {
-                    if (isOverridden) {
-                      Alert.alert(
-                        'Delete event or wait?',
-                        'You’re currently running an event. “Delete Event & Disconnect” will remove the event (all guests will be kicked off) and disconnect LiquorBot. You can also wait until the event ends automatically.',
-                        [
-                          { text: 'Wait until event ends', style: 'default' },
-                          {
-                            text: 'Delete Event & Disconnect',
-                            style: 'destructive',
-                            onPress: async () => {
-                              try {
-                                if (activeEventId) {
-                                  await client.graphql({
-                                    query: deleteEvent,
-                                    variables: { input: { id: activeEventId } },
-                                    authMode: 'userPool',
-                                  });
-                                }
-                              } catch (err) {
-                                console.warn('Event deletion failed (continuing disconnect):', err);
-                              } finally {
-                                restorePreviousId();           // drop the override
-                                setLiquorbotId('000');         // clear device
-                                setConfigLoading(false);
-                                Alert.alert('Disconnected', 'Event deleted and device fully disconnected.');
-                              }
-                            },
+                  if (isOverridden) {
+                    Alert.alert(
+                      'Delete event or wait?',
+                      'You’re currently running an event. “Delete Event & Disconnect” will remove the event (all guests will be kicked off) and disconnect LiquorBot. You can also wait until the event ends automatically.',
+                      [
+                        {
+                          text: 'Wait until event ends',
+                          style: 'default',
+                          onPress: () => {
+                            clearPrevLiquorbotId();
                           },
-                          { text: 'Cancel', style: 'cancel' },
-                        ],
-                      );
-                    } else {
-                      // regular disconnect (unchanged)
-                      setLiquorbotId('000');
-                      setConfigLoading(false);
-                      Alert.alert('Disconnected', 'You have disconnected from the device.');
-                    }
-                  }}
+                        },
+                        {
+                          text: 'Delete Event & Disconnect',
+                          style: 'destructive',
+                          onPress: async () => {
+                            try {
+                              if (activeEventId) {
+                                await client.graphql({
+                                  query: deleteEvent,
+                                  variables: { input: { id: activeEventId } },
+                                  authMode: 'userPool',
+                                });
+                              }
+                            } catch (err) {
+                              console.warn('Event deletion failed (continuing disconnect):', err);
+                            } finally {
+                              restorePreviousId();      // drops override and restores (→ '000')
+                              setLiquorbotId('000');    // ensure immediate disconnect
+                              setConfigLoading(false);
+                              Alert.alert('Disconnected', 'Event deleted and device fully disconnected.');
+                            }
+                          },
+                        },
+                        { text: 'Cancel', style: 'cancel' },
+                      ]
+                    );
+                  } else {
+                    // simple disconnect if no override
+                    setLiquorbotId('000');
+                    setConfigLoading(false);
+                    Alert.alert('Disconnected', 'You have disconnected from the device.');
+                  }
+                }}
                                   >
                   <Text style={styles.disconnectButtonText}>Disconnect from Device</Text>
                 </TouchableOpacity>
