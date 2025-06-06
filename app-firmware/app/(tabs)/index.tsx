@@ -25,6 +25,7 @@ import { generateClient }   from 'aws-amplify/api';
 import { listEvents }       from '../../src/graphql/queries';
 import { Asset }            from 'expo-asset';
 import { Hub }              from 'aws-amplify/utils';
+import { useNavigation } from '@react-navigation/native';
 
 /* ---------- AWS IoT SDK (static import) ---------- */
 import {
@@ -39,6 +40,7 @@ const POLICY_NAME = 'Amplify-App-Policy'; // must match the console
 
 export default function Index() {
   const router        = useRouter();
+  const navigation = useNavigation();
   const glowAnimation = useRef(new Animated.Value(1)).current;
 
   /* LiquorBot connectivity (UI only) */
