@@ -358,7 +358,7 @@ export default function CreateDrinkScreen() {
   /* ═════════════  PREVIEW THUMB  ═════════════ */
   // Responsive preview image and selectors
 const { width: SCREEN_W } = Dimensions.get('window');
-const PREVIEW_SIZE = Math.min(300, Math.max(120, Math.floor(SCREEN_W * 0.32)));
+const PREVIEW_SIZE = Math.min(200, Math.max(120, Math.floor(SCREEN_W * 0.32)));
 const SELECTOR_THUMB = Math.max(36, Math.floor(PREVIEW_SIZE * 0.32));
 const COLOUR_SWATCH = Math.max(28, Math.floor(PREVIEW_SIZE * 0.22));
 const COLOUR_SWATCH_SELECTED = Math.max(20, Math.floor(PREVIEW_SIZE * 0.16));
