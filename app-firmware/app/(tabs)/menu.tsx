@@ -21,7 +21,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Text, View, StyleSheet, ScrollView, Image, TouchableOpacity,
   Dimensions, LayoutAnimation, Platform, UIManager, Animated,
-  TextInput, Modal, Switch, ActivityIndicator, Alert, RefreshControl,
+  TextInput, Modal, Switch, ActivityIndicator, Alert,
 } from 'react-native';
 import Ionicons      from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
@@ -185,7 +185,7 @@ function DrinkItem({
 }: DrinkItemProps) {
   const [animValue] = useState(new Animated.Value(isExpanded ? 1 : 0));
   const [quantity, setQuantity] = useState(1);
-  const { isConnected, slots, liquorbotId, } = useLiquorBot();
+  const { isConnected, slots, liquorbotId } = useLiquorBot();
   const [logging, setLogging] = useState(false); // prevent double-taps
   const [statusAnim] = useState(new Animated.Value(0));
   const [statusType, setStatusType] = useState<'success' | 'error' | null>(null);
@@ -532,7 +532,7 @@ function DrinkItem({
 export default function MenuScreen() {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
-  const { isConnected, slots, liquorbotId, isAdmin, reconnect } = useLiquorBot();
+  const { isConnected, slots, liquorbotId, isAdmin } = useLiquorBot();
   const isFocused = useIsFocused();
 
   /* ------------------------- STATE ------------------------- */
@@ -559,7 +559,6 @@ export default function MenuScreen() {
   const [expandedDrink, setExpandedDrink] = useState<number | null>(null);
   const [userID, setUserID] = useState<string | null>(null);
   const [likedDrinks, setLikedDrinks] = useState<number[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
 
   /* ------------------------------------------------------------------ */
   /*                       NEW: sign-in prompt helper                    */
@@ -1062,39 +1061,8 @@ export default function MenuScreen() {
       renderedDrinks.splice(i - 1, 0, renderedDrinks.splice(i, 1)[0]);
   }
 
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-
-    try {
-      /* 1 ─── device / IoT ------------------------------------------- */
-      reconnect();              // ask LiquorBotProvider to reconnect
-      await requestSlotConfig(); // force a fresh slot-config reply
-
-      /* 2 ─── wipe local drink data so the effects re-run ------------- */
-      setDrinks([]);            // built-in & custom will reload
-      setAllIngredients([]);
-      setAllowedStd(null);
-      setAllowedCustom(null);
-      setLoading(true);         // shows the “Loading drinks…” splash
-
-      /* 3 ─── custom recipes & likes --------------------------------- */
-      setRefreshCustom(p => !p);             // flip to re-query customs
-      if (userID) {
-        try {
-          const res = await client.graphql({
-            query: listLikedDrinks,
-            variables: { filter: { userID: { eq: userID } } },
-            authMode: 'userPool',
-          });
-          setLikedDrinks(
-            res.data?.listLikedDrinks?.items.map((i: any) => i.drinkID) || [],
-          );
-        } catch (e) { console.error(e); }
-      }
-    } finally {
-      setRefreshing(false);
-    }
-  }, [userID, reconnect, requestSlotConfig]);
+  const handleExpandedLayout = (layout: { y: number }) =>
+    scrollViewRef.current?.scrollTo({ y: layout.y, animated: true });
 
   /* ---------------------- initial loader --------------------- */
   if (loading) {
@@ -1199,19 +1167,11 @@ export default function MenuScreen() {
       {/* ------------ DRINK GRID ------------ */}
       <ScrollView
         ref={scrollViewRef}
-        refreshControl={
-          <RefreshControl
-            tintColor="#CE975E"           /* iOS spinner colour */
-            colors={['#CE975E']}          /* Android spinner colour */
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-          />
-        }
-          contentContainerStyle={[
-            styles.scrollContainer,
-            { paddingBottom: expandedDrink ? 100 : 80 },
-          ]}
-        >
+        contentContainerStyle={[
+          styles.scrollContainer,
+          { paddingBottom: expandedDrink ? 100 : 80 },
+        ]}
+      >
         {!userID ? (
           /* ---------- guest view ---------- */
           <View style={styles.noDrinksContainer}>
@@ -1389,5 +1349,4 @@ const styles = StyleSheet.create({
     padding: 30,
   },
   noDrinksText: { color: '#4f4f4f', fontSize: 12, textAlign: 'center' },
-  
 });
