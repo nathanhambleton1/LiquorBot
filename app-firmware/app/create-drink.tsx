@@ -156,7 +156,6 @@ export default function CreateDrinkScreen() {
   /* ----------- state: image builder ----------- */
   const [glassIdx,   setGlassIdx]   = useState(0);
   const [colourIdx,  setColourIdx]  = useState(0);
-  const [imageConfigured, setImageConfigured] = useState(false);
   const [exporting, setExporting]   = useState(false);
 
   /* ----------- edit-mode existing image ----------- */
@@ -288,19 +287,20 @@ export default function CreateDrinkScreen() {
     if(!ingredientsInput.length){ alert('Add at least one ingredient.'); return; }
 
     /* decide image */
-    let imageKey:string|null=null;
-    if(imageConfigured){
+    let imageKey: string | null = null;
+    const isCustomImage = glassIdx !== 0 || colourIdx !== 0;
+    if (isCustomImage) {
       imageKey = await exportAndUploadImage();
-    }else if(existingImageKey){               // keep original
+    } else if (existingImageKey) {
       imageKey = existingImageKey;
-    }else{                                    // upload placeholder
+    } else {
       const { uri } = Image.resolveAssetSource(PLACEHOLDER_IMAGE);
       const buf = await (await fetch(uri)).arrayBuffer();
-      const key=`drinkImages/${Date.now()}-placeholder.png`;
-      await uploadData({ key, data:new Uint8Array(buf), options:{ contentType:'image/png'} }).result;
+      const key = `drinkImages/${Date.now()}-placeholder.png`;
+      await uploadData({ key, data: new Uint8Array(buf), options: { contentType: 'image/png' } }).result;
       imageKey = key;
     }
-    if(!imageKey){ alert('Could not save image'); return; }
+    if (!imageKey) { alert('Could not save image'); return; }
 
     try{
       if(isEditing){
@@ -356,14 +356,10 @@ export default function CreateDrinkScreen() {
   };
 
   /* ═════════════  PREVIEW THUMB  ═════════════ */
-  const previewCanvas = imageConfigured ? (
+  const previewCanvas = (
     <Canvas style={styles.previewCanvasSmall}>
-      {baseImage   && <SkiaImage image={baseImage} x={0} y={0} width={THUMB} height={THUMB}/>}
+      {baseImage && <SkiaImage image={baseImage} x={0} y={0} width={THUMB} height={THUMB}/>}
     </Canvas>
-  ) : existingImageUrl ? (
-    <Image source={{uri:existingImageUrl}} style={styles.previewCanvasSmall} resizeMode="contain"/>
-  ):(
-    <Image source={PLACEHOLDER_IMAGE} style={styles.previewCanvasSmall} resizeMode="contain"/>
   );
 
   const { units } = useUnits();
