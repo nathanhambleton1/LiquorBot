@@ -19,6 +19,9 @@ const KEYS = {
 };
 
 export default function SettingsPopup({ signOut }: { signOut: () => void }) {
+  // ────────────── Version (from app.json) ──────────────
+  const APP_VERSION = '1.0.1';
+
   // ───────────────────────────── state ─────────────────────────────
   const [notifications, setNotifications] = useState(false);
   const { units, setUnits } = useUnits();
@@ -164,6 +167,7 @@ export default function SettingsPopup({ signOut }: { signOut: () => void }) {
       />
 
 
+
       {/* units picker */}
       <Text style={[styles.label, { marginTop: 25, marginBottom: 10 }]}>  
         Default Measurement Units
@@ -178,6 +182,12 @@ export default function SettingsPopup({ signOut }: { signOut: () => void }) {
             <Text style={styles.unitText}>{u.toUpperCase()}</Text>
           </TouchableOpacity>
         ))}
+      </View>
+
+      {/* Version info */}
+      <View style={styles.versionRow}>
+        <Ionicons name="information-circle-outline" size={16} color="#888" style={{marginRight:6}} />
+        <Text style={styles.versionText}>App Version {APP_VERSION}</Text>
       </View>
 
       {/* ────────────── Danger Zone ────────────── */}
@@ -214,6 +224,18 @@ export default function SettingsPopup({ signOut }: { signOut: () => void }) {
 
 // ─────────────────────────── styles ───────────────────────────
 const styles = StyleSheet.create({
+  versionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 30,
+    marginBottom: 10,
+    alignSelf: 'flex-end',
+  },
+  versionText: {
+    color: '#888',
+    fontSize: 13,
+    letterSpacing: 0.2,
+  },
   // preference rows
   row:        { flexDirection:'row', justifyContent:'space-between', alignItems:'center',
                 backgroundColor:'#1F1F1F', padding:15, borderRadius:10, marginBottom:15 },

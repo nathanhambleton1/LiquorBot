@@ -286,21 +286,15 @@ export default function CreateDrinkScreen() {
       }));
     if(!ingredientsInput.length){ alert('Add at least one ingredient.'); return; }
 
-    /* decide image */
+
+    // Always export and upload the image based on the current glassIdx and colourIdx, even if it's the default
     let imageKey: string | null = null;
-    const isCustomImage = glassIdx !== 0 || colourIdx !== 0;
-    if (isCustomImage) {
-      imageKey = await exportAndUploadImage();
-    } else if (existingImageKey) {
-      imageKey = existingImageKey;
-    } else {
-      const { uri } = Image.resolveAssetSource(PLACEHOLDER_IMAGE);
-      const buf = await (await fetch(uri)).arrayBuffer();
-      const key = `drinkImages/${Date.now()}-placeholder.png`;
-      await uploadData({ key, data: new Uint8Array(buf), options: { contentType: 'image/png' } }).result;
-      imageKey = key;
+    imageKey = await exportAndUploadImage();
+    if (!imageKey) {
+      alert('Could not save image');
+      setSaving(false);
+      return;
     }
-    if (!imageKey) { alert('Could not save image'); return; }
 
     try{
       if(isEditing){

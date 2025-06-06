@@ -282,12 +282,12 @@ export default function SessionLoading(): ReactElement {
 
       {/* title & tagline */}
       <Text style={styles.title}>{APP_NAME}</Text>
-      <RNAnimated.Text style={[styles.tagline, { opacity: fadeTag }]}>
+      <RNAnimated.Text style={[styles.tagline, { opacity: fadeTag }]}> 
         {TAGLINES[tagIdx]}
       </RNAnimated.Text>
 
       {/* feature card */}
-      <RNAnimated.View style={[styles.card, { opacity: fadeCard }]}>
+      <RNAnimated.View style={[styles.card, { opacity: fadeCard }]}> 
         <Ionicons
           name={FEATURES[cardIdx].icon as any}
           size={28}
@@ -325,6 +325,9 @@ export default function SessionLoading(): ReactElement {
       {/* percentage + status */}
       <Text style={styles.percent}>{percent}%</Text>
       <Text style={styles.status}>{status}</Text>
+
+      {/* app version */}
+      <Text style={styles.appVersion}>v1.0.1</Text>
     </LinearGradient>
   );
 }
@@ -428,4 +431,13 @@ const styles = StyleSheet.create({
 
   percent:{ marginTop:12, fontSize:18, color:'#DFDCD9', fontWeight:'700' },
   status: { marginTop:4,  fontSize:14, color:'#757575' },
+  appVersion: {
+    position: 'absolute',
+    bottom: 18,
+    right: 24,
+    fontSize: 13,
+    color: '#888',
+    opacity: 0.7,
+    letterSpacing: 0.2,
+  },
 });

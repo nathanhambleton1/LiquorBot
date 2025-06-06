@@ -908,20 +908,17 @@ const Field = ({
       <TextInput
         style={[
           styles.input,
-          multiline && { height: Math.max(40, height), textAlignVertical: 'top' }, // Ensure text starts at the top
+          multiline && { height: Math.max(40, height), textAlignVertical: 'top' },
         ]}
         multiline={multiline}
         placeholder={ph}
         placeholderTextColor="#4F4F4F"
         value={value}
         onChangeText={onChange}
-        onContentSizeChange={(e) => {
-          if (multiline) {
-            setHeight(e.nativeEvent.contentSize.height);
-          }
-        }}
-        blurOnSubmit={!multiline}
-        returnKeyType={multiline ? (Platform.OS === 'ios' ? 'default' : 'none') : 'done'}
+        onContentSizeChange={(e) => setHeight(e.nativeEvent.contentSize.height)}
+        blurOnSubmit={true}
+        returnKeyType={multiline ? 'default' : 'done'}
+        
       />
     </View>
   );
