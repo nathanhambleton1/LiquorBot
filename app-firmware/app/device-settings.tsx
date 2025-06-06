@@ -521,16 +521,9 @@ export default function DeviceSettings() {
                   onPress={async () => {
                   if (isOverridden) {
                     Alert.alert(
-                      'Delete event or wait?',
-                      'You’re currently running an event. “Delete Event & Disconnect” will remove the event (all guests will be kicked off) and disconnect LiquorBot. You can also wait until the event ends automatically.',
+                      'In Event Mode?',
+                      'LiquorBot is currently running an event. You can wait until the event ends (you’ll be disconnected automatically), delete the event and disconnect now (removes the event and disconnects all guests), or cancel to stay connected.',
                       [
-                        {
-                          text: 'Wait until event ends',
-                          style: 'default',
-                          onPress: () => {
-                            clearPrevLiquorbotId();
-                          },
-                        },
                         {
                           text: 'Delete Event & Disconnect',
                           style: 'destructive',
@@ -551,6 +544,13 @@ export default function DeviceSettings() {
                               setConfigLoading(false);
                               Alert.alert('Disconnected', 'Event deleted and device fully disconnected.');
                             }
+                          },
+                        },
+                        {
+                          text: 'Wait until event ends',
+                          style: 'default',
+                          onPress: () => {
+                            clearPrevLiquorbotId();
                           },
                         },
                         { text: 'Cancel', style: 'cancel' },
