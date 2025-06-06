@@ -358,10 +358,14 @@ export default function CreateDrinkScreen() {
   /* ═════════════  PREVIEW THUMB  ═════════════ */
   // Responsive preview image and selectors
 const { width: SCREEN_W } = Dimensions.get('window');
-const PREVIEW_SIZE = Math.min(200, Math.max(120, Math.floor(SCREEN_W * 0.32)));
-const SELECTOR_THUMB = Math.max(36, Math.floor(PREVIEW_SIZE * 0.32));
-const COLOUR_SWATCH = Math.max(28, Math.floor(PREVIEW_SIZE * 0.22));
-const COLOUR_SWATCH_SELECTED = Math.max(20, Math.floor(PREVIEW_SIZE * 0.16));
+const GLASS_COUNT = GLASS_COLOUR_ASSETS.length;
+const COLOUR_COUNT = DRINK_COLOURS.length;
+const H_PADDING = 40; // total horizontal padding/margin
+const PREVIEW_SIZE = Math.min(180, Math.max(100, Math.floor(SCREEN_W * 0.22)));
+const SELECTOR_ROW_WIDTH = SCREEN_W - PREVIEW_SIZE - H_PADDING;
+const SELECTOR_THUMB = Math.floor((SELECTOR_ROW_WIDTH - (GLASS_COUNT - 1) * 12) / GLASS_COUNT);
+const COLOUR_SWATCH = Math.floor((SELECTOR_ROW_WIDTH - (COLOUR_COUNT - 1) * 18) / COLOUR_COUNT);
+const COLOUR_SWATCH_SELECTED = Math.floor(COLOUR_SWATCH * 0.7);
 
   const previewCanvas = (
     <Canvas style={[styles.previewCanvasSmall, { width: PREVIEW_SIZE, height: PREVIEW_SIZE }]}> 
@@ -389,24 +393,25 @@ const COLOUR_SWATCH_SELECTED = Math.max(20, Math.floor(PREVIEW_SIZE * 0.16));
           {previewCanvas}
           <View style={{marginLeft:20, flex:1, justifyContent:'center', minWidth:0}}>
             {/* Glass picker */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom:16, minWidth:0}} contentContainerStyle={{flexGrow:1, alignItems:'center'}}>
+            <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', width:SELECTOR_ROW_WIDTH, marginBottom:16}}>
               {GLASS_COLOUR_ASSETS.map((_, idx) => (
                 <TouchableOpacity
                   key={idx}
                   onPress={() => setGlassIdx(idx)}
-                  style={[styles.selectorThumb, glassIdx === idx && styles.selectedThumb, { width: SELECTOR_THUMB, height: SELECTOR_THUMB }]}
+                  style={[styles.selectorThumb, glassIdx === idx && styles.selectedThumb, { width: SELECTOR_THUMB, height: SELECTOR_THUMB, marginRight: idx < GLASS_COUNT-1 ? 12 : 0 }]
+                  }
                 >
                   <Image source={GLASS_PLACEHOLDERS[idx]} style={[styles.thumbImage, { width: SELECTOR_THUMB * 0.8, height: SELECTOR_THUMB * 0.8 }]} />
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </View>
             {/* Colour picker */}
-            <View style={{flexDirection:'row', flexWrap:'nowrap', minWidth:0}}>
+            <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', width:SELECTOR_ROW_WIDTH}}>
               {DRINK_COLOURS.map((c, idx) => (
                 <TouchableOpacity
                   key={idx}
                   onPress={() => setColourIdx(idx)}
-                  style={[styles.colourSwatchContainer, colourIdx === idx && styles.selectedColourSwatchContainer, { width: COLOUR_SWATCH, height: COLOUR_SWATCH, borderRadius: COLOUR_SWATCH/2 }]
+                  style={[styles.colourSwatchContainer, colourIdx === idx && styles.selectedColourSwatchContainer, { width: COLOUR_SWATCH, height: COLOUR_SWATCH, borderRadius: COLOUR_SWATCH/2, marginRight: idx < COLOUR_COUNT-1 ? 18 : 0 }]
                   }
                 >
                   <View style={[
