@@ -234,8 +234,8 @@ export default function LikedDrinksPopup({ drinks: external = [] }: Props) {
 
 /* ─────────────────────────── styles ─────────────────────────── */
 const styles = StyleSheet.create({
-  center:     { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyText:  { color: '#DFDCD9', fontSize: 16, textAlign: 'center', marginTop: 10 },
+  center:     { flex: 1, alignItems: 'center', marginTop: 80 },
+  emptyText:  { color: '#DFDCD9', fontSize: 16, textAlign: 'center', marginTop: 30 },
   emptySubText: { color: '#B0AFAE', fontSize: 14, textAlign: 'center', marginTop: 10, maxWidth: 260 },
   item:       { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F',
                 borderRadius: 10, marginBottom: 10, padding: 10 },
