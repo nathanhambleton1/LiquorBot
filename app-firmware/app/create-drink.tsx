@@ -154,7 +154,6 @@ export default function CreateDrinkScreen() {
   const [saving, setSaving] = useState(false);
 
   /* ----------- state: image builder ----------- */
-  const [builderVisible, setBuilderVisible] = useState(false);
   const [glassIdx,   setGlassIdx]   = useState(0);
   const [colourIdx,  setColourIdx]  = useState(0);
   const [imageConfigured, setImageConfigured] = useState(false);
@@ -383,11 +382,34 @@ export default function CreateDrinkScreen() {
         keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
         {/* image builder entry */}
-        <View style={styles.imageBuilderEntry}>
+        <View style={{flexDirection:'row',alignItems:'center',marginBottom:25}}>
           {previewCanvas}
-          <TouchableOpacity style={styles.buildBtn} onPress={()=>setBuilderVisible(true)}>
-            <Text style={styles.buildBtnText}>{imageConfigured?'Edit Image':'Build Image'}</Text>
-          </TouchableOpacity>
+          <View style={{marginLeft:20, justifyContent:'center'}}>
+            {/* Glass picker */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom:16}}>
+              {GLASS_COLOUR_ASSETS.map((_, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  onPress={() => setGlassIdx(idx)}
+                  style={[styles.selectorThumb, glassIdx === idx && styles.selectedThumb]}
+                >
+                  <Image source={GLASS_PLACEHOLDERS[idx]} style={styles.thumbImage} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            {/* Colour picker */}
+            <View style={{flexDirection:'row'}}>
+              {DRINK_COLOURS.map((c, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  onPress={() => setColourIdx(idx)}
+                  style={[styles.colourSwatchContainer, colourIdx === idx && styles.selectedColourSwatchContainer]}
+                >
+                  <View style={[styles.colourSwatch, { backgroundColor: c }, colourIdx === idx && styles.selectedColourSwatch]} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
         </View>
 
         {/* name */}
@@ -523,98 +545,6 @@ export default function CreateDrinkScreen() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
-
-      {/* ---------- IMAGE BUILDER MODAL ---------- */}
-      <Modal
-          visible={builderVisible}
-          animationType="slide"
-          // Add this for iOS modal stacking
-          presentationStyle={Platform.OS === 'ios' ? 'formSheet' : 'fullScreen'}
-          onRequestClose={() => setBuilderVisible(false)}
-        >
-        <View style={styles.builderModal}>
-          {/* Header */}
-          <TouchableOpacity
-            style={styles.modalCloseButton}
-            onPress={() => setBuilderVisible(false)}
-          >
-            <Ionicons name="chevron-down" size={30} color="#DFDCD9" />
-          </TouchableOpacity>
-          <Text style={styles.modalHeaderText}>Build Image</Text>
-
-          {/* Preview */}
-          <Canvas style={styles.previewCanvas}>
-            {baseImage && (
-              <SkiaImage
-                image={baseImage}
-                x={0}
-                y={0}
-                width={CANVAS_W}
-                height={CANVAS_H}
-              />
-            )}
-          </Canvas>
-
-          {/* Combined Selection Boxes */}
-          <View style={styles.selectionContainer}>
-            {/* Glass picker */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.selectorRow}
-            >
-              {GLASS_COLOUR_ASSETS.map((_, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  onPress={() => setGlassIdx(idx)}
-                  style={[
-                    styles.selectorThumb,
-                    glassIdx === idx && styles.selectedThumb,
-                  ]}
-                >
-                  <Image
-                    source={GLASS_PLACEHOLDERS[idx]}   // ← always the empty glass
-                    style={styles.thumbImage}
-                  />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            {/* Colour picker */}
-            <View style={styles.selectorRow}>
-              {DRINK_COLOURS.map((c, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  onPress={() => setColourIdx(idx)}
-                  style={[
-                    styles.colourSwatchContainer,
-                    colourIdx === idx && styles.selectedColourSwatchContainer,
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.colourSwatch,
-                      { backgroundColor: c },
-                      colourIdx === idx && styles.selectedColourSwatch,
-                    ]}
-                  />
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Done */}
-          <TouchableOpacity
-            style={styles.doneBtn}
-            onPress={() => {
-              setImageConfigured(true);
-              setBuilderVisible(false);
-            }}
-          >
-            <Text style={styles.doneBtnText}>Done</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
 
       {/* INGREDIENT PICKER MODAL */}
       <Modal
@@ -764,7 +694,6 @@ const styles = StyleSheet.create({
   previewCanvasSmall: { width: THUMB, height: THUMB, backgroundColor: 'transparent', borderRadius: 8 },
   buildBtn: { marginLeft: 15, backgroundColor: '#1F1F1F', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
   buildBtnText: { color: '#DFDCD9', fontSize: 16 },
-  builderModal: { flex: 1, backgroundColor: '#141414', padding: 20 },
   modalCloseButton: { position: 'absolute', top: 80, left: 20, zIndex: 10 },
   modalHeaderText: { fontSize: 20, fontWeight: 'bold', color: '#DFDCD9', textAlign: 'center', marginTop: 60, marginBottom: 10 },
   previewCanvas: { width: CANVAS_W, height: CANVAS_H, alignSelf: 'center', borderRadius: 10, backgroundColor: 'transparent', marginTop: 30 },
