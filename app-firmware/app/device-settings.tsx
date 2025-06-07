@@ -34,6 +34,8 @@ import { listEvents }         from '../src/graphql/queries';
 import { deleteEvent }        from '../src/graphql/mutations';
 import { getCurrentUser } from 'aws-amplify/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// -----------------------------------------------------------------------------
 const client = generateClient();
 Amplify.configure(config);
 const pubsub = new PubSub({
@@ -269,21 +271,20 @@ export default function DeviceSettings() {
       next: async (d) => {
         const msg = (d as any).value ?? d;
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
-          if (!undoReady && !suppressUndo.current) await saveUndo(slots, username, liquorbotId);
-          setUndoReady(!suppressUndo.current);
           setSlots(msg.slots.map((id: any) => Number(id) || 0));
           setConfigLoading(false);
+
           if (retryIntervalRef.current) {
             clearInterval(retryIntervalRef.current);
             retryIntervalRef.current = null;
           }
         }
         if (msg.action === 'SET_SLOT' && typeof msg.slot === 'number') {
-          if (!suppressUndo.current) {
-            await saveUndo(slots, username, liquorbotId);
-            setUndoReady(true);
-          }
           setSlots(prev => {
+            if (!suppressUndo.current) {
+              saveUndo(prev, username, liquorbotId);
+              setUndoReady(true);
+            }
             const next = [...prev];
             next[msg.slot - 1] = Number(msg.ingredientId) || 0;
             return next;
@@ -320,9 +321,16 @@ export default function DeviceSettings() {
     publishSlot({ action: 'CLEAR_CONFIG' });
     setSlots(Array(15).fill(0));
   });
-  const handleSetSlot = async (idx: number, id: number) => {
-    await saveUndo(slots, username, liquorbotId);
-    setUndoReady(true);
+  const handleSetSlot = (idx: number, id: number) => {
+    setSlots(prev => {
+      if (!suppressUndo.current) {            // snapshot *before* we mutate
+        saveUndo(prev, username, liquorbotId);
+        setUndoReady(true);
+      }
+      const next = [...prev];
+      next[idx] = id;
+      return next;
+    });
     publishSlot({ action: 'SET_SLOT', slot: idx + 1, ingredientId: id });
   };
 
@@ -502,18 +510,22 @@ export default function DeviceSettings() {
             <Text style={styles.sectionHeader}>Configure Slots</Text>
             {undoReady && (
               <TouchableOpacity
-                onPress={async () => { // 🆕 UNDO HANDLER
+                onPress={async () => {
                   if (!isConnected || !undoReady) return;
                   const prev = await popUndo(username, liquorbotId);
                   if (!prev) return;
-                  // Temporarily disable undo tracking while reverting
-                  setUndoReady(false);
-                  // push backup to device
-                  await Promise.all(prev.map((ingId, i) =>
-                    publishSlot({ action: 'SET_SLOT', slot: i + 1, ingredientId: ingId })
-                  ));
+
+                  suppressUndo.current = true;      // ignore echo messages
+                  setUndoReady(false);              // hide button
+
+                  await Promise.all(
+                    prev.map((ingId, i) =>
+                      publishSlot({ action: 'SET_SLOT', slot: i + 1, ingredientId: ingId })
+                    )
+                  );
                   await publishSlot({ action: 'GET_CONFIG' });
-                  setSlots(prev);
+                  setSlots(prev);                   // instant UI feedback
+                  setTimeout(() => { suppressUndo.current = false; }, 1500);
                 }}
                 disabled={!undoReady || !isConnected}
                 style={{ marginRight: 0, marginLeft: 0 }}
