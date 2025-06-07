@@ -146,13 +146,13 @@ export default function DeviceSettings() {
     })();
   }, []);
 
-  // Remove any undo buffer on mount so undo is not persisted across reloads
+  // On mount, check if an undo buffer exists for this user/device
   useEffect(() => {
     (async () => {
       try {
         const key = getUndoKey(username, liquorbotId);
-        await AsyncStorage.removeItem(key);
-        setUndoReady(false);
+        const val = await AsyncStorage.getItem(key);
+        setUndoReady(!!val);
       } catch {}
     })();
   }, [username, liquorbotId]);
@@ -506,50 +506,52 @@ export default function DeviceSettings() {
 
         {/* ─────────────────── CONFIGURE SLOTS ─────────────────── */}
         <View style={styles.slotsContainer}>
-          <View style={styles.slotsHeaderContainer}>
+          <View style={[styles.slotsHeaderContainer, { justifyContent: 'space-between' }]}> 
             <Text style={styles.sectionHeader}>Configure Slots</Text>
-            {undoReady && (
-              <TouchableOpacity
-                onPress={async () => {
-                  if (!isConnected || !undoReady) return;
-                  const prev = await popUndo(username, liquorbotId);
-                  if (!prev) return;
+            <View style={{ flexDirection: 'row', marginLeft: 'auto' }}>
+              {undoReady && (
+                <TouchableOpacity
+                  onPress={async () => {
+                    if (!isConnected || !undoReady) return;
+                    const prev = await popUndo(username, liquorbotId);
+                    if (!prev) return;
 
-                  suppressUndo.current = true;      // ignore echo messages
-                  setUndoReady(false);              // hide button
+                    suppressUndo.current = true;      // ignore echo messages
+                    setUndoReady(false);              // hide button
 
-                  await Promise.all(
-                    prev.map((ingId, i) =>
-                      publishSlot({ action: 'SET_SLOT', slot: i + 1, ingredientId: ingId })
-                    )
-                  );
-                  await publishSlot({ action: 'GET_CONFIG' });
-                  setSlots(prev);                   // instant UI feedback
-                  setTimeout(() => { suppressUndo.current = false; }, 1500);
-                }}
-                disabled={!undoReady || !isConnected}
-                style={{ marginRight: 0, marginLeft: 0 }}
-              >
+                    await Promise.all(
+                      prev.map((ingId, i) =>
+                        publishSlot({ action: 'SET_SLOT', slot: i + 1, ingredientId: ingId })
+                      )
+                    );
+                    await publishSlot({ action: 'GET_CONFIG' });
+                    setSlots(prev);                   // instant UI feedback
+                    setTimeout(() => { suppressUndo.current = false; }, 1500);
+                  }}
+                  disabled={!undoReady || !isConnected}
+                  style={{ marginRight: 8, marginLeft: 0 }}
+                >
+                  <Text
+                    style={[
+                      styles.clearAllButtonText,
+                      !isConnected && { opacity: 0.5 },
+                    ]}
+                  >
+                    Undo
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={handleClearAll} disabled={!isConnected}>
                 <Text
                   style={[
                     styles.clearAllButtonText,
                     !isConnected && { opacity: 0.5 },
                   ]}
                 >
-                  Undo
+                  Clear All
                 </Text>
               </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={handleClearAll} disabled={!isConnected}>
-              <Text
-                style={[
-                  styles.clearAllButtonText,
-                  !isConnected && { opacity: 0.5 },
-                ]}
-              >
-                Clear All
-              </Text>
-            </TouchableOpacity>
+            </View>
           </View>
 
           {!isConnected && (
@@ -842,7 +844,7 @@ const styles = StyleSheet.create({
   actionLabel: { color: '#DFDCD9', fontSize: 16 },
 
   slotsContainer: { backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20 },
-  slotsHeaderContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  slotsHeaderContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   connectDeviceMessage: { color: '#d44a4a', fontSize: 12, textAlign: 'center', marginBottom: 25 },
   slotRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
   slotLabel: { color: '#DFDCD9', fontSize: 16, marginRight: 10, width: 80 },
@@ -890,7 +892,7 @@ const styles = StyleSheet.create({
     borderColor: '#CE975E',
   },
   connectPromptText: { color: '#DFDCD9', fontSize: 14, textAlign: 'center' },
-  clearAllButtonText: { color: '#4F4F4F', fontSize: 14, fontWeight: 'bold', marginLeft: 10 },
+  clearAllButtonText: { color: '#4F4F4F', fontSize: 14, fontWeight: 'bold', },
 
   /* ingredient modal */
   modalContainer: { flex: 1, backgroundColor: '#141414', padding: 20 },
