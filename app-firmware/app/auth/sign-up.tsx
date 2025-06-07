@@ -176,13 +176,13 @@ export default function SignUp() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={32}
     >
-      <LinearGradient colors={[BG_TOP, BG_BTM]} style={{ flex: 1 }}>
+      <LinearGradient colors={[BG_TOP, BG_BTM]} style={styles.background}>
         <ScrollView
           contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
           keyboardShouldPersistTaps="handled"
-          style={{ flex: 1 }}
+          style={{ flex: 1, backgroundColor: 'transparent' }}
         >
-          <View style={styles.container}>
+          <View style={[styles.container, { backgroundColor: 'transparent' }]}> 
             <Text style={styles.title}>Sign Up</Text>
 
             {/* Username Input */}
