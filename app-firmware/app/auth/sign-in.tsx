@@ -13,7 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import { signIn, getCurrentUser } from 'aws-amplify/auth';
 import { MaterialIcons } from '@expo/vector-icons';
-import LinearGradient from 'react-native-linear-gradient';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const BG_TOP = '#4f4f4f';
 const BG_BTM = '#000';
@@ -43,7 +43,7 @@ export default function SignIn() {
       const { isSignedIn, nextStep } = await signIn({ username, password });
 
       if (isSignedIn) {
-        router.replace('/auth/session-loading');      // 👈 NEW
+        router.replace('/auth/session-loading');
         return;
       }
 

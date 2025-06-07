@@ -12,7 +12,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-nativ
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { resetPassword, confirmResetPassword } from 'aws-amplify/auth';
-import LinearGradient from 'react-native-linear-gradient';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const BG_TOP = '#4f4f4f';
 const BG_BTM = '#000';

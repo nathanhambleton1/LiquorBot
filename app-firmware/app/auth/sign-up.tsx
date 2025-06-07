@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import { signUp, signIn } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/api';
 import { Ionicons } from '@expo/vector-icons';
-import LinearGradient from 'react-native-linear-gradient';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const client = generateClient();
 const dummyPwd = 'DummyPa$$word123!';
