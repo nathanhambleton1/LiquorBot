@@ -144,6 +144,17 @@ export default function DeviceSettings() {
     })();
   }, []);
 
+  // Remove any undo buffer on mount so undo is not persisted across reloads
+  useEffect(() => {
+    (async () => {
+      try {
+        const key = getUndoKey(username, liquorbotId);
+        await AsyncStorage.removeItem(key);
+        setUndoReady(false);
+      } catch {}
+    })();
+  }, [username, liquorbotId]);
+
   /*────────── Animations ──────────*/
   const toggleMaintenance = () => {
     Animated.timing(maintenanceRot, {
@@ -510,7 +521,7 @@ export default function DeviceSettings() {
                 <Text
                   style={[
                     styles.clearAllButtonText,
-                    { color: '#CE975E', marginRight: 10 },
+                    { color: '#CE975E', marginRight: 18 },
                     (!undoReady || !isConnected) && { opacity: 0.5 },
                   ]}
                 >
