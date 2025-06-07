@@ -510,7 +510,7 @@ export default function DeviceSettings() {
                 <Text
                   style={[
                     styles.clearAllButtonText,
-                    { color: '#CE975E', marginRight: 0 },
+                    { color: '#CE975E', marginRight: 10 },
                     (!undoReady || !isConnected) && { opacity: 0.5 },
                   ]}
                 >
