@@ -174,7 +174,7 @@ export default function SignUp() {
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={32}
+      keyboardVerticalOffset={0}
     >
       <LinearGradient colors={[BG_TOP, BG_BTM]} style={styles.background}>
         <ScrollView
@@ -182,7 +182,7 @@ export default function SignUp() {
           keyboardShouldPersistTaps="handled"
           style={{ flex: 1, backgroundColor: 'transparent' }}
         >
-          <View style={[styles.container, { backgroundColor: 'transparent' }]}> 
+          <View style={[styles.container, { backgroundColor: 'transparent', minHeight: '100%' }]}> 
             <Text style={styles.title}>Sign Up</Text>
 
             {/* Username Input */}
