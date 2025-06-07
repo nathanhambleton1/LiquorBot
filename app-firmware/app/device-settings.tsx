@@ -486,32 +486,34 @@ export default function DeviceSettings() {
         <View style={styles.slotsContainer}>
           <View style={styles.slotsHeaderContainer}>
             <Text style={styles.sectionHeader}>Configure Slots</Text>
-            <TouchableOpacity
-              onPress={async () => {                          // 🆕 UNDO HANDLER
-                if (!isConnected || !undoReady) return;
-                const prev = await popUndo(username, liquorbotId);
-                if (!prev) return;
-                /* push backup to device */
-                await Promise.all(prev.map((ingId, i) =>
-                  publishSlot({ action: 'SET_SLOT', slot: i + 1, ingredientId: ingId })
-                ));
-                await publishSlot({ action: 'GET_CONFIG' });
-                setSlots(prev);
-                setUndoReady(false);
-              }}
-              disabled={!undoReady || !isConnected}
-              style={{ marginRight: 18 }}                    // 🆕 left of Clear All
-            >
-              <Text
-                style={[
-                  styles.clearAllButtonText,
-                  (!undoReady || !isConnected) && { opacity: 0.5 },
-                ]}
+            {undoReady && (
+              <TouchableOpacity
+                onPress={async () => { // 🆕 UNDO HANDLER
+                  if (!isConnected || !undoReady) return;
+                  const prev = await popUndo(username, liquorbotId);
+                  if (!prev) return;
+                  /* push backup to device */
+                  await Promise.all(prev.map((ingId, i) =>
+                    publishSlot({ action: 'SET_SLOT', slot: i + 1, ingredientId: ingId })
+                  ));
+                  await publishSlot({ action: 'GET_CONFIG' });
+                  setSlots(prev);
+                  setUndoReady(false); // Hide the Undo button after use
+                }}
+                disabled={!undoReady || !isConnected}
+                style={{ marginRight: 0, marginLeft: 0 }}
               >
-                Undo
-              </Text>
-            </TouchableOpacity>
-
+                <Text
+                  style={[
+                    styles.clearAllButtonText,
+                    { color: '#CE975E', marginRight: 18 },
+                    (!undoReady || !isConnected) && { opacity: 0.5 },
+                  ]}
+                >
+                  Undo
+                </Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity onPress={handleClearAll} disabled={!isConnected}>
               <Text
                 style={[
