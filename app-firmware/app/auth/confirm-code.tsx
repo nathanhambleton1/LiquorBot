@@ -7,10 +7,14 @@
 // Updated: Apr 23 2025
 // -----------------------------------------------------------------------------
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ImageBackground } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { confirmSignUp, signIn, resendSignUpCode } from 'aws-amplify/auth';
 import { Ionicons } from '@expo/vector-icons';
+import LinearGradient from 'react-native-linear-gradient';
+
+const BG_TOP = '#4f4f4f';
+const BG_BTM = '#000';
 
 export default function ConfirmCode() {
   const router = useRouter();
@@ -82,12 +86,7 @@ export default function ConfirmCode() {
 
   /* ───────────────────────── UI ───────────────────────── */
   return (
-    <ImageBackground
-      source={require('@/assets/images/dark-gradient.png')}
-      style={styles.background}
-      resizeMode="cover"
-      blurRadius={5}
-    >
+    <LinearGradient colors={[BG_TOP, BG_BTM]} style={styles.background}>
       <View style={styles.container}>
         <Text style={styles.title}>Confirm Account</Text>
 
@@ -137,12 +136,12 @@ export default function ConfirmCode() {
           </View>
         )}
       </View>
-    </ImageBackground>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  background:            { flex: 1, resizeMode: 'cover' },
+  background:            { flex: 1 },
   container:             { flex: 1, justifyContent: 'center', padding: 24 },
   title:                 { fontSize: 42, color: '#fff', marginBottom: 24, fontWeight: 'bold' },
   label:                 { fontSize: 16, color: '#fff', marginTop: 10 },

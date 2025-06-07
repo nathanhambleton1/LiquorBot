@@ -1,12 +1,13 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, ActivityIndicator, ImageBackground, KeyboardAvoidingView, Platform,
+  StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { signUp, signIn } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/api';
 import { Ionicons } from '@expo/vector-icons';
+import LinearGradient from 'react-native-linear-gradient';
 
 const client = generateClient();
 const dummyPwd = 'DummyPa$$word123!';
@@ -37,6 +38,9 @@ const isUsernameTaken = async (name: string): Promise<boolean> => {
     return n === 'NotAuthorizedException' || n === 'UserNotConfirmedException';
   }
 };
+
+const BG_TOP = '#4f4f4f';
+const BG_BTM = '#000';
 
 export default function SignUp() {
   const router = useRouter();
@@ -171,12 +175,7 @@ export default function SignUp() {
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ImageBackground
-        source={require('@/assets/images/dark-gradient.png')}
-        style={styles.background}
-        resizeMode="cover"
-        blurRadius={5}
-      >
+      <LinearGradient colors={[BG_TOP, BG_BTM]} style={styles.background}>
         <View style={styles.container}>
           <Text style={styles.title}>Sign Up</Text>
 
@@ -293,7 +292,7 @@ export default function SignUp() {
             </Text>
           </View>
         </View>
-      </ImageBackground>
+      </LinearGradient>
     </KeyboardAvoidingView>
   );
 }

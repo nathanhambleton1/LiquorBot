@@ -8,11 +8,15 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity,
-  ActivityIndicator, ImageBackground, KeyboardAvoidingView, Platform,
+  ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { signIn, getCurrentUser } from 'aws-amplify/auth';
 import { MaterialIcons } from '@expo/vector-icons';
+import LinearGradient from 'react-native-linear-gradient';
+
+const BG_TOP = '#4f4f4f';
+const BG_BTM = '#000';
 
 export default function SignIn() {
   const router = useRouter();
@@ -72,12 +76,7 @@ export default function SignIn() {
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ImageBackground
-        source={require('@/assets/images/dark-gradient.png')}
-        style={[styles.background, { backgroundColor: '#141414' }]}
-        resizeMode="cover"
-        blurRadius={5}
-      >
+      <LinearGradient colors={[BG_TOP, BG_BTM]} style={{ flex: 1 }}>
         <View style={styles.container}>
           <Text style={styles.title}>Sign In</Text>
 
@@ -131,13 +130,12 @@ export default function SignIn() {
             </Text>
           </View>
         </View>
-      </ImageBackground>
+      </LinearGradient>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  background:         { flex: 1 },
   container:          { flex: 1, justifyContent: 'center', padding: 24 },
   title:              { fontSize: 48, color: '#fff', marginBottom: 24, fontWeight: 'bold' },
   label:              { fontSize: 16, color: '#fff', marginTop: 10 },

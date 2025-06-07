@@ -8,10 +8,14 @@
 // Created:  March 1, 2025
 // -----------------------------------------------------------------------------
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ImageBackground } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { resetPassword, confirmResetPassword } from 'aws-amplify/auth';
+import LinearGradient from 'react-native-linear-gradient';
+
+const BG_TOP = '#4f4f4f';
+const BG_BTM = '#000';
 
 export default function ForgotPassword() {
   const router = useRouter();
@@ -66,12 +70,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <ImageBackground
-      source={require('@/assets/images/dark-gradient.png')}
-      style={styles.background}
-      resizeMode="cover"
-      blurRadius={5}
-    >
+    <LinearGradient colors={[BG_TOP, BG_BTM]} style={styles.background}>
       <View style={styles.container}>
         {/* Back Arrow */}
         <TouchableOpacity style={styles.backArrow} onPress={() => router.replace('/auth/sign-in')}>
@@ -138,12 +137,12 @@ export default function ForgotPassword() {
           </>
         )}
       </View>
-    </ImageBackground>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  background:            { flex: 1, resizeMode: 'cover' },
+  background:            { flex: 1 },
   container:             { flex: 1, padding: 24, justifyContent: 'center' },
   backArrow:             { position: 'absolute', top: 60, left: 20, zIndex: 10 },
   title:                 { fontSize: 36, color: '#fff', marginBottom: 24, fontWeight: 'bold', textAlign: 'center' },
