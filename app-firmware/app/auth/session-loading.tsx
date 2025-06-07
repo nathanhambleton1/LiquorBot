@@ -59,8 +59,8 @@ const BAR_W    = 280;
 const BAR_H    = 12;
 const BAR_BG   = '#2B2B2B';
 const BAR_FILL = '#CE975E';
-const BG_TOP   = '#CE975E'; // deep gold
-const BG_BTM   = '#141414'; // much darker black
+const BG_TOP   = '#141414';
+const BG_BTM   = '#000';
 
 /* rotating taglines */
 const TAGLINES = [
