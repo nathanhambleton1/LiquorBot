@@ -32,6 +32,7 @@ import { PubSub }      from '@aws-amplify/pubsub';
 import { generateClient }     from 'aws-amplify/api';
 import { listEvents }         from '../src/graphql/queries';
 import { deleteEvent }        from '../src/graphql/mutations';
+import { getCurrentUser } from 'aws-amplify/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 const client = generateClient();
 Amplify.configure(config);
@@ -48,6 +49,24 @@ interface Ingredient {
   name: string;
   type: 'Alcohol' | 'Mixer' | 'Sour' | 'Sweet' | 'Misc';
   description: string;
+}
+
+/* ───── Undo-buffer helpers ───── */                            // 🆕
+const getUndoKey = (user: string, botId: string) =>
+  `undoConfig-${user}-${botId}`;
+
+async function saveUndo(slots: number[], user: string, botId: string) { // 🆕
+  try { await AsyncStorage.setItem(getUndoKey(user, botId), JSON.stringify(slots)); }
+  catch { /* ignore */ }
+}
+
+async function popUndo(user: string, botId: string): Promise<number[]|null> { // 🆕
+  try {
+    const raw = await AsyncStorage.getItem(getUndoKey(user, botId));
+    if (!raw) return null;
+    await AsyncStorage.removeItem(getUndoKey(user, botId));
+    return JSON.parse(raw) as number[];
+  } catch { return null; }
 }
 
 // ----------------------------------------------------------------------------- 
@@ -81,6 +100,8 @@ export default function DeviceSettings() {
   const [loading, setLoading] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
   const [showConnectPrompt, setShowConnectPrompt] = useState(false);
+  const [undoReady, setUndoReady] = useState(false);
+  const [username, setUsername]   = useState('guest');  
 
   /*────────── Active-event helper ──────────*/
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
@@ -113,6 +134,14 @@ export default function DeviceSettings() {
       }
     })();
   }, [isOverridden, liquorbotId]);
+
+
+  useEffect(() => {
+    (async () => {
+      try { setUsername((await getCurrentUser()).username); }
+      catch { /* guest – keep ‘guest’ */ }
+    })();
+  }, []);
 
   /*────────── Animations ──────────*/
   const toggleMaintenance = () => {
@@ -225,9 +254,11 @@ export default function DeviceSettings() {
   useEffect(() => {
     if (liquorbotId === '000') return; // Don't subscribe or fetch config if disconnected
     const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
-      next: (d) => {
+      next: async (d) => {
         const msg = (d as any).value ?? d;
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
+          if (!undoReady) await saveUndo(slots, username, liquorbotId);
+          setUndoReady(true);
           setSlots(msg.slots.map((id: any) => Number(id) || 0));
           setConfigLoading(false);
           if (retryIntervalRef.current) {
@@ -236,6 +267,8 @@ export default function DeviceSettings() {
           }
         }
         if (msg.action === 'SET_SLOT' && typeof msg.slot === 'number') {
+          await saveUndo(slots, username, liquorbotId);                  // 🆕
+          setUndoReady(true);
           setSlots(prev => {
             const next = [...prev];
             next[msg.slot - 1] = Number(msg.ingredientId) || 0;
@@ -266,13 +299,18 @@ export default function DeviceSettings() {
     setConfigLoading(true);
     publishSlot({ action: 'GET_CONFIG' });
   };
-  const handleClearAll = () =>
-    bumpIfDisconnected(() => {
-      publishSlot({ action: 'CLEAR_CONFIG' });
-      setSlots(Array(15).fill(0));
-    });
-  const handleSetSlot = (idx: number, id: number) =>
+  const handleClearAll = () =>                                       
+  bumpIfDisconnected(async () => {
+    await saveUndo(slots, username, liquorbotId);
+    setUndoReady(true);            
+    publishSlot({ action: 'CLEAR_CONFIG' });
+    setSlots(Array(15).fill(0));
+  });
+  const handleSetSlot = async (idx: number, id: number) => {
+    await saveUndo(slots, username, liquorbotId);
+    setUndoReady(true);
     publishSlot({ action: 'SET_SLOT', slot: idx + 1, ingredientId: id });
+  };
 
   /*────────── Ingredient helpers ──────────*/
   const categories = ['All', 'Alcohol', 'Mixer', 'Sour', 'Sweet', 'Misc'];
@@ -447,10 +485,44 @@ export default function DeviceSettings() {
         {/* ─────────────────── CONFIGURE SLOTS ─────────────────── */}
         <View style={styles.slotsContainer}>
           <View style={styles.slotsHeaderContainer}>
-            <Text style={styles.sectionHeader}>Configure Slots</Text>
-            <TouchableOpacity onPress={handleClearAll} disabled={!isConnected}>
-              <Text style={[styles.clearAllButtonText, !isConnected && { opacity: 0.5 }]}>Clear All</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity
+                onPress={async () => {                          // 🆕 UNDO HANDLER
+                  if (!isConnected || !undoReady) return;
+                  const prev = await popUndo(username, liquorbotId);
+                  if (!prev) return;
+                  /* push backup to device */
+                  await Promise.all(prev.map((ingId, i) =>
+                    publishSlot({ action: 'SET_SLOT', slot: i + 1, ingredientId: ingId })
+                  ));
+                  await publishSlot({ action: 'GET_CONFIG' });
+                  setSlots(prev);
+                  setUndoReady(false);
+                }}
+                disabled={!undoReady || !isConnected}
+                style={{ marginRight: 18 }}                    // 🆕 left of Clear All
+              >
+                <Text
+                  style={[
+                    styles.clearAllButtonText,
+                    (!undoReady || !isConnected) && { opacity: 0.5 },
+                  ]}
+                >
+                  Undo
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={handleClearAll} disabled={!isConnected}>
+                <Text
+                  style={[
+                    styles.clearAllButtonText,
+                    !isConnected && { opacity: 0.5 },
+                  ]}
+                >
+                  Clear All
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {!isConnected && (

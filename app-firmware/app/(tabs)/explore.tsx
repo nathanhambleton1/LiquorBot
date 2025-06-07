@@ -83,6 +83,23 @@ const parseIngIds = (d: Drink) =>
     : [];
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
+/* ───── Undo helpers (shared) ───── */
+const getUndoKey = (user: string, botId: string) =>
+  `undoConfig-${user}-${botId}`;
+
+async function saveUndo(
+  slots: number[] | unknown,           // accepts any serialisable thing
+  user:  string,
+  botId: string,
+) {
+  try {
+    await AsyncStorage.setItem(
+      getUndoKey(user, botId),
+      JSON.stringify(slots),
+    );
+  } catch { /* ignore */ }
+}
+
 /* -------------------------------------------------------------------------- */
 /*                     PER-SECTION BOOK-BUILDER (≤20 % overlap)               */
 /* -------------------------------------------------------------------------- */
@@ -436,6 +453,15 @@ export default function ExploreScreen() {
 
   // Then update applyBookToDevice to handle errors properly:
   const applyBookToDevice = useCallback(async (book: RecipeBook) => {
+    await saveUndo(
+      JSON.parse(
+        (await AsyncStorage.getItem(
+          getUndoKey(userId, String(liquorbotId)),
+        )) || '[]',
+      ),
+      userId,
+      String(liquorbotId),
+    );
     try {
       const padded = Array.from({ length: 15 }, (_, i) => 
         i < book.ingredientIds.length ? book.ingredientIds[i] : 0

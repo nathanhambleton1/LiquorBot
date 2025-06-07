@@ -27,6 +27,23 @@ import { PubSub } from '@aws-amplify/pubsub';
 const client = generateClient();
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+/* ───── Undo helpers (shared) ───── */
+const getUndoKey = (user: string, botId: string) =>
+  `undoConfig-${user}-${botId}`;
+
+async function saveUndo(
+  slots: number[] | unknown,           // accepts any serialisable thing
+  user:  string,
+  botId: string,
+) {
+  try {
+    await AsyncStorage.setItem(
+      getUndoKey(user, botId),
+      JSON.stringify(slots),
+    );
+  } catch { /* ignore */ }
+}
+
 /* ---------- helpers ---------- */
 const eventFilter = (user: string) => ({
   or: [
@@ -466,6 +483,16 @@ export default function EventManager() {
         }
       }
 
+      await saveUndo(
+        JSON.parse(
+          (await AsyncStorage.getItem(
+            getUndoKey(currentUser ?? 'guest', String(event.liquorbotId)),
+          )) || '[]',
+        ),
+        currentUser ?? 'guest',
+        String(event.liquorbotId),
+      );
+      
       // --- accept BOTH stock-drink strings and custom-recipe arrays -------------
       const allIngIds: number[] = [];
 
