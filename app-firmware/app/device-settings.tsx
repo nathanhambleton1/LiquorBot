@@ -102,6 +102,7 @@ export default function DeviceSettings() {
   const [showConnectPrompt, setShowConnectPrompt] = useState(false);
   const [undoReady, setUndoReady] = useState(false);
   const [username, setUsername]   = useState('guest');  
+  const suppressUndo = useRef(false); // Prevent undo from being tracked during undo
 
   /*────────── Active-event helper ──────────*/
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
@@ -257,8 +258,8 @@ export default function DeviceSettings() {
       next: async (d) => {
         const msg = (d as any).value ?? d;
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
-          if (!undoReady) await saveUndo(slots, username, liquorbotId);
-          setUndoReady(true);
+          if (!undoReady && !suppressUndo.current) await saveUndo(slots, username, liquorbotId);
+          setUndoReady(!suppressUndo.current);
           setSlots(msg.slots.map((id: any) => Number(id) || 0));
           setConfigLoading(false);
           if (retryIntervalRef.current) {
@@ -267,8 +268,10 @@ export default function DeviceSettings() {
           }
         }
         if (msg.action === 'SET_SLOT' && typeof msg.slot === 'number') {
-          await saveUndo(slots, username, liquorbotId);                  // 🆕
-          setUndoReady(true);
+          if (!suppressUndo.current) {
+            await saveUndo(slots, username, liquorbotId);
+            setUndoReady(true);
+          }
           setSlots(prev => {
             const next = [...prev];
             next[msg.slot - 1] = Number(msg.ingredientId) || 0;
@@ -492,13 +495,14 @@ export default function DeviceSettings() {
                   if (!isConnected || !undoReady) return;
                   const prev = await popUndo(username, liquorbotId);
                   if (!prev) return;
-                  /* push backup to device */
+                  // Temporarily disable undo tracking while reverting
+                  setUndoReady(false);
+                  // push backup to device
                   await Promise.all(prev.map((ingId, i) =>
                     publishSlot({ action: 'SET_SLOT', slot: i + 1, ingredientId: ingId })
                   ));
                   await publishSlot({ action: 'GET_CONFIG' });
                   setSlots(prev);
-                  setUndoReady(false); // Hide the Undo button after use
                 }}
                 disabled={!undoReady || !isConnected}
                 style={{ marginRight: 0, marginLeft: 0 }}
@@ -506,7 +510,7 @@ export default function DeviceSettings() {
                 <Text
                   style={[
                     styles.clearAllButtonText,
-                    { color: '#CE975E', marginRight: 18 },
+                    { color: '#CE975E', marginRight: 0 },
                     (!undoReady || !isConnected) && { opacity: 0.5 },
                   ]}
                 >
