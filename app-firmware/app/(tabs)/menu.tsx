@@ -346,6 +346,9 @@ function DrinkItem({
 
   /* ---------------------------- RENDER --------------------------- */
   if (isExpanded) {
+    // Gray effect for non-makeable drinks (expanded)
+    const grayStyle = !isMakeable ? { opacity: 0.4 } : {};
+    const grayIconStyle = !isMakeable ? { opacity: 0.4 } : {};
     return (
       <Animated.View
         onLayout={(e) => onExpandedLayout?.(e.nativeEvent.layout)}
@@ -376,6 +379,7 @@ function DrinkItem({
             name={isLiked ? 'heart' : 'heart-outline'}
             size={24}
             color={isLiked ? '#CE975E' : '#4F4F4F'}
+            style={grayIconStyle}
           />
         </TouchableOpacity>
 
@@ -402,15 +406,15 @@ function DrinkItem({
         {/* content */}
         <View style={styles.expandedContent}>
           <View style={styles.expandedTitleContainer}>
-            <Text style={styles.expandedboxText}>{drink.name}</Text>
-            <Text style={styles.expandedcategoryText}>{drink.category}</Text>
+            <Text style={[styles.expandedboxText, grayStyle]}>{drink.name}</Text>
+            <Text style={[styles.expandedcategoryText, grayStyle]}>{drink.category}</Text>
           </View>
-          <Image source={{ uri: drink.image }} style={styles.expandedImage} />
+          <Image source={{ uri: drink.image }} style={[styles.expandedImage, grayStyle]} />
         </View>
 
         <View style={styles.expandeddetailContainer}>
           {parsedIngredients.length === 0 ? (
-            <Text style={styles.expandeddescriptionText}>
+            <Text style={[styles.expandeddescriptionText, grayStyle]}>
               No ingredients found.
             </Text>
           ) : (
@@ -500,6 +504,9 @@ function DrinkItem({
   }
 
   /* ---------------------- collapsed card ----------------------- */
+  // Gray effect for non-makeable drinks (collapsed)
+  const grayStyle = !isDrinkMakeable(drink) ? { opacity: 0.4 } : {};
+  const grayIconStyle = !isDrinkMakeable(drink) ? { opacity: 0.4 } : {};
   return (
     <TouchableOpacity
       activeOpacity={0.9}
@@ -511,16 +518,20 @@ function DrinkItem({
       }
       style={styles.box}
     >
-      <TouchableOpacity onPress={handleToggleLike} style={styles.favoriteButton}>
-        <Ionicons
-          name={isLiked ? 'heart' : 'heart-outline'}
-          size={24}
-          color={isLiked ? '#CE975E' : '#4F4F4F'}
-        />
-      </TouchableOpacity>
-      <Image source={{ uri: drink.image }} style={styles.image} />
-      <Text style={styles.boxText}>{drink.name}</Text>
-      <Text style={styles.categoryText}>{drink.category}</Text>
+    <TouchableOpacity onPress={handleToggleLike} style={styles.favoriteButton}>
+      <Ionicons
+        name={isLiked ? 'heart' : 'heart-outline'}
+        size={24}
+        color={isLiked ? '#CE975E' : '#4F4F4F'}
+        style={grayIconStyle}
+      />
+    </TouchableOpacity>
+      <Image
+        source={{ uri: drink.image }}
+        style={[styles.image, grayStyle]}
+      />
+      <Text style={[styles.boxText, grayStyle]}>{drink.name}</Text>
+      <Text style={[styles.categoryText, grayStyle]}>{drink.category}</Text>
     </TouchableOpacity>
   );
 }
@@ -551,7 +562,7 @@ export default function MenuScreen() {
 
   // make-able filter
   const [filterModalVisible, setFilterModalVisible] = useState(false);
-  const [onlyMakeable, setOnlyMakeable] = useState(false);
+  const [onlyMakeable, setOnlyMakeable] = useState(false); // default off
   const [alphabetical, setAlphabetical] = useState(false);
   const [onlyCustom, setOnlyCustom] = useState(false);
 
@@ -777,9 +788,7 @@ export default function MenuScreen() {
     })();
   }, [liquorbotId, isFocused]);
 
-  useEffect(() => {
-    if (!isAdmin) setOnlyMakeable(true);   // force ON once we know the role
-  }, [isAdmin]);
+  // (Removed: force ON for non-admins. Now default is OFF for everyone)
 
   useEffect(() => {
     const subscription = pubsub.subscribe({
@@ -939,7 +948,7 @@ export default function MenuScreen() {
 
   /* -------- Pull the user’s CustomRecipe items ---------- */
   useEffect(() => {
-   if (!allowedCustom || !allowedCustom.length) return;        // nothing to do
+   if (!isAdmin && (!allowedCustom || !allowedCustom.length)) return;
 
    (async () => {
      try {
@@ -993,7 +1002,7 @@ export default function MenuScreen() {
       console.error('Error loading custom drinks', e);
      }
    })();
- }, [allowedCustom, refreshCustom]);
+ }, [allowedCustom, refreshCustom, isAdmin, userID]);
 
   // Add refresh on screen focus
   useEffect(() => {
@@ -1057,37 +1066,27 @@ export default function MenuScreen() {
       : allowedStd?.includes(d.id) ?? false;
   };
 
+
   let filteredDrinks = drinks
-    .filter(inAllowed)           // 🛠  NEW first pass
+    .filter(inAllowed)
     .filter(
-    (d) =>
-      (!onlyCustom || d.category === 'Custom') &&
-      (selectedCategory === 'All' || d.category === selectedCategory) &&
-      d.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      canMake(d),
-  );
-  if (alphabetical) {
-    filteredDrinks.sort((a, b) => a.name.localeCompare(b.name));
-  }
+      (d) =>
+        (!onlyCustom || d.category === 'Custom') &&
+        (selectedCategory === 'All' || d.category === selectedCategory) &&
+        d.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        canMake(d),
+    );
 
-  /* ---------- Admin quality-of-life: show event drinks first ---------- */
-  if (isAdmin && !onlyMakeable && (allowedStd || allowedCustom)) {
-    const isEventDrink = (drink: Drink) =>
-      drink.isCustom
-        ? allowedCustom?.includes(drink.recipeId ?? '') ?? false
-        : allowedStd?.includes(drink.id) ?? false;
+  // Sort makeable drinks to the top for everyone
+  filteredDrinks.sort((a, b) => {
+    const aMakeable = isDrinkMakeable(a) ? 1 : 0;
+    const bMakeable = isDrinkMakeable(b) ? 1 : 0;
+    if (aMakeable !== bMakeable) return bMakeable - aMakeable; // makeable first
+    if (alphabetical) return a.name.localeCompare(b.name);
+    return 0;
+  });
 
-    const eventDrinks = filteredDrinks.filter(isEventDrink);
-    const otherDrinks = filteredDrinks.filter(d => !isEventDrink(d));
-
-    /* keep alphabetical order *within* each bucket if that toggle is on */
-    if (alphabetical) {
-      eventDrinks.sort((a, b) => a.name.localeCompare(b.name));
-      otherDrinks.sort((a, b) => a.name.localeCompare(b.name));
-    }
-
-    filteredDrinks = [...eventDrinks, ...otherDrinks];  // <— re-order
-  }
+  // (Optional: If you want to keep the admin event-drink sorting, you can re-apply it here, but makeable drinks will always be on top)
 
   // keep expanded card on left column
   const renderedDrinks = [...filteredDrinks];
@@ -1187,18 +1186,16 @@ export default function MenuScreen() {
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
-        {isAdmin && (                               // ⬅️ wrap the icon
-          <TouchableOpacity
-            onPress={() => setFilterModalVisible(true)}
-            style={styles.filterIcon}
-          >
-            <Ionicons
-              name="funnel-outline"
-              size={20}
-              color={onlyMakeable ? '#CE975E' : '#4F4F4F'}
-            />
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          onPress={() => setFilterModalVisible(true)}
+          style={styles.filterIcon}
+        >
+          <Ionicons
+            name="funnel-outline"
+            size={20}
+            color={onlyMakeable ? '#CE975E' : '#4F4F4F'}
+          />
+        </TouchableOpacity>
       </View>
 
       {/* ------------ DRINK GRID ------------ */}
@@ -1213,16 +1210,16 @@ export default function MenuScreen() {
           /* ---------- guest view ---------- */
           <View style={styles.noDrinksContainer}>
             <Text style={styles.noDrinksText}>
-              Please sign in before you can view drinks.
+              <Text>
+                <Text
+                  style={styles.goldenSignInText}
+                  onPress={() => router.push('../auth/sign-in')}
+                >
+                  Sign in
+                </Text>
+                {` to view and explore the drink menu!`}
+              </Text>
             </Text>
-
-            <TouchableOpacity
-              onPress={() => router.push('../auth/sign-in')}
-              activeOpacity={0.8}
-              style={styles.signInButton}
-            >
-              <Text style={styles.signInButtonText}>Sign In</Text>
-            </TouchableOpacity>
           </View>
         ) : renderedDrinks.length === 0 ? (
           /* ---------- no drinks ---------- */
@@ -1256,55 +1253,55 @@ export default function MenuScreen() {
       </ScrollView>
 
   {/* ------------ FILTER POPUP ------------ */}
-  {isAdmin && (
-        <Modal
-          visible={filterModalVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setFilterModalVisible(false)}
+  <Modal
+    visible={filterModalVisible}
+    transparent
+    animationType="fade"
+    onRequestClose={() => setFilterModalVisible(false)}
+  >
+    <View style={styles.modalOverlay}>
+      <View style={styles.filterModal}>
+        <TouchableOpacity
+          style={styles.modalCloseButton}
+          onPress={() => setFilterModalVisible(false)}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.filterModal}>
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => setFilterModalVisible(false)}
-              >
-                <Ionicons name="close" size={24} color="#DFDCD9" />
-              </TouchableOpacity>
+          <Ionicons name="close" size={24} color="#DFDCD9" />
+        </TouchableOpacity>
 
-              <Text style={styles.filterModalTitle}>Filter Options</Text>
+        <Text style={styles.filterModalTitle}>Filter Options</Text>
 
-              <View style={styles.filterRow}>
-                <Text style={styles.filterLabel}>Show only makeable drinks</Text>
-                <Switch
-                  value={onlyMakeable}
-                  onValueChange={setOnlyMakeable}
-                  trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
-                  thumbColor="#DFDCD9"
-                />
-              </View>
-              <View style={styles.filterRow}>
-                <Text style={styles.filterLabel}>Sort drinks alphabetically</Text>
-                <Switch
-                  value={alphabetical}
-                  onValueChange={setAlphabetical}
-                  trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
-                  thumbColor="#DFDCD9"
-                />
-              </View>
-              <View style={styles.filterRow}>
-                <Text style={styles.filterLabel}>Show only my custom drinks</Text>
-                <Switch
-                  value={onlyCustom}
-                  onValueChange={setOnlyCustom}
-                  trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
-                  thumbColor="#DFDCD9"
-                />
-              </View>
-            </View>
+        <View style={styles.filterRow}>
+          <Text style={styles.filterLabel}>Show only makeable drinks</Text>
+          <Switch
+            value={onlyMakeable}
+            onValueChange={setOnlyMakeable}
+            trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
+            thumbColor="#DFDCD9"
+          />
+        </View>
+        <View style={styles.filterRow}>
+          <Text style={styles.filterLabel}>Sort drinks alphabetically</Text>
+          <Switch
+            value={alphabetical}
+            onValueChange={setAlphabetical}
+            trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
+            thumbColor="#DFDCD9"
+          />
+        </View>
+        {isAdmin && (
+          <View style={styles.filterRow}>
+            <Text style={styles.filterLabel}>Show only my custom drinks</Text>
+            <Switch
+              value={onlyCustom}
+              onValueChange={setOnlyCustom}
+              trackColor={{ false: '#4F4F4F', true: '#CE975E' }}
+              thumbColor="#DFDCD9"
+            />
           </View>
-        </Modal>
-      )}
+        )}
+      </View>
+    </View>
+  </Modal>
     </View> 
   ); 
 }     
@@ -1371,14 +1368,11 @@ const styles = StyleSheet.create({
   buttonArea: { width: '100%', alignItems: 'center', position: 'relative' },
   statusMessageOverlay: { position: 'absolute', top: '100%', marginTop: -12, fontSize: 10, textAlign: 'center' },
   editButton: { position: 'absolute', top: 10, left: 45, zIndex: 2 },
-  signInButton: {
-    marginTop: 15,
-    backgroundColor: '#CE975E',
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-    borderRadius: 8,
+  goldenSignInText: {
+    color: '#CE975E',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
-  signInButtonText: { color: '#FFFFFF', fontSize: 16 },
   noDrinksContainer: {
     flex: 1,
     justifyContent: 'center',
