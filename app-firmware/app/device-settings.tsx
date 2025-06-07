@@ -529,7 +529,7 @@ export default function DeviceSettings() {
                     setTimeout(() => { suppressUndo.current = false; }, 1500);
                   }}
                   disabled={!undoReady || !isConnected}
-                  style={{ marginRight: 8, marginLeft: 0 }}
+                  style={{ marginRight: 24, marginLeft: 0 }}
                 >
                   <Text
                     style={[
