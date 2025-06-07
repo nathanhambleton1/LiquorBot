@@ -890,7 +890,7 @@ const styles = StyleSheet.create({
     borderColor: '#CE975E',
   },
   connectPromptText: { color: '#DFDCD9', fontSize: 14, textAlign: 'center' },
-  clearAllButtonText: { color: '#4F4F4F', fontSize: 14, fontWeight: 'bold' },
+  clearAllButtonText: { color: '#4F4F4F', fontSize: 14, fontWeight: 'bold', marginLeft: 10 },
 
   /* ingredient modal */
   modalContainer: { flex: 1, backgroundColor: '#141414', padding: 20 },
