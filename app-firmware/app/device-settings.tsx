@@ -402,7 +402,7 @@ export default function DeviceSettings() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         {/* close */}
-        <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.closeButton} onPress={() => router.push('/')}>
           <Ionicons name="close" size={30} color="#DFDCD9" />
         </TouchableOpacity>
 
@@ -485,44 +485,43 @@ export default function DeviceSettings() {
         {/* ─────────────────── CONFIGURE SLOTS ─────────────────── */}
         <View style={styles.slotsContainer}>
           <View style={styles.slotsHeaderContainer}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <TouchableOpacity
-                onPress={async () => {                          // 🆕 UNDO HANDLER
-                  if (!isConnected || !undoReady) return;
-                  const prev = await popUndo(username, liquorbotId);
-                  if (!prev) return;
-                  /* push backup to device */
-                  await Promise.all(prev.map((ingId, i) =>
-                    publishSlot({ action: 'SET_SLOT', slot: i + 1, ingredientId: ingId })
-                  ));
-                  await publishSlot({ action: 'GET_CONFIG' });
-                  setSlots(prev);
-                  setUndoReady(false);
-                }}
-                disabled={!undoReady || !isConnected}
-                style={{ marginRight: 18 }}                    // 🆕 left of Clear All
+            <Text style={styles.sectionHeader}>Configure Slots</Text>
+            <TouchableOpacity
+              onPress={async () => {                          // 🆕 UNDO HANDLER
+                if (!isConnected || !undoReady) return;
+                const prev = await popUndo(username, liquorbotId);
+                if (!prev) return;
+                /* push backup to device */
+                await Promise.all(prev.map((ingId, i) =>
+                  publishSlot({ action: 'SET_SLOT', slot: i + 1, ingredientId: ingId })
+                ));
+                await publishSlot({ action: 'GET_CONFIG' });
+                setSlots(prev);
+                setUndoReady(false);
+              }}
+              disabled={!undoReady || !isConnected}
+              style={{ marginRight: 18 }}                    // 🆕 left of Clear All
+            >
+              <Text
+                style={[
+                  styles.clearAllButtonText,
+                  (!undoReady || !isConnected) && { opacity: 0.5 },
+                ]}
               >
-                <Text
-                  style={[
-                    styles.clearAllButtonText,
-                    (!undoReady || !isConnected) && { opacity: 0.5 },
-                  ]}
-                >
-                  Undo
-                </Text>
-              </TouchableOpacity>
+                Undo
+              </Text>
+            </TouchableOpacity>
 
-              <TouchableOpacity onPress={handleClearAll} disabled={!isConnected}>
-                <Text
-                  style={[
-                    styles.clearAllButtonText,
-                    !isConnected && { opacity: 0.5 },
-                  ]}
-                >
-                  Clear All
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity onPress={handleClearAll} disabled={!isConnected}>
+              <Text
+                style={[
+                  styles.clearAllButtonText,
+                  !isConnected && { opacity: 0.5 },
+                ]}
+              >
+                Clear All
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {!isConnected && (
