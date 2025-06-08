@@ -831,10 +831,10 @@ const EventsPage: React.FC = () => {
                     <div className="event-link-section">
                       <h4>Event Link</h4>
                       <div className="invite-link">
-                        <span>https://yourapp.com/join/{event.inviteCode}</span>
+                        <span>{`https://main.dxqquq649m247.amplifyapp.com/join/${event.inviteCode}`}</span>
                         <button
                           className="copy-btn"
-                          onClick={() => copyLinkToClipboard(`https://yourapp.com/join/${event.inviteCode}`, event.id)}
+                          onClick={() => copyLinkToClipboard(`https://main.dxqquq649m247.amplifyapp.com/join/${event.inviteCode}`, event.id)}
                         >
                           {copiedLinkEventId === event.id ? 'Copied!' : 'Copy'}
                         </button>
