@@ -38,20 +38,16 @@ export function DeepLinkProvider({ children }: PropsWithChildren<object>) {
     const handle = ({ url }: { url: string }) => {
       const { path } = Linking.parse(url);
       if (path?.startsWith('join/')) {
-        const code = path.split('/')[1];
-        if (code) {
-          setPendingCode(code);
-          AsyncStorage.setItem('pendingEventCode', code);
-          // If not signed in yet, push to sign-in screen
-          fetchAuthSession()
-            .catch(() => router.push('/auth/sign-in'));
-        }
+        const code = path.split('/')[1]!;
+        setPendingCode(code);
+        AsyncStorage.setItem('pendingEventCode', code);
+        
+        // ► HERE: push into your catch-route
+        router.replace({ pathname: '/join/[code]', params: { code: code } } as any);
       }
     };
 
-    // a) cold-start link
     Linking.getInitialURL().then(u => u && handle({ url: u }));
-    // b) warm-app link
     const sub = Linking.addEventListener('url', handle);
     return () => sub.remove();
   }, []);
