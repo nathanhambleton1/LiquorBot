@@ -1077,7 +1077,7 @@ const PickerModal = ({ cat, setCat, q, setQ, filtered, loading, addDrink, close,
         ListFooterComponent={
           filtered.length < allDrinks.length ? (
             <Text style={{ color: '#4F4F4F', fontSize: 10, textAlign: 'center', marginTop: 24, marginBottom: 8, paddingHorizontal: 16 }}>
-              The drinks shown here are dynamically filtered to match your current ingredient list and the number of available slots in your LiquorBot. Add or remove drinks to see more drink options.
+              Drinks are filtered based on the unique ingredients your LiquorBot can hold. As you add drinks, only those that fit within your remaining ingredient slots are shown.
             </Text>
           ) : null
         }
