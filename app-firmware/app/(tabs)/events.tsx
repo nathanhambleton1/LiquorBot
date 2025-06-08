@@ -23,6 +23,7 @@ import { Hub } from 'aws-amplify/utils';
 import { Amplify } from 'aws-amplify';
 import config from '../../src/amplifyconfiguration.json';
 import { PubSub } from '@aws-amplify/pubsub';
+import QRCode from 'react-native-qrcode-svg';
 
 const client = generateClient();
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -133,6 +134,10 @@ export default function EventManager() {
   const [loadingDeviceId, setLoadingDeviceId] = useState<string|null>(null);
   const [successDeviceId, setSuccessDeviceId] = useState<string|null>(null);
   const [errorDeviceId, setErrorDeviceId] = useState<string|null>(null);
+
+  /* QR Code modal */
+  const [qrModalVisible, setQrModalVisible] = useState(false);
+  const [qrLink, setQrLink] = useState<string | null>(null);
 
   /* ---------------- GUEST JOIN PARAM ---------------- */
   useEffect(() => {
@@ -648,12 +653,20 @@ export default function EventManager() {
                   <Text style={styles.deviceId}>Device ID: {item.liquorbotId}</Text>
                 )}
               </View>
-              <View style={styles.inviteRow}>
-                <Text style={styles.inviteLink}>{`${INVITE_BASE_URL}/join/${item.inviteCode}`}</Text>
-                <TouchableOpacity onPress={() => copyToClipboard(`${INVITE_BASE_URL}/join/${item.inviteCode}`, item.id)}>
-                  <Ionicons name="copy-outline" size={16} color="#CE975E"/>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  const link = `${INVITE_BASE_URL}/join/${item.inviteCode}`;
+                  setQrLink(link);
+                  setQrModalVisible(true);
+                  copyToClipboard(link, item.id);
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={styles.inviteRow}>
+                  <Text style={styles.inviteLink}>{`${INVITE_BASE_URL}/join/${item.inviteCode}`}</Text>
+                  <Ionicons name="qr-code-outline" size={20} color="#CE975E" style={{marginLeft:8}} />
+                </View>
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -852,6 +865,29 @@ export default function EventManager() {
                 ? <ActivityIndicator color="#141414"/>
                 : <Text style={styles.joinGoTxt}>Join Event</Text>}
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* QR Code Modal */}
+      <Modal
+        visible={qrModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setQrModalVisible(false)}
+      >
+        <View style={styles.overlay}>
+          <View style={[styles.filtCard, { alignItems: 'center' }]}> 
+            <TouchableOpacity style={styles.filtClose} onPress={() => setQrModalVisible(false)}>
+              <Ionicons name="close" size={24} color="#DFDCD9"/>
+            </TouchableOpacity>
+            <Text style={styles.filtTitle}>Scan to Join Event</Text>
+            {qrLink && (
+              <QRCode value={qrLink} size={200} backgroundColor="#1F1F1F" color="#CE975E" />
+            )}
+            <Text style={{color:'#8F8F8F',fontSize:12,marginTop:16,textAlign:'center'}}>
+              Link copied to clipboard
+            </Text>
           </View>
         </View>
       </Modal>
