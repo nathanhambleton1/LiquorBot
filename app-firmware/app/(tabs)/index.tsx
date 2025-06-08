@@ -432,7 +432,7 @@ export default function Index() {
         visible={linkModalVisible}
         onRequestClose={() => setLinkModalVisible(false)}
       >
-        <View style={styles.overlay}>
+        <View style={styles.modalOverlay}>
           <View style={styles.joinCard}>
             {/* close button */}
             <TouchableOpacity
@@ -550,5 +550,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',  // semi-transparent backdrop
+  },
 });
