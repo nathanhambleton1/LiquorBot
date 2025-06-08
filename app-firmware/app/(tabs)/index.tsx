@@ -449,8 +449,9 @@ export default function Index() {
             </Text>
             {linkEvent && (
               <Text style={[styles.detail,{marginBottom:16}]}>
-                {new Date(linkEvent.startTime).toLocaleString([], { hour: '2-digit', minute: '2-digit' })} –{' '}
-                {new Date(linkEvent.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {new Date(linkEvent.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                {"  "}
+                {new Date(linkEvent.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – {new Date(linkEvent.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </Text>
             )}
 
