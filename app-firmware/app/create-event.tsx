@@ -205,7 +205,7 @@ export function TimePickerModal({
           value={date}
           mode="time"
           display={Platform.OS === 'ios' ? 'spinner' : 'clock'}
-          minuteInterval={30}
+          minuteInterval={15} // Changed from 30 to 15
           onChange={(_, d) => d && setDate(d)}
           onTouchEnd={() => { commit(date); if (Platform.OS !== 'ios') onClose(); }}
           textColor="#DFDCD9"
