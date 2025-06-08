@@ -163,6 +163,12 @@ export function TimePickerModal({
     return new Date(2025, 0, 1, h, m);
   }, [value24]);
 
+  useEffect(() => {
+    if (visible) {
+      setDate(initial);
+    }
+  }, [visible, initial]);
+
   const [date, setDate] = useState(initial);
 
   const commit = (d: Date) => {
@@ -266,6 +272,15 @@ export default function EventsScreen(){
   const[showSlots,setShowSlots]=useState(false);
   const [showTimeInfo, setShowTimeInfo] = useState(false);
 
+  const canAddDrink = (d: Drink) => {
+    const ing = parseIng(d);
+    let extra = 0;
+    for (const id of ing) {
+      if (!ingredientSet.has(id)) extra++;      // only count new uniques
+    }
+    return ingredientSet.size + extra <= 15;    // true → safe to add
+  };
+
   useEffect(() => {
     setSynced(false)
   }, [edit])
@@ -353,9 +368,12 @@ export default function EventsScreen(){
   const[pickerVis,setPV]=useState(false);
   const[cat,setCat]=useState('All');
   const[q,setQ]=useState('');
-  const filtered=allDrinks.filter(d=>
-    (cat==='All'||d.category===cat)&&
-    d.name.toLowerCase().includes(q.toLowerCase()));
+  const filtered = allDrinks.filter(d =>
+    (cat === 'All' || d.category === cat) &&                 // category match
+    d.name.toLowerCase().includes(q.toLowerCase()) &&        // search match
+    !menu.some(m => m.id === d.id) &&                        // skip already-added
+    canAddDrink(d)                                           // skip if it overflows
+  );
 
   /* helpers */
   const fmtSlots=()=>`${ingredientSet.size}/15 unique ingredients`;
