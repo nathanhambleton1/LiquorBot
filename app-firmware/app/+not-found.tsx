@@ -27,10 +27,10 @@ export default function NotFoundScreen() {
         </ThemedText>
         <ThemedText style={styles.info}>
           If you believe this is a mistake or keep seeing this screen, please contact support at
-          <ThemedText style={styles.linkText}> support@liquorbot.io</ThemedText>.
+          <ThemedText style={styles.linkText}> nhambleton03@gmail.com</ThemedText>.
         </ThemedText>
         <Link href="/" style={styles.link}>
-          <ThemedText type="link">Go to home screen</ThemedText>
+          <ThemedText type="link" style={{ color: '#CE975E', fontWeight: 'bold' }}>Go to home screen</ThemedText>
         </Link>
       </LinearGradient>
     </>
