@@ -1077,7 +1077,7 @@ const PickerModal = ({ cat, setCat, q, setQ, filtered, loading, addDrink, close,
         ListFooterComponent={
           filtered.length < allDrinks.length ? (
             <Text style={{ color: '#4F4F4F', fontSize: 10, textAlign: 'center', marginTop: 24, marginBottom: 8, paddingHorizontal: 16 }}>
-              Drinks are filtered based on the unique ingredients your LiquorBot can hold. As you add drinks, only those that fit within your remaining ingredient slots are shown.
+              Drinks heres are filtered based on the unique ingredients your LiquorBot can hold. As you add drinks, only those that fit within your remaining ingredient slots are shown.
             </Text>
           ) : null
         }
