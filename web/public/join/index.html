@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>LiquorBot Invite</title>
+  <script>
+    (function(){
+      // e.g. URL: https://…/join/ABC123
+      var parts = window.location.pathname.split('/');
+      var code = parts[2] || '';
+      // 1) Try to open the app
+      window.location = 'myapp://join/' + code;
+      // 2) If not installed within 2s, send to App Store
+      setTimeout(function(){
+        window.location = 'https://apps.apple.com/app/id6746461095';
+      }, 2000);
+    })();
+  </script>
+</head>
+<body>
+  <p>Opening LiquorBot…</p>
+  <p>If it doesn’t open, <a href="https://apps.apple.com/app/id6746461095">download the app</a>.</p>
+</body>
+</html>

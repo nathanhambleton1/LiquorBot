@@ -12,7 +12,7 @@ import { Amplify } from 'aws-amplify';
 import config from '../src/amplifyconfiguration.json';
 import { StatusBar } from 'expo-status-bar';
 import { UnitsProvider } from './components/UnitsContext';
-// Auth wrapper
+import { DeepLinkProvider }   from './components/deep-link-provider';
 import { Authenticator } from '@aws-amplify/ui-react-native';
 
 // PubSub setup
@@ -31,19 +31,19 @@ import { LiquorBotProvider } from './components/liquorbot-provider';
 export default function RootLayout() {
   return (
     <Authenticator.Provider>
-      {/* 👇 WRAP everything inside LiquorBotProvider and UnitsProvider */}
-      <LiquorBotProvider>
-        <UnitsProvider>
-          {/* Force white (light-content) status-bar icons everywhere */}
-          <StatusBar style="light" translucent />
-          <Stack
-            screenOptions={{ headerShown: false }}
-          >
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="auth" />
-          </Stack>
-        </UnitsProvider>
-      </LiquorBotProvider>
+      <DeepLinkProvider>
+        <LiquorBotProvider>
+          <UnitsProvider>
+            <StatusBar style="light" translucent />
+            <Stack
+              screenOptions={{ headerShown: false }}
+            >
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="auth" />
+            </Stack>
+          </UnitsProvider>
+        </LiquorBotProvider>
+      </DeepLinkProvider>
     </Authenticator.Provider>
   );
 }

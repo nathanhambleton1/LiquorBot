@@ -17,6 +17,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nathanhambleton.liquorbot",
+      "associatedDomains": [
+        "applinks:main.dxqquq649m247.amplifyapp.com"
+      ],
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "LiquorBot needs Bluetooth to discover and connect to your LiquorBot dispenser.",
         "NSBluetoothPeripheralUsageDescription": "LiquorBot uses Bluetooth to communicate with your LiquorBot dispenser.",

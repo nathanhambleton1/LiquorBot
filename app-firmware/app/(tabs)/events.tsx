@@ -27,6 +27,8 @@ import { PubSub } from '@aws-amplify/pubsub';
 const client = generateClient();
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+const INVITE_BASE_URL = 'https://main.dxqquq649m247.amplifyapp.com';
+
 /* ───── Undo helpers (shared) ───── */
 const getUndoKey = (user: string, botId: string) =>
   `undoConfig-${user}-${botId}`;
@@ -647,8 +649,8 @@ export default function EventManager() {
                 )}
               </View>
               <View style={styles.inviteRow}>
-                <Text style={styles.inviteLink}>https://yourapp.com/join/{item.inviteCode}</Text>
-                <TouchableOpacity onPress={() => copyToClipboard(`https://yourapp.com/join/${item.inviteCode}`, item.id)}>
+                <Text style={styles.inviteLink}>{`${INVITE_BASE_URL}/join/${item.inviteCode}`}</Text>
+                <TouchableOpacity onPress={() => copyToClipboard(`${INVITE_BASE_URL}/join/${item.inviteCode}`, item.id)}>
                   <Ionicons name="copy-outline" size={16} color="#CE975E"/>
                 </TouchableOpacity>
               </View>

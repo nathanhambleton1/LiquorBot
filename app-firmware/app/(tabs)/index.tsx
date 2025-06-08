@@ -6,7 +6,7 @@
 // Author: Nathan Hambleton
 // Updated: 31 May 2025 – fixed currentUser TDZ errors
 // -----------------------------------------------------------------------------
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useContext } from 'react';
 import {
   StyleSheet,
   ImageBackground,
@@ -16,6 +16,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -26,6 +27,9 @@ import { listEvents }       from '../../src/graphql/queries';
 import { Asset }            from 'expo-asset';
 import { Hub }              from 'aws-amplify/utils';
 import { useNavigation } from '@react-navigation/native';
+import { DeepLinkContext } from '../components/deep-link-provider';
+import { eventsByCode }   from '../../src/graphql/queries';
+import { joinEvent }      from '../../src/graphql/mutations';
 
 /* ---------- AWS IoT SDK (static import) ---------- */
 import {
@@ -53,6 +57,13 @@ export default function Index() {
   const [currentUser,    setCurrentUser]    = useState<string | null>(null);
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
   const [eventsLoading,  setEventsLoading]  = useState(true);
+
+  /* ---------- deep-link join popup ---------- */
+  const { pendingCode } = useContext(DeepLinkContext);
+  const [linkEvent,         setLinkEvent]         = useState<Event|null>(null);
+  const [linkModalVisible,  setLinkModalVisible]  = useState(false);
+  const [linkLoading,       setLinkLoading]       = useState(false);
+  const [linkErr,           setLinkErr]           = useState<string|null>(null);
 
   /* -------------------- types -------------------- */
   interface Event {
@@ -93,6 +104,34 @@ export default function Index() {
   useEffect(() => {
     if (!currentUser) setUpcomingEvents([]);
   }, [currentUser]);
+
+  /* ───────── deep-link: fetch event & open popup ───────── */
+  useEffect(() => {
+    if (!pendingCode || !currentUser) return;
+
+    (async () => {
+      try {
+        const { data } = await generateClient().graphql({
+          query: eventsByCode,
+          variables: { inviteCode: pendingCode },
+          authMode:  'userPool',
+        }) as { data: { eventsByCode: { items: any[] } } };
+
+        const ev = data.eventsByCode.items?.[0];
+        if (ev) {
+          setLinkEvent({
+            id:   ev.id,
+            name: ev.name,
+            startTime: ev.startTime,
+            endTime:   ev.endTime,
+          });
+          setLinkModalVisible(true);
+        }
+      } catch (e) {
+        console.warn('Deep-link lookup failed', e);
+      }
+    })();
+  }, [pendingCode, currentUser]);
 
   /* ──────────────────────── fetch events ──────────────────────── */
   const fetchEvents = useCallback(async () => {
@@ -200,6 +239,23 @@ export default function Index() {
       })();
     }
   }, []); // run once
+
+  const confirmDeepLinkJoin = async () => {
+    if (!pendingCode) return;
+    setLinkLoading(true); setLinkErr(null);
+    try {
+      await generateClient().graphql({
+        query: joinEvent,
+        variables: { inviteCode: pendingCode },
+        authMode:  'userPool',
+      });
+      setLinkModalVisible(false);
+      // you may navigate or refresh events here if you like
+      router.push('/events');          // optional UX
+    } catch (e:any) {
+      setLinkErr(e.errors?.[0]?.message ?? 'Join failed');
+    } finally { setLinkLoading(false); }
+  };
 
   /* ───────────────────────── UI ───────────────────────── */
   return (
@@ -369,6 +425,51 @@ export default function Index() {
           )}
         </View>
       </View>
+      {/* ───── Deep-link Join Modal ───── */}
+      <Modal
+        transparent
+        animationType="fade"
+        visible={linkModalVisible}
+        onRequestClose={() => setLinkModalVisible(false)}
+      >
+        <View style={styles.overlay}>
+          <View style={styles.joinCard}>
+            {/* close button */}
+            <TouchableOpacity
+              style={styles.filtClose}
+              onPress={() => setLinkModalVisible(false)}
+            >
+              <Ionicons name="close" size={24} color="#DFDCD9"/>
+            </TouchableOpacity>
+
+            {/* event summary */}
+            <Ionicons name="calendar" size={48} color="#CE975E" style={{marginBottom:10}}/>
+            <Text style={[styles.filtTitle,{marginBottom:4}]}>
+              {linkEvent?.name ?? 'Event'}
+            </Text>
+            {linkEvent && (
+              <Text style={[styles.detail,{marginBottom:16}]}>
+                {new Date(linkEvent.startTime).toLocaleString()} –{' '}
+                {new Date(linkEvent.endTime).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
+              </Text>
+            )}
+
+            {/* error */}
+            {linkErr && <Text style={styles.err}>{linkErr}</Text>}
+
+            {/* join button */}
+            <TouchableOpacity
+              style={styles.joinGo}
+              onPress={confirmDeepLinkJoin}
+              disabled={linkLoading}
+            >
+              {linkLoading
+                ? <ActivityIndicator color="#141414"/>
+                : <Text style={styles.joinGoTxt}>Join Event</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ImageBackground>
   );
 }
@@ -405,4 +506,49 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 5, marginRight: 8, shadowOffset: { width: 0, height: 0 }, shadowRadius: 5, shadowOpacity: 0.6, elevation: 5 },
   connectionText: { fontSize: 18, color: '#4F4F4F' },
   wifiIconContainer: { position: 'absolute', top: 115, right: 40, zIndex: 10 },
+  /* deep-link popup ---------------------------- */
+  joinCard: {                         // container card
+    width: '80%',
+    backgroundColor: '#1F1F1F',
+    borderRadius: 10,
+    padding: 20,
+    alignItems: 'center',
+  },
+  filtClose: {                        // “X” button
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    padding: 4,
+  },
+  filtTitle: {                        // event title
+    color: '#DFDCD9',
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  detail: {                           // date / time line
+    color: '#8F8F8F',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  err: {                              // error text
+    color: '#D9534F',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  joinGo: {                           // join button
+    backgroundColor: '#CE975E',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  joinGoTxt: {                        // button label
+    color: '#141414',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
 });
