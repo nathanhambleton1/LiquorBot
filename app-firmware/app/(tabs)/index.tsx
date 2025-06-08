@@ -71,6 +71,7 @@ export default function Index() {
     name: string;
     startTime: string;
     endTime: string;
+    location?: string;
   }
 
   // ------------------------------------------------------------------
@@ -124,6 +125,7 @@ export default function Index() {
             name: ev.name,
             startTime: ev.startTime,
             endTime:   ev.endTime,
+            location:  ev.location ?? undefined,
           });
           setLinkModalVisible(true);
         }
@@ -448,11 +450,16 @@ export default function Index() {
               {linkEvent?.name ?? 'Event'}
             </Text>
             {linkEvent && (
-              <Text style={[styles.detail,{marginBottom:16}]}>
-                {new Date(linkEvent.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                {"  "}
-                {new Date(linkEvent.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – {new Date(linkEvent.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </Text>
+              <>
+                <Text style={[styles.detail,{marginBottom:8}]}> {/* date/time */}
+                  {new Date(linkEvent.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  {"  "}
+                  {new Date(linkEvent.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – {new Date(linkEvent.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+                {linkEvent.location && (
+                  <Text style={styles.venueSubheading}>{linkEvent.location}</Text>
+                )}
+              </>
             )}
 
             {/* error */}
@@ -556,5 +563,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)',  // semi-transparent backdrop
+  },
+  venueSubheading: {
+    color: '#BCA16A',
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 0,
+    marginBottom: 16,
+    letterSpacing: 0.2,
   },
 });
