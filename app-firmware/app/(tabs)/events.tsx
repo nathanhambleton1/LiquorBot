@@ -7,7 +7,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
   ActivityIndicator, Alert, Platform, TextInput, ScrollView,
-  Modal, Switch, Dimensions, LayoutAnimation,
+  Modal, Switch, Dimensions, LayoutAnimation, Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Ionicons                       from '@expo/vector-icons/Ionicons';
@@ -23,7 +23,6 @@ import { Hub } from 'aws-amplify/utils';
 import { Amplify } from 'aws-amplify';
 import config from '../../src/amplifyconfiguration.json';
 import { PubSub } from '@aws-amplify/pubsub';
-import QRCode from 'react-native-qrcode-svg';
 
 const client = generateClient();
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -883,7 +882,12 @@ export default function EventManager() {
             </TouchableOpacity>
             <Text style={styles.filtTitle}>Scan to Join Event</Text>
             {qrLink && (
-              <QRCode value={qrLink} size={200} backgroundColor="#1F1F1F" color="#CE975E" />
+              <Image
+                source={{
+                  uri: `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrLink)}&size=200x200&color=CE975E&bgcolor=1F1F1F`
+                }}
+                style={{ width: 200, height: 200 }}
+              />
             )}
             <Text style={{color:'#8F8F8F',fontSize:12,marginTop:16,textAlign:'center'}}>
               Link copied to clipboard

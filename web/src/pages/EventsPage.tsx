@@ -7,8 +7,6 @@ import { fetchAuthSession } from '@aws-amplify/auth';
 import { getUrl } from 'aws-amplify/storage';
 import './styles/EventsPage.css';
 import { FiEdit2, FiTrash2, FiLogOut, FiPlus, FiX, FiCalendar, FiLogIn } from 'react-icons/fi';
-// @ts-ignore
-const QRCode = require('qrcode.react');
 
 const client = generateClient();
 
@@ -1401,7 +1399,11 @@ const EventsPage: React.FC = () => {
           <div className="modal-content" style={{ maxWidth: 340, textAlign: 'center', position: 'relative' }} onClick={e => e.stopPropagation()}>
             <span className="modal-close" onClick={() => setShowQrModal(false)} style={{ position: 'absolute', top: 12, right: 18, fontSize: 28, cursor: 'pointer' }}>&times;</span>
             <h3 className="modal-title" style={{ marginBottom: 18 }}>Scan to Join Event</h3>
-            <QRCode value={qrLink} size={220} bgColor="#fff" fgColor="#ce975e" includeMargin={true} />
+            <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrLink)}&size=220x220&color=ce975e&bgcolor=ffffff&margin=10`}
+                alt="QR code"
+                style={{ width: 220, height: 220 }}
+              />
             <div style={{ color: '#8F8F8F', fontSize: 13, marginTop: 18 }}>Link copied to clipboard</div>
             <div style={{ fontSize: 12, color: '#aaa', marginTop: 8, wordBreak: 'break-all' }}>{qrLink}</div>
           </div>
