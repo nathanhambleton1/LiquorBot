@@ -886,7 +886,7 @@ export default function EventManager() {
             {qrLink && (
               <Image
                 source={{
-                  uri: `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrLink)}&size=200x200&bgcolor=1F1F1F`
+                  uri: `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrLink)}&size=200x200&color=fff&bgcolor=1F1F1F`
                 }}
                 style={{ width: 200, height: 200 }}
               />
