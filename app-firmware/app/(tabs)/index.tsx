@@ -500,9 +500,9 @@ const styles = StyleSheet.create({
   tileSubtext: { color: 'rgba(223, 220, 217, 0.8)', fontSize: 12, fontWeight: '300', lineHeight: 14 },
   glowOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255, 255, 255, 0.05)' },
   background: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1F1F1F' },
-  overlay: { 
-    position: 'absolute', 
-    top: 0, // changed from 100
+  overlay: {
+    position: 'absolute',
+    top: 0,
     left: 0,
     right: 0,
     bottom: 0,
@@ -511,7 +511,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.45)', // darken background for modal focus
-    paddingLeft: 0, // remove left padding
   },
   title: { fontSize: 48, color: '#DFDCD9', fontWeight: 'bold' },
   connectionRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
