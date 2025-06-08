@@ -645,28 +645,30 @@ export default function EventManager() {
             </View>
 
             {/* invite link */}
-            <View style={styles.section}>
-              <View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}>
-                <Text style={styles.sectionTitle}>Event Link</Text>
-                {isExpanded && isAdmin && (
-                  <Text style={styles.deviceId}>Device ID: {item.liquorbotId}</Text>
-                )}
-              </View>
-              <TouchableOpacity
-                onPress={() => {
-                  const link = `${INVITE_BASE_URL}/join/${item.inviteCode}`;
-                  setQrLink(link);
-                  setQrModalVisible(true);
-                  copyToClipboard(link, item.id);
-                }}
-                activeOpacity={0.8}
-              >
-                <View style={styles.inviteRow}>
-                  <Text style={styles.inviteLink}>{`${INVITE_BASE_URL}/join/${item.inviteCode}`}</Text>
-                  <Ionicons name="qr-code-outline" size={20} color="#CE975E" style={{marginLeft:8}} />
+            {!isPast && (
+              <View style={styles.section}>
+                <View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}>
+                  <Text style={styles.sectionTitle}>Event Link</Text>
+                  {isExpanded && isAdmin && (
+                    <Text style={styles.deviceId}>Device ID: {item.liquorbotId}</Text>
+                  )}
                 </View>
-              </TouchableOpacity>
-            </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    const link = `${INVITE_BASE_URL}/join/${item.inviteCode}`;
+                    setQrLink(link);
+                    setQrModalVisible(true);
+                    copyToClipboard(link, item.id);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.inviteRow}>
+                    <Text style={styles.inviteLink}>{`${INVITE_BASE_URL}/join/${item.inviteCode}`}</Text>
+                    <Ionicons name="qr-code-outline" size={20} color="#CE975E" style={{marginLeft:8}} />
+                  </View>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
 
@@ -884,7 +886,7 @@ export default function EventManager() {
             {qrLink && (
               <Image
                 source={{
-                  uri: `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrLink)}&size=200x200&color=CE975E&bgcolor=1F1F1F`
+                  uri: `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrLink)}&size=200x200&bgcolor=1F1F1F`
                 }}
                 style={{ width: 200, height: 200 }}
               />

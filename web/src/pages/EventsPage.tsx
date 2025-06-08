@@ -1400,7 +1400,7 @@ const EventsPage: React.FC = () => {
             <span className="modal-close" onClick={() => setShowQrModal(false)} style={{ position: 'absolute', top: 12, right: 18, fontSize: 28, cursor: 'pointer' }}>&times;</span>
             <h3 className="modal-title" style={{ marginBottom: 18 }}>Scan to Join Event</h3>
             <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrLink)}&size=220x220&color=ce975e&bgcolor=ffffff&margin=10`}
+                src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrLink)}&size=220x220&bgcolor=ffffff&margin=10`}
                 alt="QR code"
                 style={{ width: 220, height: 220 }}
               />
