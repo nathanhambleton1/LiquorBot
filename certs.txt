@@ -17,3 +17,5 @@ aws iot attach-policy --policy-name Amplify-App-Policy --target us-east-1:29fa5f
 amplify pull --appId d2rasb2ek5t9gn --envName dev
 
 APP SKU: liquorbot_20250527
+
+https://main.dxqquq649m247.amplifyapp.com/
