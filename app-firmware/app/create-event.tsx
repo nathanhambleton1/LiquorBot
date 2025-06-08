@@ -850,7 +850,7 @@ export default function EventsScreen(){
         <Modal visible={pickerVis} animationType="slide"
           onRequestClose={()=>setPV(false)}
           presentationStyle={Platform.OS==='ios'?'pageSheet':'fullScreen'}>
-          <PickerModal {...{cat,setCat,q,setQ,filtered,loading,addDrink,close:()=>setPV(false)}}/>
+          <PickerModal {...{cat,setCat,q,setQ,filtered,loading,addDrink,close:()=>setPV(false), allDrinks}}/>
         </Modal>
         
         {/* time‑info modal */}
@@ -1004,7 +1004,7 @@ const TimeBox=forwardRef(({label,onPress,tag}:{label:string;onPress:()=>void;tag
   </TouchableOpacity>
 ));
 
-const PickerModal = ({ cat, setCat, q, setQ, filtered, loading, addDrink, close }: any) => {
+const PickerModal = ({ cat, setCat, q, setQ, filtered, loading, addDrink, close, allDrinks }: any) => {
   const router = useRouter();
 
   function openCustomDrink() {
@@ -1074,6 +1074,13 @@ const PickerModal = ({ cat, setCat, q, setQ, filtered, loading, addDrink, close 
         )}
         contentContainerStyle={styles.listContent}
         ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+        ListFooterComponent={
+          filtered.length < allDrinks.length ? (
+            <Text style={{ color: '#4F4F4F', fontSize: 12, textAlign: 'center', marginTop: 16, marginBottom: 8 }}>
+              The drinks shown here are dynamically filtered to match your current ingredient list and the number of available slots in your LiquorBot. Add or remove drinks to see more drink options.
+            </Text>
+          ) : null
+        }
       />
     )}
   </View>
