@@ -18,7 +18,7 @@ import React, {
 import { useUnits, ozToMl, mlToOz } from './components/UnitsContext';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView,
-  Modal, FlatList, Platform, KeyboardAvoidingView, Image, Dimensions, ActivityIndicator,
+  Modal, FlatList, Platform, KeyboardAvoidingView, Image, Dimensions, ActivityIndicator, Alert,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
@@ -235,6 +235,11 @@ export default function CreateDrinkScreen() {
 
   const assignIngredient = (ingredientId:number) => {
     if (editingIndex===null) return;
+    // Prevent duplicate ingredient assignment
+    if (rows.some((r, i) => r.id === ingredientId && i !== editingIndex)) {
+      Alert.alert('Duplicate Ingredient', 'This ingredient is already selected.');
+      return;
+    }
     const next=[...rows]; next[editingIndex].id = ingredientId;
     if (editingIndex===rows.length-1) next.push({ id:0, volume:1.5, priority:1 });
     setRows(next); setPickerVisible(false); setSearchQuery('');

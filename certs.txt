@@ -19,3 +19,5 @@ amplify pull --appId d2rasb2ek5t9gn --envName dev
 APP SKU: liquorbot_20250527
 
 https://main.dxqquq649m247.amplifyapp.com/
+
+check no doup ingredeint create drink and device settings

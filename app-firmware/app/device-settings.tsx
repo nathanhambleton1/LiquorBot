@@ -781,6 +781,11 @@ export default function DeviceSettings() {
                   item={item}
                   index={index}
                   onPress={() => {
+                    // Prevent duplicate ingredient assignment
+                    if (slots.includes(item.id)) {
+                      Alert.alert('Duplicate Ingredient', 'This ingredient is already in a slot.');
+                      return;
+                    }
                     handleSetSlot(selectedSlot!, item.id);
                     setModalVisible(false);
                     setSearchQuery('');
