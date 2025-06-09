@@ -136,7 +136,8 @@ export default function EventManager() {
 
   /* QR Code modal */
   const [qrModalVisible, setQrModalVisible] = useState(false);
-  const [qrLink, setQrLink] = useState<string | null>(null);
+  const [qrLink,   setQrLink]   = useState<string|null>(null);
+  const [qrLoading,setQrLoading]= useState(false);
 
   /* ---------------- GUEST JOIN PARAM ---------------- */
   useEffect(() => {
@@ -656,6 +657,7 @@ export default function EventManager() {
                 <TouchableOpacity
                   onPress={() => {
                     const link = `${INVITE_BASE_URL}/join/${item.inviteCode}`;
+                    setQrLoading(true);
                     setQrLink(link);
                     setQrModalVisible(true);
                     copyToClipboard(link, item.id);
@@ -884,12 +886,22 @@ export default function EventManager() {
             </TouchableOpacity>
             <Text style={styles.filtTitle}>Scan to Join Event</Text>
             {qrLink && (
-              <Image
-                source={{
-                  uri: `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrLink)}&size=200x200&color=fff&bgcolor=1F1F1F`
-                }}
-                style={{ width: 200, height: 200 }}
-              />
+              <View style={{ width:200, height:200, justifyContent:'center', alignItems:'center' }}>
+                <ActivityIndicator
+                  size="large"
+                  color="#CE975E"
+                  animating={qrLoading}
+                  style={ qrLoading ? {} : { display: 'none' } }
+                />
+                <Image
+                  source={{
+                    uri: `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrLink)}&size=200x200&color=fff&bgcolor=1F1F1F`
+                  }}
+                  style={[{ width:200, height:200 }, qrLoading && { display: 'none' }]}
+                  onLoadStart={() => setQrLoading(true)}
+                  onLoadEnd={()   => setQrLoading(false)}
+                />
+              </View>
             )}
             <Text style={{color:'#8F8F8F',fontSize:12,marginTop:16,textAlign:'center'}}>
               Link copied to clipboard
