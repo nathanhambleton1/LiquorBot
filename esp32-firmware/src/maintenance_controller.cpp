@@ -9,6 +9,35 @@
 #include "state_manager.h"
 #include "aws_manager.h"
 #include "led_control.h"
+#include "pin_config.h"
+#include "drink_controller.h"
+
+// Cleaning durations (in milliseconds)
+#ifndef CLEAN_WATER_MS
+#define CLEAN_WATER_MS 500
+#endif
+#ifndef CLEAN_AIR_MS
+#define CLEAN_AIR_MS 300
+#endif
+
+#define SOL_OUTPUT_PIN  23
+
+static const uint8_t SOL_PINS[14] = {
+    13,  /* SOL_1  */
+    12,  /* SOL_2  */
+    14,  /* SOL_3  */
+    27,  /* SOL_4  */
+    26,  /* SOL_5  */
+    25,  /* SOL_6  */
+    33,  /* SOL_7  */
+    19,  /* SOL_8  */
+    18,  /* SOL_9  */
+     5,  /* SOL_10 */
+     4,  /* SOL_11 */
+    32,  /* SOL_12 */
+    21,  /* SOL_13 (WATER) */
+    22   /* SOL_14 (AIR)   */
+};
 
 // --- FreeRTOS task forward declarations ---
 static void readySystemTask(void *param);
@@ -96,16 +125,28 @@ static void deepCleanTask(void *param) {
     setState(State::MAINTENANCE);
     ledPouring();
     Serial.println("→ State set to MAINTENANCE (DEEP_CLEAN)");
-    const unsigned long totalMs = 10000;
-    const unsigned long stepMs = 50;
-    unsigned long waited = 0;
-    while (waited < totalMs) {
-        vTaskDelay(pdMS_TO_TICKS(stepMs));
-        waited += stepMs;
-    }
+    // Ensure all solenoids are closed
+    cleanupDrinkController();
+    Serial.println("Starting deep clean sequence");
+    // Open outlet and start pump
+    digitalWrite(SOL_OUTPUT_PIN, HIGH);
+    digitalWrite(PUMP1_PIN, HIGH);
+    // Open water solenoid (SOL_13)
+    digitalWrite(SOL_PINS[12], HIGH);
+    vTaskDelay(pdMS_TO_TICKS(CLEAN_WATER_MS));
+    digitalWrite(SOL_PINS[12], LOW);
+    // Open air solenoid (SOL_14)
+    digitalWrite(SOL_PINS[13], HIGH);
+    vTaskDelay(pdMS_TO_TICKS(CLEAN_AIR_MS));
+    digitalWrite(SOL_PINS[13], LOW);
+    // Stop pump and close outlet
+    digitalWrite(PUMP1_PIN, LOW);
+    digitalWrite(SOL_OUTPUT_PIN, LOW);
+    Serial.println("Deep clean sequence complete");
+    // Send result and reset state
+    sendData(MAINTENANCE_TOPIC, "{\"status\":\"ok\",\"action\":\"DEEP_CLEAN\"}");
     setState(State::IDLE);
     ledIdle();
-    sendData(MAINTENANCE_TOPIC, "{\"status\":\"ok\",\"action\":\"DEEP_CLEAN\"}");
     Serial.println("→ State set to IDLE after DEEP_CLEAN");
     vTaskDelete(nullptr);
 }

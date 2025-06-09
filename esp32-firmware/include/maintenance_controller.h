@@ -16,6 +16,4 @@ void startEmptySystemTask();
 // Start the DEEP_CLEAN maintenance task
 void startDeepCleanTask();
 
-// Add more maintenance actions as needed
-
 #endif // MAINTENANCE_CONTROLLER_H

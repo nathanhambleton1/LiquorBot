@@ -22,7 +22,7 @@
 
 // Pump pin assignments
 #define PUMP1_PIN 17
-#define PUMP2_PIN 16
+#define PUMP2_PIN 2
 
 // LED Pin assignemnt
 #define LED_PIN 4

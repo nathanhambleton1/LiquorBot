@@ -3,6 +3,17 @@
  *  Author: Nathan Hambleton – back-port 08 Jun 2025 by ChatGPT
  * -------------------------------------------------------------------------- */
 
+// PWM setup for PUMP1 (ESP32)
+#ifndef PUMP1_PWM_CHANNEL
+#define PUMP1_PWM_CHANNEL 0
+#endif
+#ifndef PUMP1_PWM_FREQ
+#define PUMP1_PWM_FREQ 1000
+#endif
+#ifndef PUMP1_PWM_RES
+#define PUMP1_PWM_RES 8
+#endif
+
 #include <Arduino.h>
 #include <vector>
 #include <algorithm>
@@ -15,14 +26,18 @@
 #include "pin_config.h"      // PUMP1_PIN (use DRIVER1+ 17)
 #include "led_control.h"
 
-#ifndef PUMP1_PIN
-#define PUMP1_PIN   17      /* DRIVER1_POS  – forward */
+// Cleaning durations (in milliseconds)
+#ifndef CLEAN_WATER_MS
+#define CLEAN_WATER_MS 2000
+#endif
+#ifndef CLEAN_AIR_MS
+#define CLEAN_AIR_MS 3000
 #endif
 
 /* ---------------- SOLENOID + OUTPUT PINS (original hardware) -------------- */
 #define SOL_OUTPUT_PIN  23   // Combined outlet valve (was SOL_OUTPUT)
 
-static const uint8_t SOL_PINS[13] = {
+static const uint8_t SOL_PINS[14] = {
     13,  /* SOL_1  */
     12,  /* SOL_2  */
     14,  /* SOL_3  */
@@ -35,7 +50,8 @@ static const uint8_t SOL_PINS[13] = {
      5,  /* SOL_10 */
      4,  /* SOL_11 */
     32,  /* SOL_12 */
-    21   /* SOL_13 */
+    21,  /* SOL_13 (WATER) */
+    22   /* SOL_14 (AIR)   */
 };
 
 /* ---------------------------- TYPES --------------------------------------- */
@@ -52,7 +68,7 @@ static std::vector<IngredientCommand> parseDrinkCommand(const String &str);
 static void pourDrinkTask(void *param);
 static float flowRate(int numOpen);
 static void dispenseParallelGroup(std::vector<IngredientCommand> &group);
-static void cleanupDrinkController();
+void cleanupDrinkController();
 static float estimatePourTime(const std::vector<IngredientCommand> &parsed);
 
 /* -------------------------------------------------------------------------- */
@@ -62,13 +78,20 @@ void initDrinkController() {
     /* Pump */
     pinMode(PUMP1_PIN, OUTPUT);
     digitalWrite(PUMP1_PIN, LOW);
+    // PWM setup for PUMP1
+    ledcSetup(PUMP1_PWM_CHANNEL, PUMP1_PWM_FREQ, PUMP1_PWM_RES);
+    ledcAttachPin(PUMP1_PIN, PUMP1_PWM_CHANNEL);
+    ledcWrite(PUMP1_PWM_CHANNEL, 0); // Start off
+
+    pinMode(PUMP2_PIN, OUTPUT);
+    digitalWrite(PUMP2_PIN, LOW);
 
     /* Common outlet */
     pinMode(SOL_OUTPUT_PIN, OUTPUT);
     digitalWrite(SOL_OUTPUT_PIN, LOW);
 
-    /* 13 individual solenoids */
-    for (uint8_t i = 0; i < 13; ++i) {
+    /* 14 individual solenoids */
+    for (uint8_t i = 0; i < 14; ++i) {
         pinMode(SOL_PINS[i], OUTPUT);
         digitalWrite(SOL_PINS[i], LOW);
     }
@@ -182,7 +205,7 @@ static float estimatePourTime(const std::vector<IngredientCommand> &parsed) {
             totalSec += groupSumOz / rate;
         }
     }
-    return totalSec;
+    return totalSec + 4.0f; // add 4 seconds for cleaning & delays
 }
 
 /* -------------------------------------------------------------------------- */
@@ -225,7 +248,8 @@ static std::vector<IngredientCommand> parseDrinkCommand(const String &commandStr
 static void dispenseDrink(std::vector<IngredientCommand> &parsed) {
     /* Open outlet & start pump */
     digitalWrite(SOL_OUTPUT_PIN, HIGH);
-    digitalWrite(PUMP1_PIN, HIGH);
+    // Set pump to full speed (PWM max)
+    ledcWrite(PUMP1_PWM_CHANNEL, 255);
     Serial.println("Pump ON, outlet open.");
 
     /* Sort commands by priority ASC */
@@ -246,12 +270,33 @@ static void dispenseDrink(std::vector<IngredientCommand> &parsed) {
         dispenseParallelGroup(group);
     }
 
-    /* Stop pump & close outlet */
+    cleanupDrinkController();
+
+    Serial.println("Starting tube cleaning sequence");
+    // TURN PUMP & OUTLET BACK ON so fluid/air actually flows
+    digitalWrite(SOL_OUTPUT_PIN, HIGH);
+    // Set pump to full speed for water flush
+    ledcWrite(PUMP1_PWM_CHANNEL, 255);
+
+    // WATER flush (SOL_PINS[12] is pin 21)
+    Serial.println("Water flush...");
+    digitalWrite(SOL_PINS[12], HIGH);
+    delay(CLEAN_WATER_MS);
+    digitalWrite(SOL_PINS[12], LOW);
+
+    // AIR flush (SOL_PINS[13] is pin 22)
+    Serial.println("Air flush (slowed pump)...");
+    // Slow down pump for air flush
+    ledcWrite(PUMP1_PWM_CHANNEL, 180); // ~40% speed
+    digitalWrite(SOL_PINS[13], HIGH);
+    delay(CLEAN_AIR_MS);
+    digitalWrite(SOL_PINS[13], LOW);
+
+    // now turn everything off again
+    ledcWrite(PUMP1_PWM_CHANNEL, 0);
     digitalWrite(PUMP1_PIN, LOW);
     digitalWrite(SOL_OUTPUT_PIN, LOW);
-    Serial.println("Pump OFF, outlet closed.");
-
-    cleanupDrinkController();
+    Serial.println("Tube cleaning sequence complete");
 }
 
 /* ----------------------- PARALLEL GROUP DISPENSE --------------------------- */
@@ -315,16 +360,16 @@ static void setSolenoid(int slot, bool on) {
 /* ------------------------ FLOW RATE CALCULATION ----------------------------- */
 static float flowRate(int n) {            /* time is in total oz/sec */
     switch (n) {
-        case 1:  return 1.0f;
-        case 2:  return 1.4f;
-        case 3:  return 1.6f;
-        case 4:  return 1.7f;
-        default: return 1.8f;             /* 5+ */
+        case 1:  return 0.38f;
+        case 2:  return 0.54f;
+        case 3:  return 0.61f;
+        case 4:  return 0.65f;
+        default: return 0.68f;             /* 5+ */
     }
 }
 
-static void cleanupDrinkController() {
-    for (uint8_t i = 0; i < 13; ++i) digitalWrite(SOL_PINS[i], LOW);
+void cleanupDrinkController() {
+    for (uint8_t i = 0; i < 14; ++i) digitalWrite(SOL_PINS[i], LOW);
     digitalWrite(SOL_OUTPUT_PIN, LOW);
 }
 
