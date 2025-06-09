@@ -202,12 +202,14 @@ static void handleSlotConfigMessage(const String &json) {
 /*                           PUBLISH HELPERS                                  */
 /* -------------------------------------------------------------------------- */
 void sendData(const String &topic, const String &msg) {
-    if (mqttClient.connected()) {
-        mqttClient.publish(topic.c_str(), msg.c_str());
-        Serial.printf("→ %s : %s\n", topic.c_str(), msg.c_str());
-    } else {
+    if (!mqttClient.connected()) {
         Serial.println("MQTT not connected; publish skipped.");
+        return;
     }
+    // Publish and immediately service the network to flush it out
+    Serial.printf("→ %s : %s\n", topic.c_str(), msg.c_str());
+    mqttClient.publish(topic.c_str(), msg.c_str());
+    mqttClient.loop();   // <— ensures the packet goes out right away
 }
 
 void sendHeartbeat() {
