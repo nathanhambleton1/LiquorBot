@@ -17,6 +17,7 @@ enum class State {
     IDLE,
     POURING,
     SETUP,
+    MAINTENANCE,
     ERROR
 };
 
