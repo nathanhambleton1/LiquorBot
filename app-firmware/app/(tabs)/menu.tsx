@@ -17,11 +17,12 @@
 // Author: Nathan Hambleton
 // Updated: May 28 2025 – redundant get‑config requests on screen focus
 // -----------------------------------------------------------------------------
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Text, View, StyleSheet, ScrollView, Image, TouchableOpacity,
   Dimensions, LayoutAnimation, Platform, UIManager, Animated,
   TextInput, Modal, Switch, ActivityIndicator, Alert,
+  PanResponder,
 } from 'react-native';
 import Ionicons      from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
@@ -290,6 +291,182 @@ function DrinkItem({
     }
   }
 
+  /* ------------------------------------------------------------------ */
+  /*                      DRAG-TO-POUR  (clone of ActionRow)            */
+  /* ------------------------------------------------------------------ */
+  function PourSlider({
+    canPour,
+    onPour,
+    isPouring,
+    statusDone,
+  }: {
+    canPour: boolean;
+    onPour: () => Promise<void>;
+    isPouring: boolean;
+    statusDone: 'success' | 'error' | null;
+  }) {
+    const CIRCLE = 48;                 // Ø of the draggable circle
+    const x        = useRef(new Animated.Value(0)).current;
+    const progress = useRef(new Animated.Value(0)).current;
+    const [rowW, setRowW] = useState(0);
+    const [done, setDone] = useState(false);
+    const [bounce, setBounce] = useState(false);
+    const [successAnim] = useState(new Animated.Value(0));
+
+    /* colours */
+    const baseGray   = '#1F1F1F';
+    const goldBorder = '#CE975E';
+    const circleGold = '#CE975E';
+    const circleGreen= '#63d44a';
+    const circleRed  = '#D9534F';
+
+    /* icon to show inside circle */
+    const iconName = done
+      ? 'checkmark'
+      : isPouring
+      ? 'sync'
+      : 'chevron-forward';         // ◀︎▶︎ drag cue
+
+    /* circle colour */
+    const circleColor = !canPour
+      ? '#4F4F4F' // gray out if not pourable
+      : done
+      ? statusDone === 'error'
+        ? circleRed
+        : circleGreen
+      : circleGold;
+
+    /* icon color */
+    const iconColor = !canPour ? '#9E9E9E' : '#141414';
+
+    // Animate green flash on success
+    useEffect(() => {
+      if (statusDone === 'success') {
+        successAnim.setValue(1);
+        Animated.timing(successAnim, {
+          toValue: 0,
+          duration: 1200,
+          useNativeDriver: false,
+        }).start();
+      }
+    }, [statusDone]);
+
+    // Animated border and circle color
+    const animatedBorderColor = successAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [baseGray, circleGreen],
+    });
+    const animatedCircleColor = successAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [circleColor, circleGreen],
+    });
+
+    /* drag responder */
+    const responder = useMemo(
+      () =>
+        PanResponder.create({
+          onStartShouldSetPanResponder: () => canPour && !isPouring,
+          onPanResponderMove: (_, g) => {
+            if (!rowW) return;
+            const max = rowW - CIRCLE - 12;
+            const pos = Math.max(0, Math.min(g.dx, max));
+            x.setValue(pos);
+            progress.setValue(pos / max);
+          },
+          onPanResponderRelease: () => {
+            if (!rowW) return;
+            const max = rowW - CIRCLE - 4;
+            x.stopAnimation(async (pos) => {
+              /* threshold = 90 % */
+              if (pos >= max * 0.9) {
+                setDone(true);
+                Animated.timing(x, {
+                  toValue: 0,
+                  duration: 350,
+                  useNativeDriver: true,
+                }).start(async () => {
+                  try {
+                    await onPour();
+                  } finally {
+                    /* let success/fail spinner run */
+                    setTimeout(() => {
+                      Animated.timing(x, {
+                        toValue: 0,
+                        duration: 350,
+                        useNativeDriver: true,
+                      }).start(() => {
+                        progress.setValue(0);
+                        setDone(false);
+                      });
+                    }, 600);
+                  }
+                });
+              } else {
+                Animated.spring(x, { toValue: 0, useNativeDriver: true }).start(
+                  () => progress.setValue(0),
+                );
+              }
+            });
+          },
+        }),
+      [rowW, canPour, isPouring],
+    );
+
+    /* bounce prompt on simple press */
+    const handleTap = () => {
+      if (bounce || !canPour || isPouring) return;
+      setBounce(true);
+      Animated.sequence([
+        Animated.timing(x, { toValue: 12, duration: 60, useNativeDriver: true }),
+        Animated.spring(x, { toValue: 0, friction: 5, tension: 50, useNativeDriver: true }),
+      ]).start(() => setBounce(false));
+    };
+
+    return (
+      <TouchableOpacity
+        activeOpacity={1}
+        style={styles.pourRow}
+        onLayout={(e) => setRowW(e.nativeEvent.layout.width)}
+        onPress={handleTap}
+      >
+        <Animated.Text
+          style={[
+            styles.pourLabel,
+            {
+              opacity: progress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [1, 0.35],
+              }),
+            },
+            (!canPour || isPouring) && { color: '#4F4F4F' },
+          ]}
+        >
+          {isPouring ? 'Pouring…' : 'Slide to Pour'}
+        </Animated.Text>
+
+        {/* draggable circle */}
+        <Animated.View
+          {...responder.panHandlers}
+          style={[
+            styles.pourCircle,
+            {
+              transform: [{ translateX: x }],
+              backgroundColor: animatedCircleColor,
+              borderWidth: 2,
+              borderColor: animatedBorderColor,
+            },
+          ]}
+        >
+          {isPouring ? (
+            <ActivityIndicator size="small" color={iconColor} />
+          ) : (
+            <Ionicons name={iconName} size={26} color={iconColor} />
+          )}
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  }
+
   // ADD NEW useEffect FOR RESPONSE HANDLING:
   useEffect(() => {
     if (!logging) return;                       // only listen while waiting
@@ -472,62 +649,28 @@ function DrinkItem({
           </TouchableOpacity>
         </View>
 
-        <View style={styles.buttonArea}>
-          <AnimatedTouchable
+        {/* --- DRAG-TO-POUR SLIDER ---------------------------------- */}
+        <PourSlider
+          canPour={isMakeable && isConnected}
+          isPouring={logging}
+          statusDone={statusType}
+          onPour={handlePourDrink}
+        />
+        {statusType && (
+          <Text
             style={[
-              styles.button,
-              statusType && {
-                backgroundColor: statusAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [
-                    '#CE975E',
-                    statusType === 'error' ? '#D9534F' : '#63d44a',
-                  ],
-                }),
-              },
-              (!isMakeable || logging || !isConnected) && styles.disabledButton,
+              styles.statusMessageOverlay,
+              statusType === 'error' ? styles.errorText : styles.successText,
             ]}
-            onPress={handlePourDrink}
-            disabled={logging || !isMakeable || !isConnected}
           >
-            <View style={styles.buttonContent}>
-              <Text style={[
-                styles.buttonText,
-                (!isMakeable || logging || !isConnected) && styles.disabledButtonText,
-              ]}>
-                { !isConnected
-                    ? 'No Pouring Device Connected'
-                    : !isMakeable
-                    ? 'Missing Ingredients'
-                    : logging
-                    ? 'Pouring…'
-                    : 'Pour Drink'
-                }
-              </Text>
-              {logging && (
-                <ActivityIndicator size="small" color="#FFFFFF" style={styles.spinner} />
-              )}
-            </View>
-          </AnimatedTouchable>
-
-          {/* overlayed status text – does NOT shift layout */}
-          {statusType && (
-            <Text
-              style={[
-                styles.statusMessageOverlay,
-                statusType === 'error' ? styles.errorText : styles.successText,
-              ]}
-            >
-              {statusMessage}
-            </Text>
-          )}
-          {/* --- NEW: show ticking timer --- */}
-          {countdown !== null && (
-            <Text style={[styles.statusMessageOverlay, styles.successText]}>
-              {countdown}s remaining…
-            </Text>
-          )}
-        </View>
+            {statusMessage}
+          </Text>
+        )}
+        {countdown !== null && (
+          <Text style={[styles.statusMessageOverlay, styles.successText]}>
+            {countdown}s remaining…
+          </Text>
+        )}
       </Animated.View>
     );
   }
@@ -1358,7 +1501,7 @@ const styles = StyleSheet.create({
   scrollContainer: { flexGrow: 1, padding: 20 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   box: { width: '45%', marginBottom: 25, alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, overflow: 'visible', position: 'relative', paddingVertical: 10 },
-  expandedBox: { width: '100%', height: 500, padding: 20, marginBottom: 25, overflow: 'visible' },
+  expandedBox: { width: '100%', height: 450, padding: 20, marginBottom: 25, overflow: 'visible' },
   favoriteButton: { position: 'absolute', top: 10, right: 10, zIndex: 2 },
   expandedFavoriteButton: { position: 'absolute', top: 10, right: 10, zIndex: 2 },
   closeButton: { position: 'absolute', top: 10, left: 10, zIndex: 2 },
@@ -1366,19 +1509,16 @@ const styles = StyleSheet.create({
   expandedboxText: { color: '#DFDCD9', fontSize: 24, marginBottom: 10, textAlign: 'left', alignSelf: 'flex-start' },
   expandedImage: { marginTop: 0, width: 200, height: 200, borderRadius: 10, marginLeft: -30 },
   expandedcategoryText: { color: '#CE975E', fontSize: 14, textAlign: 'left', alignSelf: 'flex-start' },
-  expandeddescriptionText: { color: '#4F4F4F', fontSize: 14, textAlign: 'left', alignSelf: 'flex-start', marginBottom: 5 },
+  expandeddescriptionText: { color: '#4F4F4F', fontSize: 14, textAlign: 'left', alignSelf: 'flex-start' },
   expandedContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   expandedTitleContainer: { flex: 1, marginTop: 50, marginRight: 10, alignSelf: 'flex-start' },
-  expandeddetailContainer: { flex: 1, marginTop: 40, marginRight: 10 },
+  expandeddetailContainer: { flex: 1, marginTop: 10, marginRight: 10 },
   boxText: { color: '#DFDCD9', fontSize: 18, paddingLeft: 10, marginBottom: 0, textAlign: 'left', alignSelf: 'flex-start' },
   categoryText: { color: '#CE975E', fontSize: 14, marginBottom: 10, paddingLeft: 10, textAlign: 'left', alignSelf: 'flex-start' },
-  quantityContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20, marginBottom: 20 },
+  quantityContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 30 },
   quantityButton: { backgroundColor: '#4f4f4f', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 5, alignItems: 'center' },
   quantityButtonText: { color: '#FFFFFF', fontSize: 20 },
   quantityText: { color: '#FFFFFF', fontSize: 20, marginHorizontal: 20 },
-  button: { backgroundColor: '#CE975E', paddingVertical: 20, paddingHorizontal: 20, borderRadius: 20, alignItems: 'center', marginTop: 20, marginBottom: 20, width: '100%', alignSelf: 'center' },
-  buttonText: { color: '#FFFFFF', fontSize: 20 },
-  buttonContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   spinner: { marginLeft: 10 },
   editIconContainer: { position: 'absolute', top: 85, right: 30 },
   loadingScreen: { flex: 1, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center' },
@@ -1392,11 +1532,11 @@ const styles = StyleSheet.create({
   modalCloseButton: { position: 'absolute', top: 15, right: 15 },
   disabledButton: { backgroundColor: '#4F4F4F' },
   disabledButtonText: { color: '#9E9E9E' },
-  statusMessage: { textAlign: 'center', fontSize: 10 },
+  statusMessage: { textAlign: 'center', fontSize: 10, },
   errorText: { color: '#D9534F' },
   successText: { color: '#63d44a' },
   buttonArea: { width: '100%', alignItems: 'center', position: 'relative' },
-  statusMessageOverlay: { position: 'absolute', top: '100%', marginTop: -12, fontSize: 10, textAlign: 'center' },
+  statusMessageOverlay: { position: 'absolute', top: '100%', marginTop: -4, fontSize: 10, textAlign: 'center' },
   editButton: { position: 'absolute', top: 10, left: 45, zIndex: 2 },
   goldenSignInText: {
     color: '#CE975E',
@@ -1410,4 +1550,32 @@ const styles = StyleSheet.create({
     padding: 30,
   },
   noDrinksText: { color: '#4f4f4f', fontSize: 12, textAlign: 'center' },
+  pourRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#141414',
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    marginTop: -10,
+    marginBottom: 20,
+    position: 'relative',
+  },
+  pourLabel: {
+    color: '#DFDCD9',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    width: '100%',
+  },
+  pourCircle: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });
