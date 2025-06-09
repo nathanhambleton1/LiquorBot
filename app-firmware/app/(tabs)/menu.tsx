@@ -284,9 +284,9 @@ function DrinkItem({
       await publishDrinkCommand();
       console.log(`Pouring ${drink.name} (${quantity})`);
     } catch (error) {
-      console.error('Pour failed', error);
+      console.error('Pour Failed', error);
       setLogging(false);
-      triggerStatus('error', 'Pour failed – please try again.');
+      triggerStatus('error', 'Pour Failed – please try again.');
     }
   }
 
@@ -344,7 +344,7 @@ function DrinkItem({
               typeof payload === 'object' && payload?.error
                 ? ` – ${payload.error}`
                 : '';
-            triggerStatus('error', `Pour failed${reason}.`);
+            triggerStatus('error', `Pour Failed${reason}.`);
             setLogging(false);
             clearTimeout(timeoutId);
           }

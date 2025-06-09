@@ -16,7 +16,8 @@ void setState(State newState) {
 }
 
 bool isBusy() {
-    return (currentState == State::POURING);
+    return currentState == State::POURING
+        || currentState == State::MAINTENANCE;
 }
 
 bool isIdle() {

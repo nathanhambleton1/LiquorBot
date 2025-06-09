@@ -123,7 +123,16 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
 
         Serial.printf("[AWS] Drink command received: %s\n", cmd.c_str());
         if (getCurrentState() != State::IDLE) {
-            sendData(AWS_RECEIVE_TOPIC, "{\"status\":\"fail\",\"error\":\"busy\"}");
+            StaticJsonDocument<64> doc;
+            doc["status"] = "fail";
+            /* Distinguish *why* we're busy. */
+            switch (getCurrentState()) {
+            case State::POURING:      doc["error"] = "Device Already In Use";      break;
+            case State::MAINTENANCE:  doc["error"] = "Device In Maintenance Mode";  break;
+            default:                  doc["error"] = "Device Busy";              break;
+            }
+            String out;  serializeJson(doc, out);
+            sendData(AWS_RECEIVE_TOPIC, out);
             Serial.printf("✖ Busy – drink rejected. Current state: %d\n", (int)getCurrentState());
             return;
         }

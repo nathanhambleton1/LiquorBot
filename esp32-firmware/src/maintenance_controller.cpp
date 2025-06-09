@@ -58,8 +58,15 @@ static void readySystemTask(void *param) {
     setState(State::MAINTENANCE);
     ledPouring();
     Serial.println("→ State set to MAINTENANCE (READY_SYSTEM)");
-    // TODO: Implement priming logic here
-    delay(10000); // Simulate work
+    // Simulate work for 10 seconds, but yield frequently for heartbeats/messages
+    const unsigned long totalMs = 10000;
+    const unsigned long stepMs = 50;
+    unsigned long waited = 0;
+    while (waited < totalMs) {
+        vTaskDelay(pdMS_TO_TICKS(stepMs));
+        waited += stepMs;
+        // Optionally, check for abort/error here
+    }
     setState(State::IDLE);
     ledIdle();
     sendData(MAINTENANCE_TOPIC, "{\"status\":\"ok\",\"action\":\"READY_SYSTEM\"}");
@@ -71,8 +78,13 @@ static void emptySystemTask(void *param) {
     setState(State::MAINTENANCE);
     ledPouring();
     Serial.println("→ State set to MAINTENANCE (EMPTY_SYSTEM)");
-    // TODO: Implement emptying logic here
-    delay(10000); // Simulate work
+    const unsigned long totalMs = 10000;
+    const unsigned long stepMs = 50;
+    unsigned long waited = 0;
+    while (waited < totalMs) {
+        vTaskDelay(pdMS_TO_TICKS(stepMs));
+        waited += stepMs;
+    }
     setState(State::IDLE);
     ledIdle();
     sendData(MAINTENANCE_TOPIC, "{\"status\":\"ok\",\"action\":\"EMPTY_SYSTEM\"}");
@@ -84,8 +96,13 @@ static void deepCleanTask(void *param) {
     setState(State::MAINTENANCE);
     ledPouring();
     Serial.println("→ State set to MAINTENANCE (DEEP_CLEAN)");
-    // TODO: Implement deep clean logic here
-    delay(10000); // Simulate work
+    const unsigned long totalMs = 10000;
+    const unsigned long stepMs = 50;
+    unsigned long waited = 0;
+    while (waited < totalMs) {
+        vTaskDelay(pdMS_TO_TICKS(stepMs));
+        waited += stepMs;
+    }
     setState(State::IDLE);
     ledIdle();
     sendData(MAINTENANCE_TOPIC, "{\"status\":\"ok\",\"action\":\"DEEP_CLEAN\"}");

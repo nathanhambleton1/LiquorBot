@@ -70,14 +70,13 @@ void loop() {
     }
 
     /* 2 · Handle MQTT */
-    if (WiFi.status() == WL_CONNECTED && state == State::IDLE) {
-        // Only process AWS messages if IDLE (not pouring, not maintenance)
+    if (WiFi.status() == WL_CONNECTED) {
         processAWSMessages();
     }
 
-    /* 3 · Heartbeat */
+    /* 3 · Heartbeat  ➜  always advertise liveness while Wi-Fi is up */
     if (millis() - lastHeartbeat >= HB_PERIOD) {
-        if (WiFi.status() == WL_CONNECTED && state == State::IDLE) sendHeartbeat();
+        if (WiFi.status() == WL_CONNECTED) sendHeartbeat();
         lastHeartbeat = millis();
     }
 }
