@@ -308,16 +308,18 @@ function DrinkItem({
           if (!isMounted) return;
 
           // Amplify wraps the raw payload in evt.value
-          const payload: any = evt?.value ?? evt;
+          const raw      = evt?.value ?? evt;
+          const payload: any =
+              typeof raw === 'string'
+                ? (() => { try { return JSON.parse(raw) } catch { return { message: raw } } })()
+                : raw;
           console.log('[LiquorBot] device reply →', payload);
 
-          const status = typeof payload === 'string'
-            ? payload.toLowerCase().trim()
-            : String(
-                payload.status ??        // { status: "success" }
-                payload.result ??        // { result: "success" }
-                payload.message ?? ''    // fallback
-              ).toLowerCase();
+          const status = (payload.status ??
+            payload.result ??
+            payload.message ??
+            (typeof payload === 'string' ? payload : '')
+          ).toString().toLowerCase().trim();
 
           // --- NEW: handle ETA ---
           if (status === 'eta' && typeof payload.eta === 'number') {
