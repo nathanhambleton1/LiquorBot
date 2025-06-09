@@ -100,16 +100,29 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
         return; // nothing else
     }
 
-    /* 2 · Drink command */
+    /* 2 · Drink command */
     if (topicStr == AWS_PUBLISH_TOPIC) {
+        // try parsing as a JSON string literal, otherwise strip quotes
+        String cmd;
+        StaticJsonDocument<64> jdoc;
+        if (deserializeJson(jdoc, message) == DeserializationError::Ok) {
+            cmd = jdoc.as<const char*>(); 
+        } else {
+            cmd = message;
+            if (cmd.startsWith("\"") && cmd.endsWith("\"")) {
+                cmd = cmd.substring(1, cmd.length() - 1);
+            }
+        }
+
+        Serial.printf("[AWS] Drink command received: %s\n", cmd.c_str());
         if (isBusy()) {
             sendData(AWS_RECEIVE_TOPIC, "{\"status\":\"fail\",\"error\":\"busy\"}");
-            Serial.println("✖ Busy – drink rejected.");
+            Serial.println("✖ Busy – drink rejected.");
             return;
         }
 
-        /* Kick off non‑blocking FreeRTOS task */
-        startPourTask(message);
+        /* Kick off non-blocking FreeRTOS task with the clean command */
+        startPourTask(cmd);
         return; // main loop continues running
     }
 

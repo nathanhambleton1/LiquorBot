@@ -190,6 +190,7 @@ function DrinkItem({
   const [statusAnim] = useState(new Animated.Value(0));
   const [statusType, setStatusType] = useState<'success' | 'error' | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const [countdown, setCountdown] = useState<number | null>(null);
   const isDrinkMakeable = (drink: Drink) => {
     if (!drink.ingredients) return false;
     const needed = drink.ingredients
@@ -255,7 +256,21 @@ function DrinkItem({
     console.log('PouredDrink stored.');
   }
 
+  function startCountdown(sec: number) {
+    setCountdown(Math.ceil(sec));
+    const id = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(id);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
+
   async function handlePourDrink() {
+    setCountdown(null); // clear any leftover timer
     if (logging || !isMakeable) return;
     if (!isConnected) { 
       console.warn('LiquorBot is not connected.'); 
@@ -289,7 +304,6 @@ function DrinkItem({
     const sub = pubsub
       .subscribe({ topics: [`liquorbot/liquorbot${liquorbotId}/receive`] })
       .subscribe({
-        /* ---------- CHANGED ---------- */
         next: async (evt: any) => {
           if (!isMounted) return;
 
@@ -305,8 +319,16 @@ function DrinkItem({
                 payload.message ?? ''    // fallback
               ).toLowerCase();
 
+          // --- NEW: handle ETA ---
+          if (status === 'eta' && typeof payload.eta === 'number') {
+            startCountdown(payload.eta);
+            return; // wait for success/fail next
+          }
+          // -----------------------
+
           if (status === 'success') {
             triggerStatus('success', 'Success! Your drink was poured – enjoy.');
+            setCountdown(null); // clear countdown on success
             try {
               const user = await getCurrentUser();
               await logPouredDrink(user?.username ?? null);
@@ -325,7 +347,6 @@ function DrinkItem({
             clearTimeout(timeoutId);
           }
         },
-        /* -------------------------------- */
         error: (err: any) => {
           console.error('MQTT receive‑topic error:', err);
           triggerStatus('error', 'Error receiving device response.');
@@ -498,6 +519,12 @@ function DrinkItem({
               {statusMessage}
             </Text>
           )}
+          {/* --- NEW: show ticking timer --- */}
+          {countdown !== null && (
+            <Text style={[styles.statusMessageOverlay, styles.successText]}>
+              {countdown}s remaining…
+            </Text>
+          )}
         </View>
       </Animated.View>
     );
@@ -554,6 +581,7 @@ export default function MenuScreen() {
   const [loading, setLoading] = useState(true);
   const lastFocusedTime = useRef<number>(0);
   const [refreshCustom, setRefreshCustom] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
 
   // category & search
   const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey'];
