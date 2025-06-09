@@ -37,6 +37,10 @@
  
  // Turn off the LED with a fade from the current color to black
  void ledOff();
+
+ // State-based LED feedback helpers
+ void ledPouring();   // Fade to green for POURING state
+ void ledError();     // Fade to red for ERROR state
+ void ledIdle();      // Fade to white for IDLE state
  
  #endif // LED_CONTROL_H
- 

@@ -13,7 +13,7 @@
 #include "state_manager.h"   // setState(), isBusy()
 #include "aws_manager.h"     // notifyPourResult()
 #include "pin_config.h"      // PUMP1_PIN (use DRIVER1+ 17)
-                             // If pin_config.h is empty, define below.
+#include "led_control.h"
 
 #ifndef PUMP1_PIN
 #define PUMP1_PIN   17      /* DRIVER1_POS  – forward */
@@ -82,6 +82,9 @@ void startPourTask(const String &commandStr) {
     char *raw = static_cast<char*>(pvPortMalloc(commandStr.length() + 1));
     if (!raw) {
         Serial.println("❌ Failed to allocate memory for pour task");
+        setState(State::ERROR);
+        ledError();
+        notifyPourResult(false, "alloc_fail");
         return;
     }
     strcpy(raw, commandStr.c_str());
@@ -96,7 +99,10 @@ void startPourTask(const String &commandStr) {
         nullptr          // Task handle
     ) != pdPASS) {
         Serial.println("❌ Failed to create pour task");
+        setState(State::ERROR);
+        ledError();
         vPortFree(raw);
+        notifyPourResult(false, "task_fail");
     }
 }
 
@@ -109,11 +115,14 @@ static void pourDrinkTask(void *param) {
     free(raw);
 
     setState(State::POURING);
+    Serial.println("→ State set to POURING");
+    ledPouring();
 
     auto parsed = parseDrinkCommand(cmd);
     if (parsed.empty()) {
         notifyPourResult(false, "empty_command");
-        setState(State::IDLE);
+        setState(State::ERROR);
+        ledError();
         vTaskDelete(nullptr);
     }
 
@@ -141,6 +150,8 @@ static void pourDrinkTask(void *param) {
 
     notifyPourResult(true, nullptr);
     setState(State::IDLE);
+    Serial.println("→ State set to IDLE");
+    ledIdle();
     Serial.println("✅ Pour complete");
     vTaskDelete(nullptr);
 }

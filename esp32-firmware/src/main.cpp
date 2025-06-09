@@ -27,7 +27,9 @@ void setup() {
     Serial.begin(115200);
     Serial.println("\n=== LiquorBot boot ===");
 
-    initializeState();      // IDLE
+    // Set state to SETUP at the very start
+    setState(State::SETUP);
+
     initWiFiStorage();      // load saved creds from NVS
     setupBluetooth();       // always advertising
 
@@ -38,6 +40,9 @@ void setup() {
     initDrinkController();
     initLED();
 
+    // Setup complete, set state to IDLE
+    setState(State::IDLE);
+
     /* Developers may override creds during bench-test --------------------- */
     //setWiFiCredentials("WhiteSky-TheWilde", "qg3v2zyr");
     //setWiFiCredentials("USuites_legacy", "onmyhonor");
@@ -47,6 +52,14 @@ void setup() {
 
 /* ------------------------------------------------------------------------- */
 void loop() {
+    // Only allow WiFi/MQTT/heartbeat if not in ERROR or SETUP
+    State state = getCurrentState();
+    if (state == State::ERROR || state == State::SETUP) {
+        // In error or setup, do not process normal operations
+        delay(100);
+        return;
+    }
+
     /* 1 · Always try WiFi if disconnected */
     if (WiFi.status() != WL_CONNECTED) {
         static unsigned long lastRetry = 0;
@@ -57,13 +70,14 @@ void loop() {
     }
 
     /* 2 · Handle MQTT */
-    if (WiFi.status() == WL_CONNECTED) {
+    if (WiFi.status() == WL_CONNECTED && state == State::IDLE) {
+        // Only process AWS messages if IDLE (not pouring, not maintenance)
         processAWSMessages();
     }
 
     /* 3 · Heartbeat */
     if (millis() - lastHeartbeat >= HB_PERIOD) {
-        if (WiFi.status() == WL_CONNECTED) sendHeartbeat();
+        if (WiFi.status() == WL_CONNECTED && state == State::IDLE) sendHeartbeat();
         lastHeartbeat = millis();
     }
 }

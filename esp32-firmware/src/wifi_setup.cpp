@@ -14,6 +14,7 @@
 #include "bluetooth_setup.h"
 #include "esp_wifi.h"
 #include <Preferences.h>  // Add for NVS
+#include "state_manager.h"
 
 static Preferences prefs;  // Add NVS preferences
 
@@ -48,8 +49,10 @@ void clearWiFiCredentials() {
 }
 
 bool connectToWiFi() {
+    setState(State::SETUP); // Set state to SETUP while connecting
     if (ssid.empty() || pw.empty()) {
         Serial.println("No WiFi credentials available");
+        setState(State::ERROR);
         return false;
     }
 
@@ -68,10 +71,12 @@ bool connectToWiFi() {
         Serial.printf("\n✔ WiFi Connected! IP: %s\n", WiFi.localIP().toString().c_str());
         setupAWS();
         notifyWiFiReady();
+        setState(State::IDLE); // Set state to IDLE after successful connection
         return true;
     }
     
     Serial.println("\n✖ Connection failed");
+    setState(State::ERROR); // Set state to ERROR on failure
     return false;
 }
 

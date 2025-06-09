@@ -11,6 +11,7 @@
 #include "state_manager.h"
 #include "wifi_setup.h"
 #include "bluetooth_setup.h"
+#include "maintenance_controller.h"
 
 /* ---------- NVS for slot‑config persistence ---------- */
 #include <Preferences.h>
@@ -28,12 +29,18 @@ static volatile bool   pourResultPending = false;
 static String          pourResultMessage;
 
 void notifyPourResult(bool success, const char *error /*=nullptr*/) {
-    /* Build JSON once; send from processAWSMessages() in main loop */
     StaticJsonDocument<128> doc;
     doc["status"] = success ? "success" : "fail";
     if (!success && error) doc["error"] = error;
     serializeJson(doc, pourResultMessage);
     pourResultPending = true;
+    if (success) {
+        setState(State::IDLE);
+        Serial.println("→ State set to IDLE after pour");
+    } else {
+        setState(State::ERROR);
+        Serial.printf("→ State set to ERROR after pour fail: %s\n", error ? error : "unknown");
+    }
 }
 
 /* ---------- forward decls ---------- */
@@ -95,7 +102,7 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
     String message  = String((char *)payload).substring(0, length);
     String topicStr = String(topic);
 
-    /* 1 · Heartbeat ping (ignore) */
+    /* 1 · Heartbeat ping (ignore) */
     if (topicStr == HEARTBEAT_TOPIC) {
         return; // nothing else
     }
@@ -115,18 +122,19 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
         }
 
         Serial.printf("[AWS] Drink command received: %s\n", cmd.c_str());
-        if (isBusy()) {
+        if (getCurrentState() != State::IDLE) {
             sendData(AWS_RECEIVE_TOPIC, "{\"status\":\"fail\",\"error\":\"busy\"}");
-            Serial.println("✖ Busy – drink rejected.");
+            Serial.printf("✖ Busy – drink rejected. Current state: %d\n", (int)getCurrentState());
             return;
         }
-
+        setState(State::POURING);
+        Serial.println("→ State set to POURING");
         /* Kick off non-blocking FreeRTOS task with the clean command */
         startPourTask(cmd);
         return; // main loop continues running
     }
 
-    /* 3 · Slot‑config JSON */
+    /* 3 · Slot‑config JSON */
     if (topicStr == SLOT_CONFIG_TOPIC) {
         handleSlotConfigMessage(message);
         return;
@@ -134,16 +142,29 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
     
     /* 4 · Maintenance actions (including DISCONNECT_WIFI) */
     if (topicStr == MAINTENANCE_TOPIC) {
+        // Parse the message and ignore if it's a status response (status == "ok")
         StaticJsonDocument<96> doc;
         if (deserializeJson(doc, message)) return;
+        const char *status = doc["status"];
+        if (status && strcmp(status, "ok") == 0) {
+            Serial.println("[AWS] Maintenance status OK response ignored.");
+            return;
+        }
         const char *action = doc["action"];
+        if (!action) return;
 
-        if      (strcmp(action, "DISCONNECT_WIFI") == 0) {
+        if (strcmp(action, "DISCONNECT_WIFI") == 0) {
             sendData(MAINTENANCE_TOPIC,
                      "{\"status\":\"ok\",\"note\":\"disconnecting\"}");
             disconnectFromWiFi();    // never returns (ESP.restart)
+        } else if (strcmp(action, "READY_SYSTEM") == 0) {
+            startReadySystemTask();
+        } else if (strcmp(action, "EMPTY_SYSTEM") == 0) {
+            startEmptySystemTask();
+        } else if (strcmp(action, "DEEP_CLEAN") == 0) {
+            startDeepCleanTask();
         }
-        /* READY_SYSTEM / EMPTY_SYSTEM / DEEP_CLEAN handled elsewhere */
+        // All maintenance actions handled above
         return;
     }
 

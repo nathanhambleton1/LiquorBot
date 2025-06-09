@@ -90,3 +90,15 @@ void ledOff() {
   // Fade from current color to black
   fadeToColor(strip.Color(0, 0, 0));
 }
+
+void ledPouring() {
+  fadeToGreen();
+}
+
+void ledError() {
+  fadeToRed();
+}
+
+void ledIdle() {
+  fadeToWhite();
+}
