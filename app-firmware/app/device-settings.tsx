@@ -7,7 +7,7 @@
 // -----------------------------------------------------------------------------
 
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -21,6 +21,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  PanResponder,
 } from 'react-native';
 import Ionicons        from '@expo/vector-icons/Ionicons';
 import { useRouter }   from 'expo-router';
@@ -395,27 +396,96 @@ export default function DeviceSettings() {
     info: string;
     onInfoPress: () => void;
   }) => {
-    const anim = useRef(new Animated.Value(1)).current;
-    const pressIn = () => Animated.timing(anim, { toValue: 0.97, duration: 90, useNativeDriver: true }).start();
-    const pressOut = () => Animated.timing(anim, { toValue: 1, duration: 90, useNativeDriver: true }).start();
+    /* ───── constants & animated refs ───── */
+    const CIRCLE     = 48;                         // Ø of the slider “logo”
+    const x          = useRef(new Animated.Value(0)).current;
+    const progress   = useRef(new Animated.Value(0)).current;   // 0-1
+    const [rowW, setRowW] = useState(0);
+    const [done, setDone] = useState(false);
+    const [bouncing, setBouncing] = useState(false);
+
+    /* ───── hide info + fade text while dragging ───── */
+    const infoOpacity  = progress.interpolate({ inputRange: [0, 0.05], outputRange: [1, 0],  extrapolate: 'clamp' });
+    const textOpacity  = progress.interpolate({ inputRange: [0, 1   ], outputRange: [1, 0.35]});
+    const circleColor  = done ? '#63d44a' /* green */ : '#CE975E';
+
+    /* ───── drag logic ───── */
+    const responder = useMemo(() =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onPanResponderMove: (_, g) => {
+          if (!rowW) return;
+          const max = rowW - CIRCLE - 2;                          // 4 px padding left & right
+          const pos = Math.max(0, Math.min(g.dx, max));
+          x.setValue(pos);
+          progress.setValue(pos / max);
+        },
+        onPanResponderRelease: () => {
+          if (!rowW) return;
+          const max = rowW - CIRCLE - 2;
+          x.stopAnimation(pos => {
+            if (pos >= max * 0.9) {                               // ── SUCCESS ──
+              setDone(true);
+              Animated.timing(x, { toValue: max, duration: 150, useNativeDriver: true }).start(async () => {
+                try { await onPress(); } catch {}
+                setTimeout(() => {
+                  Animated.timing(x, { toValue: 0, duration: 350, useNativeDriver: true }).start(() => {
+                    progress.setValue(0);
+                    setDone(false);
+                  });
+                }, 600);                                           // pause w/ green tick
+              });
+            } else {                                              // ── cancel → snap back ──
+              Animated.spring(x, { toValue: 0, useNativeDriver: true }).start(() => progress.setValue(0));
+            }
+          });
+        },
+      })
+    , [rowW]);
+
+    // ───── Bounce animation on row press ─────
+    const handleRowPress = () => {
+      if (bouncing) return;
+      setBouncing(true);
+      Animated.sequence([
+        Animated.timing(x, { toValue: 10, duration: 50, useNativeDriver: true }),
+        Animated.spring(x, { toValue: 0, friction: 5, tension: 50, useNativeDriver: true }),
+      ]).start(() => setBouncing(false));
+    };
 
     return (
-      <Animated.View style={{ transform: [{ scale: anim }] }}>
-        <TouchableOpacity
-          style={styles.actionRow}
-          activeOpacity={0.8}
-          onPressIn={pressIn}
-          onPressOut={pressOut}
-          onPress={onPress}
-        >
-          <Ionicons name={icon} size={20} color="#CE975E" style={{ marginRight: 15 }} />
-          <Text style={styles.actionLabel}>{label}</Text>
-          <View style={{ flex: 1 }} />
+      <TouchableOpacity
+        activeOpacity={1}
+        style={styles.actionRow}
+        onLayout={e => setRowW(e.nativeEvent.layout.width)}
+        onPress={handleRowPress}
+      >
+
+        {/* label */}
+        <Animated.Text style={[styles.actionLabel, { opacity: textOpacity }]}>
+          {label}
+        </Animated.Text>
+
+        <View style={{ flex: 1 }} />
+
+        {/* info button (fades away while dragging) */}
+        <Animated.View style={{ opacity: infoOpacity }}>
           <TouchableOpacity onPress={onInfoPress}>
             <Ionicons name="information-circle-outline" size={20} color="#4F4F4F" />
           </TouchableOpacity>
-        </TouchableOpacity>
-      </Animated.View>
+        </Animated.View>
+
+        {/* draggable circle */}
+        <Animated.View
+          {...responder.panHandlers}
+          style={[
+            styles.sliderCircle,
+            { transform: [{ translateX: x }], backgroundColor: circleColor }
+          ]}
+        >
+          <Ionicons name={done ? 'checkmark' : icon} size={24} color="#141414" />
+        </Animated.View>
+      </TouchableOpacity>
     );
   };
 
@@ -845,8 +915,22 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 15,
     marginBottom: 10,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  actionLabel: { color: '#DFDCD9', fontSize: 16 },
+  actionLabel: { color: '#DFDCD9', fontSize: 16, paddingLeft: 40, flex: 1, opacity: 1 },
+  sliderCircle: {
+    position: 'absolute',
+    top: 5,
+    left: 8,
+    width: 35,
+    height: 35,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#CE975E',
+    opacity: 0.9,                 // a touch of transparency
+  },
 
   slotsContainer: { backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20 },
   slotsHeaderContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
