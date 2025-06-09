@@ -3,6 +3,97 @@
 <head>
   <meta charset="utf-8"/>
   <title>LiquorBot Invite</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="/assets/favicon.ico" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      background: #0f0f0f;
+      color: #fff;
+      font-family: 'Inter', Arial, sans-serif;
+      min-height: 100vh;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .lb-container {
+      background: #181818;
+      border-radius: 16px;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.45);
+      padding: 2.5rem 2rem 2rem 2rem;
+      max-width: 380px;
+      width: 100%;
+      text-align: center;
+      border: 1.5px solid #2a2a2a;
+    }
+    .lb-logo {
+      width: 72px;
+      height: 72px;
+      margin-bottom: 1.2rem;
+      border-radius: 50%;
+      background: #222;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .lb-logo img {
+      width: 60px;
+      height: 60px;
+      object-fit: contain;
+    }
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin: 0 0 0.5rem 0;
+      color: #ce975e;
+      letter-spacing: 0.01em;
+    }
+    p {
+      color: #cecece;
+      font-size: 1.05rem;
+      margin: 0.7rem 0 0.7rem 0;
+    }
+    .lb-btn {
+      display: inline-block;
+      background: #ce975e;
+      color: #181818;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      padding: 0.85rem 1.5rem;
+      font-size: 1.08rem;
+      margin-top: 1.2rem;
+      text-decoration: none;
+      transition: background 0.18s;
+      box-shadow: 0 2px 12px rgba(206,151,94,0.08);
+    }
+    .lb-btn:hover {
+      background: #d6a777;
+      color: #181818;
+    }
+    .lb-fallback {
+      margin-top: 1.5rem;
+      font-size: 0.98rem;
+      color: #b0b0b0;
+    }
+    @media (max-width: 500px) {
+      .lb-container {
+        padding: 1.2rem 0.5rem 1.5rem 0.5rem;
+        max-width: 98vw;
+      }
+      .lb-logo {
+        width: 56px;
+        height: 56px;
+      }
+      .lb-logo img {
+        width: 44px;
+        height: 44px;
+      }
+    }
+  </style>
   <script>
   (function () {
     var parts = window.location.pathname.split('/');
@@ -23,7 +114,16 @@
 </script>
 </head>
 <body>
-  <p>Opening LiquorBot…</p>
-  <p>If it doesn’t open, <a href="https://apps.apple.com/app/id6746461095">download the app</a>.</p>
+  <div class="lb-container">
+    <div class="lb-logo">
+      <img src="/assets/liquorbot_overlay.png" alt="LiquorBot Logo" />
+    </div>
+    <h1>Opening LiquorBot…</h1>
+    <p>Hang tight! We’re opening the app for you.<br>If nothing happens, you can download the app below.</p>
+    <a class="lb-btn" href="https://apps.apple.com/app/id6746461095">Download on the App Store</a>
+    <div class="lb-fallback">
+      <p>If you already have the app, make sure it’s installed and up to date.</p>
+    </div>
+  </div>
 </body>
 </html>
