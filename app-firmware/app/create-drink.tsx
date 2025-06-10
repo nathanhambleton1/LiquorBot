@@ -14,11 +14,13 @@ import React, {
   useEffect,
   useMemo,
   useCallback,
+  useRef,
 } from 'react';
 import { useUnits, ozToMl, mlToOz } from './components/UnitsContext';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView,
   Modal, FlatList, Platform, KeyboardAvoidingView, Image, Dimensions, ActivityIndicator, Alert,
+  Animated,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
@@ -366,6 +368,46 @@ export default function CreateDrinkScreen() {
     }));
   };
 
+  // Animated ingredient item for drop-down animation (copied from device-settings.tsx)
+  const AnimatedIngredientItem = ({
+    item,
+    index,
+    onPress,
+  }: {
+    item: Ingredient;
+    index: number;
+    onPress: () => void;
+  }) => {
+    const anim = useRef(new Animated.Value(0)).current;
+    useEffect(() => {
+      Animated.spring(anim, {
+        toValue: 1,
+        delay: index * 40,
+        useNativeDriver: true,
+      }).start();
+    }, []);
+
+    return (
+      <Animated.View
+        style={{
+          opacity: anim,
+          transform: [
+            {
+              translateY: anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [50, 0],
+              }),
+            },
+          ],
+        }}
+      >
+        <TouchableOpacity style={styles.ingredientItem} onPress={onPress}>
+          <Text style={styles.ingredientText}>{item.name}</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
+
   /* ═════════════  PREVIEW THUMB  ═════════════ */
   // Responsive preview image and selectors
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -644,13 +686,12 @@ const COLOUR_SWATCH_SELECTED = Math.floor(COLOUR_SWATCH * 0.7);
             <FlatList
               data={filteredIngredients}
               keyExtractor={(item) => String(item.id)}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.ingredientItem}
+              renderItem={({ item, index }) => (
+                <AnimatedIngredientItem
+                  item={item}
+                  index={index}
                   onPress={() => assignIngredient(item.id)}
-                >
-                  <Text style={styles.ingredientText}>{item.name}</Text>
-                </TouchableOpacity>
+                />
               )}
             />
           )}
@@ -718,8 +759,8 @@ const styles = StyleSheet.create({
   previewCanvasSmall: { width: THUMB, height: THUMB, backgroundColor: 'transparent', borderRadius: 8 },
   buildBtn: { marginLeft: 15, backgroundColor: '#1F1F1F', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
   buildBtnText: { color: '#DFDCD9', fontSize: 16 },
-  modalCloseButton: { position: 'absolute', top: 80, left: 20, zIndex: 10 },
-  modalHeaderText: { fontSize: 20, fontWeight: 'bold', color: '#DFDCD9', textAlign: 'center', marginTop: 60, marginBottom: 10 },
+  modalCloseButton: { position: 'absolute', top: 30, left: 20, zIndex: 10 },
+  modalHeaderText: { fontSize: 20, fontWeight: 'bold', color: '#DFDCD9', textAlign: 'center', marginTop: 10, marginBottom: 10 },
   previewCanvas: { width: CANVAS_W, height: CANVAS_H, alignSelf: 'center', borderRadius: 10, backgroundColor: 'transparent', marginTop: 30 },
   selectorRow: { flexDirection: 'row', marginTop: 30 },
   selectorThumb: { width: 50, height: 50, borderRadius: 8, backgroundColor: '#1F1F1F', marginRight: 10, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },

@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File:   explore.tsx
+// File:   explore.tsx   (REPLACEMENT – 09 Jun 2025)
 // Purpose: Explore page – themed Recipe Books plus “Load to Device” button that
 //          publishes the book’s ingredient IDs to the ESP-32 slot-config topic
 //          (15 slots; 0 = empty) using the same MQTT flow as device-settings.
@@ -7,9 +7,10 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ImageBackground, Dimensions,
-  Modal, FlatList, Animated, Easing, Platform, UIManager, ActivityIndicator,
-  NativeScrollEvent, NativeSyntheticEvent,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
+  ImageBackground, Dimensions, Modal, FlatList, Animated, Easing,
+  Platform, UIManager, ActivityIndicator, NativeScrollEvent,
+  NativeSyntheticEvent,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { getUrl } from 'aws-amplify/storage';
@@ -40,7 +41,10 @@ type Drink = {
   category: string;
   description?: string;
   image: string;
-  ingredients?: string;              // “id:amt:prio, …”
+  /** legacy single-string field (id:oz:prio, …) */
+  ingredients?: string;
+  /** new multi-string field(s) (id:oz:prio, …) */
+  recipes?: string[];
 };
 
 type Ingredient = { id: number; name: string; type: string };
@@ -57,16 +61,15 @@ type RecipeBook = {
 /* -------------------------------------------------------------------------- */
 /*                              CONSTANTS                                     */
 /* -------------------------------------------------------------------------- */
-const MAX_INGS      = 15;
+const MAX_INGS      = 15;   // hardware limit (slots)
 const MIN_DRINKS    = 3;
-const OVERLAP_CAP   = 0.20;    // per-section
+const OVERLAP_CAP   = 0.20; // per-section
 const CAROUSEL_LOOP = 30;
 const ITEM_W        = 112;
 const AUTO_SPEED    = 36;
 
 /* placeholder for any missing drink artwork */
-const placeholder =
-  '../../assets/images/glasses/rocks.png';
+const placeholder = '../../assets/images/glasses/rocks.png';
 
 /* handy helpers */
 const shuffle = <T,>(arr: T[]) => {
@@ -77,10 +80,21 @@ const shuffle = <T,>(arr: T[]) => {
   }
   return a;
 };
-const parseIngIds = (d: Drink) =>
-  d.ingredients
-    ? d.ingredients.split(',').map((c) => +c.split(':')[0]).filter(Number.isFinite)
-    : [];
+
+/** parse "id:oz:prio" → id – handles both old `.ingredients` and new `.recipes[]` */
+const parseIngIds = (d: Drink): number[] => {
+  const slice = (str: string) => +str.split(':')[0];
+  if (d.ingredients)
+    return d.ingredients.split(',').map(slice).filter(Number.isFinite);
+
+  if (Array.isArray(d.recipes))
+    return d.recipes
+      .flatMap((r) => r.split(',').map(slice))
+      .filter(Number.isFinite);
+
+  return [];
+};
+
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
 /* ───── Undo helpers (shared) ───── */
@@ -88,15 +102,12 @@ const getUndoKey = (user: string, botId: string) =>
   `undoConfig-${user}-${botId}`;
 
 async function saveUndo(
-  slots: number[] | unknown,           // accepts any serialisable thing
+  slots: number[] | unknown,
   user:  string,
   botId: string,
 ) {
   try {
-    await AsyncStorage.setItem(
-      getUndoKey(user, botId),
-      JSON.stringify(slots),
-    );
+    await AsyncStorage.setItem(getUndoKey(user, botId), JSON.stringify(slots));
   } catch { /* ignore */ }
 }
 
@@ -108,12 +119,12 @@ function buildBookDistinct(
   sectionUsed: Set<number>,
   id: string,
   name: string,
-  desc: string
+  desc: string,
 ): RecipeBook | null {
   if (!pool.length) return null;
 
   const uniquePool = pool.filter((d) => !sectionUsed.has(d.id));
-  const dupPool    = pool.filter((d) => sectionUsed.has(d.id));
+  const dupPool    = pool.filter((d) =>  sectionUsed.has(d.id));
 
   for (let attempt = 0; attempt < 10; attempt++) {
     const ordered = [...shuffle(uniquePool), ...shuffle(dupPool)];
@@ -125,10 +136,10 @@ function buildBookDistinct(
       if (nextIng.size > MAX_INGS) continue;
 
       const dupCntIfAdd =
-        sel.filter((x) => sectionUsed.has(x.id)).length + (sectionUsed.has(d.id) ? 1 : 0);
-      const dupRatio = dupCntIfAdd / (sel.length + 1);
+        sel.filter((x) => sectionUsed.has(x.id)).length +
+        (sectionUsed.has(d.id) ? 1 : 0);
 
-      if (dupRatio <= OVERLAP_CAP) {
+      if (dupCntIfAdd / (sel.length + 1) <= OVERLAP_CAP) {
         sel.push(d);
         nextIng.forEach((id) => ingSet.add(id));
         if (sel.length >= 8 || ingSet.size >= MAX_INGS) break;
@@ -143,7 +154,7 @@ function buildBookDistinct(
         description: desc,
         drinks: sel,
         ingredientIds: [...ingSet],
-        image: sel[0]?.image ?? placeholder,
+        image: sel[0]?.image || placeholder,
       };
     }
   }
@@ -155,7 +166,10 @@ function buildBookDistinct(
 /* -------------------------------------------------------------------------- */
 function InfiniteDrinkCarousel({ drinks }: { drinks: Drink[] }) {
   if (!drinks.length) return null;
-  const data   = useMemo(() => Array.from({ length: CAROUSEL_LOOP }).flatMap(() => drinks), [drinks]);
+  const data   = useMemo(
+    () => Array.from({ length: CAROUSEL_LOOP }).flatMap(() => drinks),
+    [drinks],
+  );
   const list   = useRef<FlatList>(null);
   const offset = useRef(0);
   const tick   = useRef(new Animated.Value(0)).current;
@@ -164,23 +178,37 @@ function InfiniteDrinkCarousel({ drinks }: { drinks: Drink[] }) {
 
   const start = () => {
     loop.current = Animated.loop(
-      Animated.timing(tick, { toValue: 1, duration: 1000, easing: Easing.linear, useNativeDriver: false })
+      Animated.timing(tick, {
+        toValue: 1,
+        duration: 1000,
+        easing: Easing.linear,
+        useNativeDriver: false,
+      }),
     );
     loop.current.start();
   };
   const stop = () => loop.current?.stop();
 
   useEffect(() => {
-    list.current?.scrollToIndex({ index: Math.floor(data.length / 2), animated: false });
+    list.current?.scrollToIndex({
+      index: Math.floor(data.length / 2),
+      animated: false,
+    });
     start();
+
     const id = tick.addListener(() => {
       offset.current += AUTO_SPEED / 60;
       list.current?.scrollToOffset({ offset: offset.current, animated: false });
     });
-    return () => { tick.removeListener(id); stop(); };
+    return () => {
+      tick.removeListener(id);
+      stop();
+    };
   }, [data]);
 
-  const wrap = ({ nativeEvent: { contentOffset } }: NativeSyntheticEvent<NativeScrollEvent>) => {
+  const wrap = ({
+    nativeEvent: { contentOffset },
+  }: NativeSyntheticEvent<NativeScrollEvent>) => {
     offset.current = contentOffset.x;
     const pad   = drinks.length * ITEM_W;
     const total = data.length   * ITEM_W;
@@ -193,10 +221,16 @@ function InfiniteDrinkCarousel({ drinks }: { drinks: Drink[] }) {
     }
   };
 
-  const pause = () => { stop(); if (resume.current) clearTimeout(resume.current); };
+  const pause = () => {
+    stop();
+    if (resume.current) clearTimeout(resume.current);
+  };
   const onEnd = () => {
     if (resume.current) clearTimeout(resume.current);
-    resume.current = setTimeout(() => { tick.setValue(0); start(); }, 500);
+    resume.current = setTimeout(() => {
+      tick.setValue(0);
+      start();
+    }, 500);
   };
 
   return (
@@ -223,7 +257,7 @@ function InfiniteDrinkCarousel({ drinks }: { drinks: Drink[] }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                             MODAL + BOOK CARD                              */
+/*                            MODAL + BOOK CARD                               */
 /* -------------------------------------------------------------------------- */
 interface BookModalProps {
   book: RecipeBook | null;
@@ -342,8 +376,7 @@ const BookCard = ({ book, onPress }: BookCardProps) => (
 /*                          MAIN EXPLORE SCREEN                               */
 /* -------------------------------------------------------------------------- */
 export default function ExploreScreen() {
-
-  // Ensure user is an admin before rendering
+  /* gate non-admins */
   const { isAdmin } = useLiquorBot();
   if (!isAdmin) {
     router.replace('/');
@@ -360,26 +393,24 @@ export default function ExploreScreen() {
   const [modalBook, setModal]    = useState<RecipeBook | null>(null);
   const [modalVis,  setModalVis] = useState(false);
 
-  // Subscribe to the SLOT_CONFIG_TOPIC
+  /* subscribe to SLOT-CONFIG topic so page stays in sync */
   useEffect(() => {
     if (!liquorbotId) return;
-
     const topic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
-    const subscription = pubsub.subscribe({ topics: [topic] }).subscribe({
-      error: (error) => console.error('Subscription error:', error),
+    const sub   = pubsub.subscribe({ topics: [topic] }).subscribe({
+      error: (err) => console.error('Subscription error:', err),
     });
-
-    return () => subscription.unsubscribe();
+    return () => sub.unsubscribe();
   }, [liquorbotId]);
 
-  /* map for quick id→ingredient lookup */
+  /* map for quick id→ingredient */
   const ingredientMap = useMemo(() => {
     const m = new Map<number, Ingredient>();
     ingredients.forEach((i) => m.set(i.id, i));
     return m;
   }, [ingredients]);
 
-  /* 1 ▸ fetch drinks + ingredients (S3) */
+  /* 1 ▸ fetch drinks & ingredients from S3 */
   useEffect(() => {
     (async () => {
       try {
@@ -387,14 +418,16 @@ export default function ExploreScreen() {
           getUrl({ key: 'drinkMenu/drinks.json' }),
           getUrl({ key: 'drinkMenu/ingredients.json' }),
         ]);
-        const [dRes, iRes] = await Promise.all([fetch(dUrl.url), fetch(iUrl.url)]);
+        const [dRes, iRes] = await Promise.all([
+          fetch(dUrl.url), fetch(iUrl.url),
+        ]);
         setDrinks(await dRes.json());
         setIngs(await iRes.json());
       } catch (e) { console.error(e); }
     })();
   }, []);
 
-  /* 2 ▸ get current user id */
+  /* 2 ▸ current user */
   useEffect(() => {
     (async () => {
       try {
@@ -404,7 +437,7 @@ export default function ExploreScreen() {
     })();
   }, []);
 
-  /* 3 ▸ load cached or generate recipe-books */
+  /* 3 ▸ load / generate recipe books */
   useEffect(() => {
     if (!drinks.length || !ingredients.length || !userId) return;
 
@@ -437,52 +470,42 @@ export default function ExploreScreen() {
     try { await AsyncStorage.setItem(`exploreBooks_${userId}`, JSON.stringify(rebuilt)); } catch {}
   }, [drinks, ingredientMap, userId]);
 
-  /* ––––– SLOT-CONFIG PUBLISHER ––––– */
+  /* ––––– SLOT-CONFIG publisher ––––– */
   const publishSlotMessage = useCallback(async (payload: any) => {
     if (!liquorbotId) return;
     try {
       const topic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
-      await pubsub.publish({ 
-        topics: [topic],
-        message: payload 
-      });
-    } catch (error) {
-      console.error('Publish error:', error);
-    }
+      await pubsub.publish({ topics: [topic], message: payload });
+    } catch (e) { console.error('Publish error:', e); }
   }, [liquorbotId]);
 
-  // Then update applyBookToDevice to handle errors properly:
   const applyBookToDevice = useCallback(async (book: RecipeBook) => {
     await saveUndo(
       JSON.parse(
-        (await AsyncStorage.getItem(
-          getUndoKey(userId, String(liquorbotId)),
-        )) || '[]',
+        (await AsyncStorage.getItem(getUndoKey(userId, String(liquorbotId)))) || '[]',
       ),
       userId,
       String(liquorbotId),
     );
     try {
-      const padded = Array.from({ length: 15 }, (_, i) => 
-        i < book.ingredientIds.length ? book.ingredientIds[i] : 0
+      const padded = Array.from({ length: 15 }, (_, i) =>
+        i < book.ingredientIds.length ? book.ingredientIds[i] : 0,
       );
-
-      // Send batch updates with confirmation logging
-      await Promise.all(padded.map((ingId, index) => 
-        publishSlotMessage({
-          action: 'SET_SLOT',
-          slot: index + 1,
-          ingredientId: ingId,
-          timestamp: Date.now()
-        })
-      ));
-
-      // Final verification request
-      await publishSlotMessage({ action: 'GET_CONFIG' });
-      console.log('Slot config update complete');
-    } catch (error) {
-      console.error('Failed to apply book:', error);
-      throw error; // Let modal handle the error state
+      await Promise.all(
+        padded.map((ingId, idx) =>
+          publishSlotMessage({
+            action: 'SET_SLOT',
+            slot: idx + 1,
+            ingredientId: ingId,
+            timestamp: Date.now(),
+          }),
+        ),
+      );
+      await publishSlotMessage({ action: 'GET_CONFIG' }); // verification
+      console.log('Slot-config update complete');
+    } catch (e) {
+      console.error('Failed to apply book:', e);
+      throw e;
     }
   }, [publishSlotMessage]);
 
@@ -551,50 +574,39 @@ export default function ExploreScreen() {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                    generateBooks – builds all sections                     */
+/*               generateBooks – builds Starter, Base, Party                  */
 /* -------------------------------------------------------------------------- */
 function generateBooks(
   drinks: Drink[],
   ingredientMap: Map<number, Ingredient>,
 ): [string, RecipeBook[]][] {
-  /* helper to get base spirit */
-  const spiritOf = (d: Drink) => {
+  /* helper: the first Alcohol found in the recipe */
+  const baseSpirit = (d: Drink) => {
     for (const id of parseIngIds(d)) {
       const i = ingredientMap.get(id);
-      if (i?.type?.toLowerCase() === 'spirit') return i.name.toLowerCase();
+      if (i?.type?.toLowerCase() === 'alcohol') return i.name.toLowerCase();
     }
     return null;
   };
 
-  /* 1 ▸ Starter Kits */
-  const starterLabels = ['vodka', 'rum', 'tequila', 'gin', 'whiskey'];
-  const starterUsed   = new Set<number>();
+  /* 1 ▸ Starter Packs – purely miscellaneous */
   const starterBooks: RecipeBook[] = [];
-
-  starterLabels.forEach((spirit) => {
-    const pool = drinks.filter((d) => spiritOf(d)?.includes(spirit));
+  const starterUsed = new Set<number>();
+  for (let i = 0; i < 5; i++) {
     const b = buildBookDistinct(
-      pool, starterUsed,
-      `starter_${spirit}`,
-      `${spirit[0].toUpperCase()}${spirit.slice(1)} Starter Kit`,
-      `Load-out for all things ${spirit}.`,
+      shuffle(drinks),
+      starterUsed,
+      `starter_${i}`,
+      `Starter Pack #${i + 1}`,
+      'Miscellaneous beginner load-out.',
     );
-    if (b) starterBooks.push(b);
-  });
-  while (starterBooks.length < 10) {
-    const extra = buildBookDistinct(
-      drinks, starterUsed,
-      `starter_extra_${starterBooks.length}`,
-      `Starter Mix #${starterBooks.length + 1}`,
-      'Additional starter kit.',
-    );
-    if (!extra) break;
-    starterBooks.push(extra);
+    if (!b) break;
+    starterBooks.push(b);
   }
 
-  /* 2 ▸ Bartender Favourites */
-  const favUsed  = new Set<number>();
-  const favBooks: RecipeBook[] = [];
+  /* 2 ▸ Base Spirit collections (one per category) */
+  const spiritBooks: RecipeBook[] = [];
+  const spiritUsed  = new Set<number>();
   const catMap = new Map<string, Drink[]>();
   drinks.forEach((d) => {
     const key = d.category?.trim() || 'Misc';
@@ -602,65 +614,46 @@ function generateBooks(
   });
   catMap.forEach((pool, cat) => {
     const b = buildBookDistinct(
-      pool, favUsed,
-      `fav_${cat.toLowerCase().replace(/\s+/g, '_')}`,
-      `${cat} Picks`,
-      `Popular ${cat.toLowerCase()} cocktails.`,
+      pool,
+      spiritUsed,
+      `spirit_${cat.toLowerCase().replace(/\s+/g, '_')}`,
+      `${cat} Classics`,
+      `Essential cocktails based on ${cat.toLowerCase()}.`,
     );
-    if (b) favBooks.push(b);
+    if (b) spiritBooks.push(b);
   });
-  while (favBooks.length < 4) {
-    const extra = buildBookDistinct(
-      drinks, favUsed,
-      `fav_auto_${favBooks.length}`,
-      `Fan Favourites #${favBooks.length + 1}`,
-      'Randomly generated favourites.',
-    );
-    if (!extra) break;
-    favBooks.push(extra);
-  }
 
-  /* 3 ▸ Party Packs */
+  /* 3 ▸ Party Packs – aim for ≥3 different base spirits each */
   const partyBooks: RecipeBook[] = [];
   const names = shuffle([
-    'Game-Night Mix', 'Game-Day Pack', 'Brunch Favourites',
-    'Late-Night Blend', 'Party Essentials', 'Classics Party Pack',
+    'Game-Night Mix', 'Brunch Vibes', 'Weekend Bender',
+    'Tailgate Pack', 'Late-Night Blend', 'Tiki Party',
   ]);
 
   const spiritSet = (list: Drink[]) =>
-    new Set(list.map(spiritOf).filter(Boolean) as string[]);
+    new Set(list.map(baseSpirit).filter(Boolean) as string[]);
 
-  let idx = 0, attempts = 0, bestSoFar: RecipeBook | null = null;
-  while (partyBooks.length < 4 && attempts < 30) {
+  let idx = 0, attempts = 0, best: RecipeBook | null = null;
+  while (partyBooks.length < 4 && attempts < 40) {
     const b = buildBookDistinct(
-      drinks, new Set<number>(),
+      shuffle(drinks),
+      new Set<number>(),                  // fresh overlap rules per attempt
       `party_${idx}`,
       names[idx % names.length],
-      'Mixed-spirit party load-out.',
+      'High-variety party load-out.',
     );
     attempts++; idx++;
-    if (!b) break;
-    const bases = spiritSet(b.drinks);
-    if (!bestSoFar || bases.size > spiritSet(bestSoFar.drinks).size) bestSoFar = b;
-    if (bases.size < 3) continue;   // need ≥3 spirit bases
+    if (!b) continue;
+    if (!best || spiritSet(b.drinks).size > spiritSet(best.drinks).size) best = b;
+    if (spiritSet(b.drinks).size < 3) continue;  // need ≥3 alcohol bases
     partyBooks.push(b);
   }
-  if (partyBooks.length === 0 && bestSoFar) partyBooks.push(bestSoFar);
-  while (partyBooks.length < 3) {
-    const extra = buildBookDistinct(
-      drinks, new Set<number>(),
-      `party_auto_${partyBooks.length}`,
-      `Party Mix #${partyBooks.length + 1}`,
-      'Extra party load-out.',
-    );
-    if (!extra || spiritSet(extra.drinks).size < 3) break;
-    partyBooks.push(extra);
-  }
+  if (!partyBooks.length && best) partyBooks.push(best);
 
   return [
-    ['Starter Kits',         starterBooks],
-    ['Bartender Favourites', favBooks],
-    ['Party Packs',          partyBooks],
+    ['Starter Packs', starterBooks],
+    ['Base Spirits',  spiritBooks],
+    ['Party Packs',   partyBooks],
   ];
 }
 
@@ -693,7 +686,8 @@ const styles = StyleSheet.create({
   bookCard:   { width: CARD_W * 0.9, height: CARD_W * 0.6, borderRadius: 8,
                 overflow: 'hidden', backgroundColor: '#1F1F1F' },
   bookImage:  { width: '100%', height: '100%', resizeMode: 'contain' },
-  bookOverlay:{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
+  bookOverlay:{ ...StyleSheet.absoluteFillObject,
+                backgroundColor: 'rgba(0,0,0,0.35)' },
   bookTitle:  { position: 'absolute', bottom: 40, left: 12, right: 12,
                 color: '#DFDCD9', fontSize: 20, fontWeight: '600' },
   bookSubtitle:{ position: 'absolute', bottom: 18, left: 12, right: 12,

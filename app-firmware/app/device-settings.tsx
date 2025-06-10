@@ -369,7 +369,7 @@ export default function DeviceSettings() {
     useEffect(() => {
       Animated.spring(anim, {
         toValue: 1,
-        delay: index * 50,
+        delay: index * 40,
         useNativeDriver: true,
       }).start();
     }, []);
