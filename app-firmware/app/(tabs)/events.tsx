@@ -124,8 +124,9 @@ export default function EventManager() {
   const [joinError,        setJoinError]        = useState<string|null>(null);
 
   const [expandedEventId, setExpandedEventId]   = useState<string | null>(null);
-  const [standardDrinks,  setStandardDrinks]    = useState<Array<{ id:number; name:string }>>([]);
-  const [customRecipes,   setCustomRecipes]     = useState<Array<{ id:string; name:string }>>([]);
+const [standardDrinks,  setStandardDrinks]    = useState<Array<{ id:number; name:string; ingredients?:string }>>([]);
+const [customRecipes,   setCustomRecipes]     = useState<Array<{ id:string; name:string; ingredients?:any }>>([]);
+const [ingredients, setIngredients] = useState<Array<{ id: number; name: string; type: string }>>([]);
   const [processingEvents,setProcessingEvents]  = useState<string[]>([]);
   const [copiedEventId,   setCopiedEventId]     = useState<string | null>(null);
 
@@ -192,19 +193,43 @@ export default function EventManager() {
     })();
   }, [currentUser, liquorbotId]);
 
-  /* ---------------- STANDARD DRINKS JSON ---------------- */
+  /* ---------------- STANDARD DRINKS & INGREDIENTS JSON ---------------- */
   useEffect(() => {
     (async () => {
       try {
-        const dUrl = await getUrl({ key: 'drinkMenu/drinks.json' });
-        const response = await fetch(dUrl.url);
-        const data = await response.json();
-        setStandardDrinks(data);
+        const [dUrl, iUrl] = await Promise.all([
+          getUrl({ key: 'drinkMenu/drinks.json' }),
+          getUrl({ key: 'drinkMenu/ingredients.json' }),
+        ]);
+        const [dRes, iRes] = await Promise.all([
+          fetch(dUrl.url), fetch(iUrl.url),
+        ]);
+        setStandardDrinks(await dRes.json());
+        setIngredients(await iRes.json());
       } catch (err) {
-        console.error('Error fetching standard drinks:', err);
+        console.error('Error fetching standard drinks or ingredients:', err);
       }
     })();
   }, []);
+  // --- Ingredient sorting helper (copied from explore.tsx) ---
+  function sortIngredientsByType(ids: number[], ingredientList: Array<{ id: number; name: string; type: string }>): number[] {
+    const priority: Record<string, number> = {
+      alcohol: 0,
+      mixer: 1,
+      'sweet & sour': 2,
+    };
+    // Build a map for quick lookup
+    const ingredientMap = new Map<number, { id: number; name: string; type: string }>();
+    ingredientList.forEach(i => ingredientMap.set(i.id, i));
+    return [...ids].sort((a, b) => {
+      const typeA = ingredientMap.get(a)?.type?.toLowerCase() || '';
+      const typeB = ingredientMap.get(b)?.type?.toLowerCase() || '';
+      const prioA = priority[typeA] ?? 99;
+      const prioB = priority[typeB] ?? 99;
+      if (prioA !== prioB) return prioA - prioB;
+      return a - b;
+    });
+  }
 
   /* ---------------- CUSTOM RECIPES ---------------- */
   useEffect(() => {
@@ -538,8 +563,10 @@ export default function EventManager() {
         }),
       );
 
+      // Sort ingredient IDs by type before padding
+      const sortedIngIds = sortIngredientsByType(allIngIds, ingredients);
       // Pad to 15 slots
-      const padded = Array.from({ length: 15 }, (_, i) => i < allIngIds.length ? allIngIds[i] : 0);
+      const padded = Array.from({ length: 15 }, (_, i) => i < sortedIngIds.length ? sortedIngIds[i] : 0);
       // Send slot config
       await Promise.all(padded.map((ingId, index) =>
         publishSlotMessage({
