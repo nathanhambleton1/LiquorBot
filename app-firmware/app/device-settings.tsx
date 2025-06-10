@@ -246,7 +246,6 @@ export default function DeviceSettings() {
         const ingUrl = await getUrl({ key: 'drinkMenu/ingredients.json' });
         const resp = await fetch(ingUrl.url);
         const data = await resp.json();
-        data.sort((a: Ingredient, b: Ingredient) => a.name.localeCompare(b.name));
         setIngredients(data);
       } catch (err) {
         console.error('S3 ingredients fetch error:', err);
@@ -255,6 +254,22 @@ export default function DeviceSettings() {
       }
     })();
   }, []);
+
+  // Custom filteredIngredients: sort by ID for Alcohol/Mixer/Sour/Sweet, alpha for All/Misc
+  const filteredIngredients = ingredients
+    .filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .filter(i => selectedCategory === 'All' || i.type === selectedCategory)
+    .sort((a, b) => {
+      const idSortTypes = ['Alcohol', 'Mixer', 'Sour', 'Sweet'];
+      if (selectedCategory === 'All') {
+        return a.name.localeCompare(b.name);
+      }
+      if (idSortTypes.includes(selectedCategory)) {
+        return a.id - b.id;
+      }
+      // For Misc or any other, sort alphabetically
+      return a.name.localeCompare(b.name);
+    });
 
   /*────────── Slot-config MQTT subscribe/publish ──────────*/
   const slotTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
@@ -337,9 +352,6 @@ export default function DeviceSettings() {
 
   /*────────── Ingredient helpers ──────────*/
   const categories = ['All', 'Alcohol', 'Mixer', 'Sour', 'Sweet', 'Misc'];
-  const filteredIngredients = ingredients
-    .filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    .filter(i => selectedCategory === 'All' || i.type === selectedCategory);
   const ingName = (id: number | string) =>
     ingredients.find(i => i.id === Number(id))?.name ?? '';
 

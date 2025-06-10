@@ -220,9 +220,21 @@ export default function CreateDrinkScreen() {
   /* ═════════════  HELPERS  ═════════════ */
   const ingName = (id:number) => id ? ingredients.find(i=>i.id===id)?.name ?? '' : '';
 
-  const filteredIngredients = ingredients
-    .filter(i=>i.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    .filter(i=>selectedCategory==='All' || i.type===selectedCategory);
+  // Updated filteredIngredients sorting logic
+  const filteredIngredients = useMemo(() => {
+    let filtered = ingredients
+      .filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      .filter(i => selectedCategory === 'All' || i.type === selectedCategory);
+
+    if (selectedCategory === 'All' || selectedCategory === 'Misc') {
+      // Sort alphabetically by name
+      filtered = filtered.slice().sort((a, b) => a.name.localeCompare(b.name));
+    } else {
+      // Alcohol, Mixer, Sour, Sweet: sort by ID ascending
+      filtered = filtered.slice().sort((a, b) => a.id - b.id);
+    }
+    return filtered;
+  }, [ingredients, searchQuery, selectedCategory]);
 
   const matchingDrink = useMemo(() => {
     if (drinkName.trim()==='') return null;
