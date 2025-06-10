@@ -365,7 +365,26 @@ function DrinkItem({
     const responder = useMemo(
       () =>
         PanResponder.create({
+          // --- Use same logic as DeviceSettings for robust horizontal drag ---
+          onStartShouldSetPanResponderCapture: () => canPour && !isPouring,
+          onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+            return (
+              canPour &&
+              !isPouring &&
+              Math.abs(gestureState.dx) > Math.abs(gestureState.dy) &&
+              Math.abs(gestureState.dx) > 4
+            );
+          },
+          onMoveShouldSetPanResponder: (_, gestureState) => {
+            return (
+              canPour &&
+              !isPouring &&
+              Math.abs(gestureState.dx) > Math.abs(gestureState.dy) &&
+              Math.abs(gestureState.dx) > 4
+            );
+          },
           onStartShouldSetPanResponder: () => canPour && !isPouring,
+          onPanResponderTerminationRequest: () => false,
           onPanResponderMove: (_, g) => {
             if (!rowW) return;
             const max = rowW - CIRCLE - 12;
@@ -429,6 +448,8 @@ function DrinkItem({
         onLayout={(e) => setRowW(e.nativeEvent.layout.width)}
         onPress={handleTap}
       >
+
+        {/* --- Dynamic slider label --- */}
         <Animated.Text
           style={[
             styles.pourLabel,
@@ -441,7 +462,13 @@ function DrinkItem({
             (!canPour || isPouring) && { color: '#4F4F4F' },
           ]}
         >
-          {isPouring ? 'Pouring…' : 'Slide to Pour'}
+          {(!isConnected)
+            ? 'Not Connected'
+            : (!isMakeable)
+              ? 'Missing Ingredients'
+              : isPouring
+                ? 'Pouring…'
+                : 'Slide to Pour'}
         </Animated.Text>
 
         {/* draggable circle */}
