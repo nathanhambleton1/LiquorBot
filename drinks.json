@@ -1,0 +1,210 @@
+[
+  {
+    "id": 1,
+    "name": "Sex on the Beach",
+    "category": "Vodka",
+    "description": "A fruity, beach-style cocktail with vodka, peach, cranberry, and orange juice.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/sex_on_the_beach.png",
+    "ingredients": "1:1.5:1,53:0.5:1,51:1.5:1,49:1.5:1"
+  },
+  {
+    "id": 2,
+    "name": "Pina Colada",
+    "category": "Rum",
+    "description": "Creamy tropical blend of rum, coconut, and pineapple.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/pina_colada.png",
+    "ingredients": "3:2:1,47:1.5:1,50:4:1"
+  },
+  {
+    "id": 3,
+    "name": "Tequila Sunrise",
+    "category": "Tequila",
+    "description": "Vibrant sunrise-style drink with tequila, orange juice, and a grenadine float.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/tequila_sunrise.png",
+    "ingredients": "7:2:1,49:4:1,41:0.5:2"
+  },
+  {
+    "id": 4,
+    "name": "Mango Daiquiri",
+    "category": "Rum",
+    "description": "Refreshing frozen-style daiquiri with rum, mango, and lime.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/mango_daiquiri.png",
+    "ingredients": "3:2:1,52:1:1,36:1:1"
+  },
+  {
+    "id": 5,
+    "name": "Mai Tai",
+    "category": "Rum",
+    "description": "Classic tiki cocktail with light and dark rums, orgeat, orange liqueur, and lime.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/mai_tai.png",
+    "ingredients": "3:1:1,4:1:1,9:0.5:1,44:0.5:1,36:0.75:1"
+  },
+  {
+    "id": 6,
+    "name": "Bahama Mama",
+    "category": "Rum",
+    "description": "Tropical punch of mixed rums, juices, and a hint of grenadine.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/bahama_mama.png",
+    "ingredients": "3:1:1,4:1:1,6:0.5:1,49:1:1,50:2:1,41:0.5:1"
+  },
+  {
+    "id": 7,
+    "name": "Coconut Margarita",
+    "category": "Tequila",
+    "description": "A tropical twist on the margarita with coconut cream.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/coconut_margarita.png",
+    "ingredients": "7:2:1,9:1:1,47:1:1,36:1:1"
+  },
+  {
+    "id": 8,
+    "name": "Vodka Cranberry",
+    "category": "Vodka",
+    "description": "Simple, tart mix of vodka and cranberry juice.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/vodka_cranberry.png",
+    "ingredients": "1:2:1,51:4:1"
+  },
+  {
+    "id": 9,
+    "name": "Rum and Punch",
+    "category": "Rum",
+    "description": "Easy punch with rum, pineapple, orange, and grenadine.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/rum_and_punch.png",
+    "ingredients": "3:2:1,50:1:1,49:1:1,41:0.5:1"
+  },
+  {
+    "id": 10,
+    "name": "Tropical Screwdriver",
+    "category": "Vodka",
+    "description": "A fruity screwdriver with mango added in.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/tropical_screwdriver.png",
+    "ingredients": "1:2:1,49:3:1,52:1:1"
+  },
+  {
+    "id": 11,
+    "name": "Screwdriver",
+    "category": "Vodka",
+    "description": "Classic mix of vodka and orange juice.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/screwdriver.png",
+    "ingredients": "1:2:1,49:4:1"
+  },
+  {
+    "id": 12,
+    "name": "Margarita",
+    "category": "Tequila",
+    "description": "The timeless trio of tequila, orange liqueur, and lime.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/margarita.png",
+    "ingredients": "7:2:1,9:1:1,36:1:1"
+  },
+  {
+    "id": 13,
+    "name": "Mexican Screwdriver",
+    "category": "Tequila",
+    "description": "A tequila-based twist on the classic screwdriver.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/mexican_screwdriver.png",
+    "ingredients": "7:2:1,49:4:1"
+  },
+  {
+    "id": 14,
+    "name": "Strawberry Daiquiri",
+    "category": "Rum",
+    "description": "Sweet strawberry puree blended with rum and lime.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/strawberry_daiquiri.png",
+    "ingredients": "3:2:1,58:1.5:1,36:1:1"
+  },
+  {
+    "id": 15,
+    "name": "Classic Daiquiri",
+    "category": "Rum",
+    "description": "Simple blend of rum, lime juice, and sugar syrup.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/classic_daiquiri.png",
+    "ingredients": "3:2:1,36:1:1,40:0.75:1"
+  },
+  {
+    "id": 16,
+    "name": "Cosmopolitan",
+    "category": "Vodka",
+    "description": "Sophisticated mix of vodka, Cointreau, cranberry, and lime.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/cosmopolitan.png",
+    "ingredients": "1:1.5:1,9:0.75:1,51:1:1,36:0.5:1"
+  },
+  {
+    "id": 17,
+    "name": "Paloma",
+    "category": "Tequila",
+    "description": "Citrusy Paloma with tequila, grapefruit, lime, and a splash of soda.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/paloma.png",
+    "ingredients": "7:2:1,38:4:1,36:0.5:1,32:1:2"
+  },
+  {
+    "id": 18,
+    "name": "Long Island Iced Tea",
+    "category": "Mixed",
+    "description": "High-octane mix of five spirits, sour mix, and cola.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/long_island_iced_tea.png",
+    "ingredients": "1:0.5:1,2:0.5:1,3:0.5:1,7:0.5:1,9:0.5:1,39:1:1,27:2:2"
+  },
+  {
+    "id": 19,
+    "name": "Vodka Lemonade",
+    "category": "Vodka",
+    "description": "Simple, refreshing vodka with fresh lemonade.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/vodka_lemonade.png",
+    "ingredients": "1:2:1,35:4:1"
+  },
+  {
+    "id": 20,
+    "name": "Fuzzy Navel",
+    "category": "Vodka",
+    "description": "Peachy, sweet mix of vodka and peach juice.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/fuzzy_navel.png",
+    "ingredients": "1:1.5:1,53:4:1"
+  },
+  {
+    "id": 21,
+    "name": "Martini",
+    "category": "Gin",
+    "description": "Classic dry martini with gin and a hint of vermouth.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/martini.png",
+    "ingredients": "2:2.5:1,16:0.5:1"
+  },
+  {
+    "id": 22,
+    "name": "Gin and Tonic",
+    "category": "Gin",
+    "description": "Crisp, botanical gin topped with tonic water.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/gin_and_tonic.png",
+    "ingredients": "2:2:1,26:4:1"
+  },
+  {
+    "id": 23,
+    "name": "Aperol Spritz",
+    "category": "Aperol",
+    "description": "Light Italian aperitif spritzed with prosecco and soda.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/aperol_spritz.png",
+    "ingredients": "13:3:1,18:2:1,32:1:2"
+  },
+  {
+    "id": 24,
+    "name": "Tom Collins",
+    "category": "Gin",
+    "description": "Sparkling gin sour with lemon and soda.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/tom_collins.png",
+    "ingredients": "2:2:1,37:1:1,40:0.5:1,25:2:2"
+  },
+  {
+    "id": 25,
+    "name": "Sidecar",
+    "category": "Brandy",
+    "description": "Brandy cocktail with orange liqueur and lemon juice.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/sidecar.png",
+    "ingredients": "17:2:1,9:1:1,37:0.75:1"
+  },
+  {
+    "id": 26,
+    "name": "Blue Lagoon",
+    "category": "Vodka",
+    "description": "Vibrant blue drink with vodka, curaçao, and lemon-lime soda.",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/blue_lagoon.png",
+    "ingredients": "1:1.5:1,10:1:1,30:4:2"
+  }
+]
