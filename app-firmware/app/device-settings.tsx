@@ -414,17 +414,29 @@ export default function DeviceSettings() {
     const progress   = useRef(new Animated.Value(0)).current;   // 0-1
     const [rowW, setRowW] = useState(0);
     const [done, setDone] = useState(false);
+    const [failed, setFailed] = useState(false);
     const [bouncing, setBouncing] = useState(false);
 
     /* ───── hide info + fade text while dragging ───── */
     const infoOpacity  = progress.interpolate({ inputRange: [0, 0.05], outputRange: [1, 0],  extrapolate: 'clamp' });
     const textOpacity  = progress.interpolate({ inputRange: [0, 1   ], outputRange: [1, 0.35]});
-    const circleColor  = done ? '#63d44a' /* green */ : '#CE975E';
+    const circleColor  = failed ? '#d44a4a' /* red */ : done ? '#63d44a' /* green */ : '#CE975E';
 
     /* ───── drag logic ───── */
     const responder = useMemo(() =>
       PanResponder.create({
+        // Capture touches and prevent parent ScrollView from intercepting
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+          return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 4;
+        },
+        // Only set pan responder if horizontal movement is greater than vertical (prevents vertical scroll on iOS)
+        onMoveShouldSetPanResponder: (_, gestureState) => {
+          return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 4;
+        },
         onStartShouldSetPanResponder: () => true,
+        // Prevent parent or other responders from taking the gesture
+        onPanResponderTerminationRequest: () => false,
         onPanResponderMove: (_, g) => {
           if (!rowW) return;
           const max = rowW - CIRCLE - 2;                          // 4 px padding left & right
@@ -437,6 +449,18 @@ export default function DeviceSettings() {
           const max = rowW - CIRCLE - 2;
           x.stopAnimation(pos => {
             if (pos >= max * 0.9) {                               // ── SUCCESS ──
+              if (!isConnected) {
+                setFailed(true);
+                Animated.timing(x, { toValue: max, duration: 150, useNativeDriver: true }).start(() => {
+                  setTimeout(() => {
+                    Animated.timing(x, { toValue: 0, duration: 350, useNativeDriver: true }).start(() => {
+                      progress.setValue(0);
+                      setFailed(false);
+                    });
+                  }, 600); // pause w/ red X
+                });
+                return;
+              }
               setDone(true);
               Animated.timing(x, { toValue: max, duration: 150, useNativeDriver: true }).start(async () => {
                 try { await onPress(); } catch {}
@@ -474,11 +498,13 @@ export default function DeviceSettings() {
       >
 
         {/* label */}
-        <Animated.Text style={[styles.actionLabel, { opacity: textOpacity }]}>
+        <Animated.Text
+          style={[styles.actionLabel, { opacity: textOpacity }]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
           {label}
         </Animated.Text>
-
-        <View style={{ flex: 1 }} />
 
         {/* info button (fades away while dragging) */}
         <Animated.View style={{ opacity: infoOpacity }}>
@@ -495,7 +521,7 @@ export default function DeviceSettings() {
             { transform: [{ translateX: x }], backgroundColor: circleColor }
           ]}
         >
-          <Ionicons name={done ? 'checkmark' : icon} size={24} color="#141414" />
+          <Ionicons name={failed ? 'close' : done ? 'checkmark' : icon} size={24} color="#141414" />
         </Animated.View>
       </TouchableOpacity>
     );
@@ -930,7 +956,20 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
-  actionLabel: { color: '#DFDCD9', fontSize: 16, paddingLeft: 40, flex: 1, opacity: 1 },
+  actionLabel: {
+    color: '#DFDCD9',
+    fontSize: 16,
+    paddingLeft: 40,
+    flex: 1,
+    opacity: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
+    minWidth: 0,
+    maxWidth: '100%',
+    textAlignVertical: 'center',
+    textAlign: 'left',
+    includeFontPadding: false,
+  },
   sliderCircle: {
     position: 'absolute',
     top: 5,
