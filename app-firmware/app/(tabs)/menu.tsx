@@ -23,6 +23,7 @@ import {
   Dimensions, LayoutAnimation, Platform, UIManager, Animated,
   TextInput, Modal, Switch, ActivityIndicator, Alert,
   PanResponder,
+  RefreshControl,
 } from 'react-native';
 import Ionicons      from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
@@ -1394,6 +1395,19 @@ export default function MenuScreen() {
           styles.scrollContainer,
           { paddingBottom: expandedDrink ? 100 : 80 },
         ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={async () => {
+              setLoading(true);
+              setConfigReceived(false); // force config to be re-fetched
+              await requestSlotConfig();
+              setLoading(false);
+            }}
+            tintColor="#CE975E"
+            colors={["#CE975E"]}
+          />
+        }
       >
         {!userID ? (
           /* ---------- guest view ---------- */
