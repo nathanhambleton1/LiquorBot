@@ -150,12 +150,14 @@ export default function EventManager() {
   /* ---------------- FETCH EVENTS ---------------- */
   useEffect(() => {
     // don’t fetch if not signed in
-    if (!currentUser) { 
-      setLoading(false); 
-      return; 
+    if (!currentUser) {
+      setEvents([]); // clear events if user logs out
+      setLoading(false);
+      return;
     }
 
     (async () => {
+      setLoading(true);
       try {
         const { data } = await client.graphql({
           query: listEvents,
@@ -179,8 +181,11 @@ export default function EventManager() {
             guestOwners: i.guestOwners ?? [],
           })),
         );
-      } catch {
-        Alert.alert('Error', 'Could not load events');
+      } catch (err) {
+        // Only show alert if still signed in
+        if (currentUser) {
+          Alert.alert('Couldn\'t load events');
+        }
       } finally {
         setLoading(false);
       }
