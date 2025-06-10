@@ -92,6 +92,7 @@ const EventsPage: React.FC = () => {
   const [isJoining, setIsJoining] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrLink, setQrLink] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
 
   const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey', 'Gin', 'Brandy', 'Liqueur', 'Custom'];
 
@@ -838,6 +839,7 @@ const EventsPage: React.FC = () => {
                         onClick={() => {
                           const link = `https://main.dxqquq649m247.amplifyapp.com/join/${event.inviteCode}`;
                           setQrLink(link);
+                          setQrLoading(true);
                           setShowQrModal(true);
                           copyLinkToClipboard(link, event.id);
                         }}
@@ -1399,11 +1401,19 @@ const EventsPage: React.FC = () => {
           <div className="modal-content" style={{ maxWidth: 340, textAlign: 'center', position: 'relative' }} onClick={e => e.stopPropagation()}>
             <span className="modal-close" onClick={() => setShowQrModal(false)} style={{ position: 'absolute', top: 12, right: 18, fontSize: 28, cursor: 'pointer' }}>&times;</span>
             <h3 className="modal-title" style={{ marginBottom: 18 }}>Scan to Join Event</h3>
-            <img
+            <div style={{ minHeight: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {qrLoading && (
+                <div style={{ width: 60, height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
+                  <span className="spinner" style={{ width: 48, height: 48, border: '4px solid #eee', borderTop: '4px solid #ce975e', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                </div>
+              )}
+              <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrLink)}&size=220x220&bgcolor=ffffff&margin=10`}
                 alt="QR code"
-                style={{ width: 220, height: 220 }}
+                style={{ width: 220, height: 220, display: qrLoading ? 'none' : 'block' }}
+                onLoad={() => setQrLoading(false)}
               />
+            </div>
             <div style={{ color: '#8F8F8F', fontSize: 13, marginTop: 18 }}>Link copied to clipboard</div>
             <div style={{ fontSize: 12, color: '#aaa', marginTop: 8, wordBreak: 'break-all' }}>{qrLink}</div>
           </div>
