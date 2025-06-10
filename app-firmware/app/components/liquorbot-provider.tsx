@@ -106,6 +106,7 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
 
   /* ---------------- setLiquorbotId (patched) ---------------- */
   const setLiquorbotId = useCallback(async (id: string) => {
+    if (id === liquorbotId) return;
     /* 1️⃣  immediately clear connection state */
     resetHb();
     setIsConnected(false);
@@ -135,14 +136,19 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
 
   /* ---------------- LOAD persisted ID when user changes ---------------- */
   useEffect(() => {
-    if (!currentUser) { setIdState('000'); return; }
+    // Guests get a hard reset; admins may reuse the last pairing
+    if (!currentUser || !isAdmin) {
+      setIdState('000');
+      if (currentUser) AsyncStorage.removeItem(DEVICE_KEY(currentUser)).catch(() => {});
+      return;
+    }
     (async () => {
       try {
         const saved = await AsyncStorage.getItem(DEVICE_KEY(currentUser));
         if (saved) setIdState(saved);
       } catch {}
     })();
-  }, [currentUser]);
+  }, [currentUser, isAdmin]);
 
   /* ---------------- AUTH LISTENER ---------------- */
   useEffect(() => {

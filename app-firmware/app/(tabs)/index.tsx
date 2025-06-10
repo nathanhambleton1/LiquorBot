@@ -26,7 +26,7 @@ import { generateClient }   from 'aws-amplify/api';
 import { listEvents }       from '../../src/graphql/queries';
 import { Asset }            from 'expo-asset';
 import { Hub }              from 'aws-amplify/utils';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { DeepLinkContext } from '../components/deep-link-provider';
 import { eventsByCode }   from '../../src/graphql/queries';
 import { joinEvent }      from '../../src/graphql/mutations';
@@ -183,6 +183,17 @@ export default function Index() {
     }
   }, [currentUser, liquorbotId]);
 
+  // Add useFocusEffect to reload events when page is focused
+  useFocusEffect(
+    useCallback(() => {
+      if (currentUser && liquorbotId) {
+        setEventsLoading(true);
+        fetchEvents();
+      }
+      // No cleanup needed
+    }, [currentUser, liquorbotId, fetchEvents])
+  );
+
   /* ---------- preload background ---------- */
   useEffect(() => {
     (async () => {
@@ -316,9 +327,7 @@ export default function Index() {
               </View>
             </View>
 
-            {eventsLoading ? (
-              <ActivityIndicator color="#DFDCD9" style={styles.eventsLoader} />
-            ) : upcomingEvents.length === 0 ? (
+            {upcomingEvents.length === 0 ? (
               <Text style={styles.noEventsText}>No upcoming events</Text>
             ) : (
               <ScrollView

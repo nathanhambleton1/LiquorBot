@@ -288,8 +288,15 @@ const EventsPage: React.FC = () => {
         setEventName(event.name);
         setEventDescription(event.description || '');
         setEventLocation(event.location || '');
-        setEventStartTime(event.startTime.substring(0, 16));
-        setEventEndTime(event.endTime.substring(0, 16));
+        // Convert UTC ISO string to local datetime-local string (YYYY-MM-DDTHH:mm)
+        const toLocalDatetime = (iso: string) => {
+          if (!iso) return '';
+          const d = new Date(iso);
+          const pad = (n: number) => n.toString().padStart(2, '0');
+          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        };
+        setEventStartTime(toLocalDatetime(event.startTime));
+        setEventEndTime(toLocalDatetime(event.endTime));
         setEventDeviceId(event.liquorbotId.toString());
         setSelectedDrinkIds(event.drinkIDs || []);
         setSelectedCustomIds(event.customRecipeIDs || []);

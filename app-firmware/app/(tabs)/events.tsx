@@ -8,6 +8,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
   ActivityIndicator, Alert, Platform, TextInput, ScrollView,
   Modal, Switch, Dimensions, LayoutAnimation, Image,
+  RefreshControl,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Ionicons                       from '@expo/vector-icons/Ionicons';
@@ -79,7 +80,7 @@ const pubsub = new PubSub({
 export default function EventManager() {
   const router  = useRouter();
   const params  = useLocalSearchParams<{ join?: string }>();
-  const { liquorbotId, temporaryOverrideId, restorePreviousId, isConnected } = useLiquorBot();
+  const { liquorbotId, temporaryOverrideId, restorePreviousId, isConnected, isOverridden, setLiquorbotId } = useLiquorBot();
 
   /* ---------------- AUTH ---------------- */
   const [currentUser, setCurrentUser] = useState<string | null>(null);
@@ -166,22 +167,50 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
           authMode:  'userPool',
         }) as { data: any };
 
-        setEvents(
-          data.listEvents.items.map((i: any): Event => ({
-            id:          i.id,
-            name:        i.name,
-            location:    i.location ?? undefined,
-            description: i.description ?? undefined,
-            startTime:   i.startTime,
-            endTime:     i.endTime,
-            liquorbotId: i.liquorbotId,
-            inviteCode:  i.inviteCode,
-            drinkIDs:    i.drinkIDs ?? [],
-            customRecipeIDs: i.customRecipeIDs ?? [],
-            owner:       i.owner,
-            guestOwners: i.guestOwners ?? [],
-          })),
-        );
+        const refreshedEvents = data.listEvents.items.map((i: any): Event => ({
+          id:          i.id,
+          name:        i.name,
+          location:    i.location ?? undefined,
+          description: i.description ?? undefined,
+          startTime:   i.startTime,
+          endTime:     i.endTime,
+          liquorbotId: i.liquorbotId,
+          inviteCode:  i.inviteCode,
+          drinkIDs:    i.drinkIDs ?? [],
+          customRecipeIDs: i.customRecipeIDs ?? [],
+          owner:       i.owner,
+          guestOwners: i.guestOwners ?? [],
+        }));
+        setEvents(refreshedEvents);
+
+        // --- Sync LiquorBotProvider with current event status ---
+        const now = new Date();
+        let activeEvent: Event | undefined = undefined;
+        for (const ev of refreshedEvents) {
+          const s = new Date(ev.startTime);
+          const e = new Date(ev.endTime);
+          const isCurrent = s <= now && e >= now;
+          const isOwner = ev.owner === currentUser;
+          const isGuest = ev.guestOwners?.includes?.(currentUser ?? '') ?? false;
+          if (isCurrent && (isOwner || isGuest)) {
+            activeEvent = ev;
+            break;
+          }
+        }
+        if (activeEvent) {
+          const newId = String(activeEvent.liquorbotId);
+          if (liquorbotId !== newId) setLiquorbotId(newId);
+        } else {
+          /* no current event */
+          if (isOverridden) {
+            // we were temporarily switched for an event – go back
+            restorePreviousId();
+          } else if (!isAdmin) {
+            // guests still get a hard reset
+            if (liquorbotId !== '000') setLiquorbotId('000');
+          }
+          // admins keep their existing pairing unchanged
+        }
       } catch (err) {
         // Only show alert if still signed in
         if (currentUser) {
@@ -616,6 +645,62 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
     return () => subscription.unsubscribe();
   }, [liquorbotId]);
 
+  // Add pull-to-refresh state and handler
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      if (currentUser) {
+        const { data } = await client.graphql({
+          query: listEvents,
+          variables: { filter: eventFilter(currentUser) },
+          authMode:  'userPool',
+        }) as { data: any };
+        const refreshedEvents = data.listEvents.items.map((i: any): Event => ({
+          id:          i.id,
+          name:        i.name,
+          location:    i.location ?? undefined,
+          description: i.description ?? undefined,
+          startTime:   i.startTime,
+          endTime:     i.endTime,
+          liquorbotId: i.liquorbotId,
+          inviteCode:  i.inviteCode,
+          drinkIDs:    i.drinkIDs ?? [],
+          customRecipeIDs: i.customRecipeIDs ?? [],
+          owner:       i.owner,
+          guestOwners: i.guestOwners ?? [],
+        }));
+        setEvents(refreshedEvents);
+
+        // --- Sync LiquorBotProvider with current event status ---
+        const now = new Date();
+        let activeEvent: Event | undefined = undefined;
+        for (const ev of refreshedEvents) {
+          const s = new Date(ev.startTime);
+          const e = new Date(ev.endTime);
+          const isCurrent = s <= now && e >= now;
+          const isOwner = ev.owner === currentUser;
+          const isGuest = ev.guestOwners?.includes?.(currentUser ?? '') ?? false;
+          if (isCurrent && (isOwner || isGuest)) {
+            activeEvent = ev;
+            break;
+          }
+        }
+        if (activeEvent) {
+          setLiquorbotId(String(activeEvent.liquorbotId));
+        } else {
+          setLiquorbotId('000');
+        }
+      }
+    } catch (err) {
+      if (currentUser) {
+        Alert.alert("Couldn't refresh events");
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   /* ------------------- RENDER ITEM ------------------- */
   const renderItem = ({ item }: { item: Event }) => {
     const isOwner  = item.owner === currentUser;
@@ -833,6 +918,14 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
             <Ionicons name="calendar-outline" size={40} color="#CE975E"/>
             <Text style={styles.emptyTxt}>Tap “New Event” or “Join Event” to get started</Text>
           </View>
+        }
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={["#CE975E"]}
+            tintColor="#CE975E"
+          />
         }
       />
 
