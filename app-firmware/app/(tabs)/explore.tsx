@@ -1,3 +1,21 @@
+/* -------------------------------------------------------------------------- */
+/*                        INGREDIENT SORTING HELPER                           */
+/* -------------------------------------------------------------------------- */
+function sortIngredientsByType(ids: number[], ingredientMap: Map<number, Ingredient>): number[] {
+  const priority: Record<string, number> = {
+    alcohol: 0,
+    mixer: 1,
+    'sweet & sour': 2,
+  };
+  return [...ids].sort((a, b) => {
+    const typeA = ingredientMap.get(a)?.type?.toLowerCase() || '';
+    const typeB = ingredientMap.get(b)?.type?.toLowerCase() || '';
+    const prioA = priority[typeA] ?? 99;
+    const prioB = priority[typeB] ?? 99;
+    if (prioA !== prioB) return prioA - prioB;
+    return a - b;
+  });
+}
 // -----------------------------------------------------------------------------
 // File:   explore.tsx   (REPLACEMENT – 09 Jun 2025)
 // Purpose: Explore page – themed Recipe Books plus “Load to Device” button that
@@ -325,10 +343,10 @@ const BookModal = ({
             <InfiniteDrinkCarousel drinks={book.drinks} />
           )}
 
-          <Text style={[styles.sectionHeader, { marginTop: 20 }]}>
+          <Text style={[styles.sectionHeader, { marginTop: 20 }]}> 
             Ingredients to Load
           </Text>
-          {book.ingredientIds.map((id) => (
+          {sortIngredientsByType(book.ingredientIds, ingredientMap).map((id) => (
             <Text key={id} style={styles.ingItem}>
               • {ingredientMap.get(id)?.name ?? `#${id}`}
             </Text>
@@ -488,8 +506,9 @@ export default function ExploreScreen() {
       String(liquorbotId),
     );
     try {
+      const sortedIds = sortIngredientsByType(book.ingredientIds, ingredientMap);
       const padded = Array.from({ length: 15 }, (_, i) =>
-        i < book.ingredientIds.length ? book.ingredientIds[i] : 0,
+        i < sortedIds.length ? sortedIds[i] : 0,
       );
       await Promise.all(
         padded.map((ingId, idx) =>
@@ -507,7 +526,7 @@ export default function ExploreScreen() {
       console.error('Failed to apply book:', e);
       throw e;
     }
-  }, [publishSlotMessage]);
+  }, [publishSlotMessage, ingredientMap, userId, liquorbotId]);
 
   /* ––––– UI ––––– */
   if (loading || !books.length) {
