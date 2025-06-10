@@ -919,20 +919,25 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
             <Text style={styles.filtTitle}>Scan to Join Event</Text>
             {qrLink && (
               <View style={{ width:200, height:200, justifyContent:'center', alignItems:'center' }}>
-                <ActivityIndicator
-                  size="large"
-                  color="#CE975E"
-                  animating={qrLoading}
-                  style={ qrLoading ? {} : { display: 'none' } }
-                />
                 <Image
                   source={{
                     uri: `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrLink)}&size=200x200&color=fff&bgcolor=1F1F1F`
                   }}
-                  style={[{ width:200, height:200 }, qrLoading && { display: 'none' }]}
+                  style={{ width:200, height:200, position: 'absolute' }}
                   onLoadStart={() => setQrLoading(true)}
                   onLoadEnd={()   => setQrLoading(false)}
                 />
+                {qrLoading && (
+                  <View style={{
+                    position: 'absolute',
+                    left: 0, top: 0, right: 0, bottom: 0,
+                    justifyContent: 'center', alignItems: 'center',
+                    backgroundColor: 'rgba(20,20,20,0.7)',
+                    borderRadius: 8,
+                  }}>
+                    <ActivityIndicator size="large" color="#CE975E" />
+                  </View>
+                )}
               </View>
             )}
             <Text style={{color:'#8F8F8F',fontSize:12,marginTop:16,textAlign:'center'}}>
