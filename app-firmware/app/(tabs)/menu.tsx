@@ -727,6 +727,7 @@ export default function MenuScreen() {
   const lastFocusedTime = useRef<number>(0);
   const [refreshCustom, setRefreshCustom] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [configReceived, setConfigReceived] = useState(false);
 
   // category & search
   const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey'];
@@ -790,25 +791,31 @@ export default function MenuScreen() {
   useEffect(() => {
     if (!liquorbotId) return;
     const topic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
-
-    const sub = pubsub.subscribe({ topics:[topic] }).subscribe({
+    const sub   = pubsub.subscribe({ topics:[topic] }).subscribe({
       next: async ({ value }) => {
-        if ((value as { action?: string })?.action !== 'MENU_UPDATE') return;
-        const v = value as { drinkIDs?: number[]; customRecipeIDs?: string[] };
-        setAllowedStd(v.drinkIDs ?? []);
-        setAllowedCustom(v.customRecipeIDs ?? []);
+        const { action, slots, drinkIDs, customRecipeIDs } = value as any;
+
+        // Always set configReceived true on ANY CURRENT_CONFIG, even if slots is empty or all zeros
+        if (action === 'CURRENT_CONFIG') {
+          setConfigReceived(true);
+        }
+
+        /* existing MENU_UPDATE handling (unchanged) */
+        if (action !== 'MENU_UPDATE') return;
+        setAllowedStd(drinkIDs ?? []);
+        setAllowedCustom(customRecipeIDs ?? []);
         await AsyncStorage.setItem(
           `allowedDrinks-${liquorbotId}`,
-          JSON.stringify({
-            drinkIDs: v.drinkIDs, customRecipeIDs: v.customRecipeIDs,
-            updatedAt: Date.now(),
-          }),
+          JSON.stringify({ drinkIDs, customRecipeIDs, updatedAt: Date.now() }),
         );
       },
       error: console.error,
     });
     return () => sub.unsubscribe();
   }, [liquorbotId]);
+
+  useEffect(() => setConfigReceived(false), [liquorbotId]);
+
 
   // Automatically re-request config when screen is focused
   useEffect(() => {
@@ -818,15 +825,33 @@ export default function MenuScreen() {
     const timeSinceLastFocus = Date.now() - lastFocusedTime.current;
     if (timeSinceLastFocus > 1000) {
       requestSlotConfig();
+      // Only send one request, skip retry
+      return;
     }
 
+    // Otherwise, schedule a single retry after 2s
     const retryTimer = setTimeout(() => {
-      const anyLoaded = slots.some((id) => id > 0);
-      if (!anyLoaded) requestSlotConfig();
+      if (!configReceived) requestSlotConfig();
     }, 2000);
     
     return () => clearTimeout(retryTimer);
-  }, [isFocused]);
+  }, [isFocused, configReceived, requestSlotConfig]); // updated deps
+
+  // If the grid is empty for >5 s, prod both config & event refresh
+  useEffect(() => {
+    if (!isFocused || configReceived) return; // updated guard
+
+    // only care when nothing is showing
+    if (renderedDrinks.length) return;
+
+    const t = setTimeout(() => {
+      requestSlotConfig();            // MQTT side
+      setRefreshCustom(p => !p);      // GraphQL / Custom side
+    }, 5000);
+
+    return () => clearTimeout(t);
+  }, [isFocused, drinks.length, requestSlotConfig, configReceived]);
+
 
   useEffect(() => {
     (async () => {
@@ -852,42 +877,6 @@ export default function MenuScreen() {
       }
     })();
   }, []);
-
-
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | undefined;
-
-    if (isConnected && liquorbotId && slots.every(id => id === 0)) {
-      requestSlotConfig(); // first (and only) kick-off
-
-      interval = setInterval(() => {
-        if (slots.every(id => id === 0)) {
-          requestSlotConfig(); // still empty? ask again
-        } else if (interval) {
-          clearInterval(interval); // got something – stop
-        }
-      }, 4000);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isConnected, liquorbotId, slots, requestSlotConfig]);
-
-  // If the grid is empty for >5 s, prod both config & event refresh
-  useEffect(() => {
-    if (!isFocused) return;
-
-    // only care when nothing is showing
-    if (renderedDrinks.length) return;
-
-    const t = setTimeout(() => {
-      requestSlotConfig();            // MQTT side
-      setRefreshCustom(p => !p);      // GraphQL / Custom side
-    }, 5000);
-
-    return () => clearTimeout(t);
-  }, [isFocused, drinks.length, requestSlotConfig]);
 
 
   /* ------------------ live refresh of allowed drinks ------------------ */
