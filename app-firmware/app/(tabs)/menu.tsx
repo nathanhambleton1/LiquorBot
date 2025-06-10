@@ -1404,7 +1404,6 @@ export default function MenuScreen() {
               await requestSlotConfig();
               setLoading(false);
             }}
-            tintColor="#CE975E"
             colors={["#CE975E"]}
           />
         }
