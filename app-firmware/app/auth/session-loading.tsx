@@ -127,7 +127,7 @@ function getLocalDrinkImagePath(drinkId: number, imageUrl: string): string {
   return `${FileSystem.cacheDirectory || FileSystem.documentDirectory}drink-images/drink_${drinkId}.${ext}`;
 }
 
-/** Download & cache images, updating progress */
+/** Download & cache images, updating progress (with Last-Modified check) */
 async function cacheDrinkImagesToDisk(
   drinks: { image: string; id: number }[],
   updatePct: (n: number) => void,
@@ -141,12 +141,29 @@ async function cacheDrinkImagesToDisk(
       try {
         const localUri = getLocalDrinkImagePath(d.id, d.image);
         const info = await FileSystem.getInfoAsync(localUri);
-        if (!info.exists) {
+        // Use a unique key for each image's last-modified
+        const lmKey = `imgLastMod:${localUri}`;
+        let shouldDownload = false;
+        let remoteLastMod = '';
+        try {
+          // HEAD request to get Last-Modified
+          const headResp = await fetch(d.image, { method: 'HEAD' });
+          remoteLastMod = headResp.headers.get('Last-Modified') || '';
+        } catch {}
+        const localLastMod = await AsyncStorage.getItem(lmKey);
+        // Check if file is missing, zero bytes, or Last-Modified changed
+        if (!info.exists || info.size === 0 || (remoteLastMod && localLastMod !== remoteLastMod)) {
+          shouldDownload = true;
+        }
+        if (shouldDownload) {
           await FileSystem.makeDirectoryAsync(
             localUri.substring(0, localUri.lastIndexOf('/')),
             { intermediates: true },
           );
           await FileSystem.downloadAsync(d.image, localUri);
+          if (remoteLastMod) {
+            await AsyncStorage.setItem(lmKey, remoteLastMod);
+          }
         }
       } catch {/* ignore individual failures */}
     }
@@ -310,36 +327,37 @@ export default function SessionLoading(): ReactElement {
           getUrl({ key: DRINKS_KEY }),
           getUrl({ key: INGREDIENTS_KEY }),
         ]);
-        const remoteMod = await Promise.all(
-          [drinksUrl.url, ingUrl.url].map(async (u) =>
-            (await fetch(u, { method: 'HEAD' })).headers.get('Last-Modified'),
-          ),
-        );
-        const localMod  = await AsyncStorage.multiGet([
-          'drinksJsonLastMod',
-          'ingredientsJsonLastMod',
+
+        // always pull down both JSON files
+        setStatus('Downloading menu JSON…');
+        const [remoteDrinksJson, remoteIngJson] = await Promise.all([
+          fetch(drinksUrl.url, { cache: 'no-cache' }).then(res => res.text()),
+          fetch(ingUrl.url,    { cache: 'no-cache' }).then(res => res.text()),
         ]);
 
-        let drinksJson: string = await AsyncStorage.getItem('drinksJson') ?? '[]';
-        let ingJson   : string = await AsyncStorage.getItem('ingredientsJson') ?? '[]';
+        let drinksJson = await AsyncStorage.getItem('drinksJson')     ?? '';
+        let ingJson    = await AsyncStorage.getItem('ingredientsJson') ?? '';
 
-        if (localMod[0][1] !== remoteMod[0]) {
+        // only overwrite if it actually changed
+        if (remoteDrinksJson !== drinksJson) {
           setStatus('Updating drink menu…');
-          drinksJson = await (await fetch(drinksUrl.url)).text();
           await AsyncStorage.multiSet([
-            ['drinksJson', drinksJson],
-            ['drinksJsonLastMod', remoteMod[0] ?? ''],
+            ['drinksJson',           remoteDrinksJson],
+            ['drinksJsonLastMod',    new Date().toUTCString()],  // optional
           ]);
+          drinksJson = remoteDrinksJson;
         }
-        if (localMod[1][1] !== remoteMod[1]) {
+
+        if (remoteIngJson !== ingJson) {
           setStatus('Updating ingredients…');
-          ingJson = await (await fetch(ingUrl.url)).text();
           await AsyncStorage.multiSet([
-            ['ingredientsJson', ingJson],
-            ['ingredientsJsonLastMod', remoteMod[1] ?? ''],
+            ['ingredientsJson',        remoteIngJson],
+            ['ingredientsJsonLastMod', new Date().toUTCString()],  // optional
           ]);
+          ingJson = remoteIngJson;
         }
-        bump(0.13);                                    // 35 %
+
+        bump(0.13);  // advance the progress bar
 
         /* ⑥ Events */
         setStatus('Loading events…');
