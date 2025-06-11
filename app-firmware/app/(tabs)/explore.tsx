@@ -1,26 +1,9 @@
-/* -------------------------------------------------------------------------- */
-/*                        INGREDIENT SORTING HELPER                           */
-/* -------------------------------------------------------------------------- */
-function sortIngredientsByType(ids: number[], ingredientMap: Map<number, Ingredient>): number[] {
-  const priority: Record<string, number> = {
-    alcohol: 0,
-    mixer: 1,
-    'sweet & sour': 2,
-  };
-  return [...ids].sort((a, b) => {
-    const typeA = ingredientMap.get(a)?.type?.toLowerCase() || '';
-    const typeB = ingredientMap.get(b)?.type?.toLowerCase() || '';
-    const prioA = priority[typeA] ?? 99;
-    const prioB = priority[typeB] ?? 99;
-    if (prioA !== prioB) return prioA - prioB;
-    return a - b;
-  });
-}
 // -----------------------------------------------------------------------------
-// File:   explore.tsx   (REPLACEMENT – 09 Jun 2025)
+// File:   explore.tsx   (UPDATED – 11 Jun 2025)
 // Purpose: Explore page – themed Recipe Books plus “Load to Device” button that
-//          publishes the book’s ingredient IDs to the ESP-32 slot-config topic
-//          (15 slots; 0 = empty) using the same MQTT flow as device-settings.
+//          publishes the book’s ingredient IDs to the ESP‑32 slot‑config topic.
+//          *NEW*: leverages on‑device image cache so book covers and drink
+//          thumbnails appear instantly (same strategy used by menu.tsx).
 // -----------------------------------------------------------------------------
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -39,6 +22,7 @@ import { Amplify } from 'aws-amplify';
 import config from '../../src/amplifyconfiguration.json';
 import { PubSub } from '@aws-amplify/pubsub';
 import { router } from 'expo-router';
+import * as FileSystem from 'expo-file-system';       // ★ NEW ★
 
 /* ─────────── Amplify + PubSub bootstrap ─────────── */
 Amplify.configure(config);
@@ -77,6 +61,50 @@ type RecipeBook = {
 };
 
 /* -------------------------------------------------------------------------- */
+/*                             IMAGE‑CACHE HELPERS                            */
+/* -------------------------------------------------------------------------- */
+/** Use same folder as menu.tsx (drink‑images) for shared cache */
+function getLocalDrinkImagePath(drinkId: number, imageUrl: string) {
+  const ext = imageUrl.split('.').pop()?.split('?')[0] || 'jpg';
+  return `${FileSystem.cacheDirectory || FileSystem.documentDirectory}drink-images/drink_${drinkId}.${ext}`;
+}
+
+/** Returns the best <Image> source for a drink – local first, else downloads */
+async function getDrinkImageSource(drink: Drink): Promise<{ uri: string }> {
+  if (!drink.image) return { uri: '' };
+  const localUri = getLocalDrinkImagePath(drink.id, drink.image);
+  try {
+    const info = await FileSystem.getInfoAsync(localUri);
+    if (info.exists) return { uri: localUri };
+    await FileSystem.makeDirectoryAsync(localUri.substring(0, localUri.lastIndexOf('/')), { intermediates: true });
+    await FileSystem.downloadAsync(drink.image, localUri);
+    return { uri: localUri };
+  } catch {
+    return { uri: drink.image };
+  }
+}
+
+/** Same logic but for arbitrary URLs (e.g. book cover) */
+function getLocalCoverPath(url: string, key: string) {
+  const ext = url.split('.').pop()?.split('?')[0] || 'jpg';
+  return `${FileSystem.cacheDirectory || FileSystem.documentDirectory}explore-covers/${key}.${ext}`;
+}
+
+async function getCoverImageSource(url: string, key: string): Promise<{ uri: string }> {
+  if (!url) return { uri: '' };
+  const localUri = getLocalCoverPath(url, key);
+  try {
+    const info = await FileSystem.getInfoAsync(localUri);
+    if (info.exists) return { uri: localUri };
+    await FileSystem.makeDirectoryAsync(localUri.substring(0, localUri.lastIndexOf('/')), { intermediates: true });
+    await FileSystem.downloadAsync(url, localUri);
+    return { uri: localUri };
+  } catch {
+    return { uri: url };
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /*                              CONSTANTS                                     */
 /* -------------------------------------------------------------------------- */
 const MAX_INGS      = 15;   // hardware limit (slots)
@@ -86,7 +114,6 @@ const CAROUSEL_LOOP = 30;
 const ITEM_W        = 112;
 const AUTO_SPEED    = 36;
 
-/* placeholder for any missing drink artwork */
 const placeholder = '../../assets/images/glasses/rocks.png';
 
 /* handy helpers */
@@ -130,7 +157,7 @@ async function saveUndo(
 }
 
 /* -------------------------------------------------------------------------- */
-/*                     PER-SECTION BOOK-BUILDER (≤20 % overlap)               */
+/*                     PER-SECTION BOOK‑BUILDER (≤20 % overlap)              */
 /* -------------------------------------------------------------------------- */
 function buildBookDistinct(
   pool: Drink[],
@@ -180,7 +207,30 @@ function buildBookDistinct(
 }
 
 /* -------------------------------------------------------------------------- */
-/*                       INFINITE-SCROLL DRINK CAROUSEL                       */
+/*                       DRINK THUMBNAIL (cached images)                      */
+/* -------------------------------------------------------------------------- */
+const DrinkThumb = ({ drink }: { drink: Drink }) => {
+  const [src, setSrc] = useState<{ uri: string }>({ uri: '' });
+  useEffect(() => {
+    let mounted = true;
+    getDrinkImageSource(drink).then((s) => mounted && setSrc(s));
+    return () => { mounted = false; };
+  }, [drink]);
+
+  return (
+    <View style={styles.modalDrink}>
+      {src.uri ? (
+        <Image source={src} style={styles.modalDrinkImg} />
+      ) : (
+        <View style={[styles.modalDrinkImg, { backgroundColor: '#141414' }]} />
+      )}
+      <Text style={styles.modalDrinkName}>{drink.name}</Text>
+    </View>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*                       INFINITE‑SCROLL DRINK CAROUSEL                       */
 /* -------------------------------------------------------------------------- */
 function InfiniteDrinkCarousel({ drinks }: { drinks: Drink[] }) {
   if (!drinks.length) return null;
@@ -257,12 +307,7 @@ function InfiniteDrinkCarousel({ drinks }: { drinks: Drink[] }) {
       data={data}
       keyExtractor={(_, i) => String(i)}
       horizontal
-      renderItem={({ item }) => (
-        <View style={styles.modalDrink}>
-          <Image source={{ uri: item.image }} style={styles.modalDrinkImg} />
-          <Text style={styles.modalDrinkName}>{item.name}</Text>
-        </View>
-      )}
+      renderItem={({ item }) => <DrinkThumb drink={item} />}
       getItemLayout={(_, i) => ({ length: ITEM_W, offset: i * ITEM_W, index: i })}
       showsHorizontalScrollIndicator={false}
       onScroll={wrap}
@@ -275,7 +320,7 @@ function InfiniteDrinkCarousel({ drinks }: { drinks: Drink[] }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                            MODAL + BOOK CARD                               */
+/*                            MODAL + BOOK CARD                               */
 /* -------------------------------------------------------------------------- */
 interface BookModalProps {
   book: RecipeBook | null;
@@ -333,10 +378,7 @@ const BookModal = ({
           {book.drinks.length <= 3 ? (
             <View style={{ flexDirection: 'row' }}>
               {book.drinks.map((d) => (
-                <View key={d.id} style={styles.modalDrink}>
-                  <Image source={{ uri: d.image }} style={styles.modalDrinkImg} />
-                  <Text style={styles.modalDrinkName}>{d.name}</Text>
-                </View>
+                <DrinkThumb key={d.id} drink={d} />
               ))}
             </View>
           ) : (
@@ -377,18 +419,31 @@ const BookModal = ({
 };
 
 interface BookCardProps { book: RecipeBook; onPress: () => void }
-const BookCard = ({ book, onPress }: BookCardProps) => (
-  <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={styles.bookTile}>
-    <View style={styles.bookCard}>
-      <Image source={{ uri: book.image }} style={styles.bookImage} />
-      <View style={styles.bookOverlay} />
-      <Text style={styles.bookTitle}>{book.name}</Text>
-      <Text style={styles.bookSubtitle}>
-        {book.drinks.length} drinks · {book.ingredientIds.length} ingredients
-      </Text>
-    </View>
-  </TouchableOpacity>
-);
+const BookCard = ({ book, onPress }: BookCardProps) => {
+  const [cover, setCover] = useState<{ uri: string }>({ uri: '' });
+  useEffect(() => {
+    let mounted = true;
+    getCoverImageSource(book.image, book.id).then((s) => mounted && setCover(s));
+    return () => { mounted = false; };
+  }, [book]);
+
+  return (
+    <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={styles.bookTile}>
+      <View style={styles.bookCard}>
+        {cover.uri ? (
+          <Image source={cover} style={styles.bookImage} />
+        ) : (
+          <View style={[styles.bookImage, { backgroundColor: '#1F1F1F' }]} />
+        )}
+        <View style={styles.bookOverlay} />
+        <Text style={styles.bookTitle}>{book.name}</Text>
+        <Text style={styles.bookSubtitle}>
+          {book.drinks.length} drinks · {book.ingredientIds.length} ingredients
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
 
 /* -------------------------------------------------------------------------- */
 /*                          MAIN EXPLORE SCREEN                               */
@@ -520,7 +575,7 @@ export default function ExploreScreen() {
           }),
         ),
       );
-      await publishSlotMessage({ action: 'GET_CONFIG' }); // verification
+      await publishSlotMessage({ action: 'GET_CONFIG' });
       console.log('Slot-config update complete');
     } catch (e) {
       console.error('Failed to apply book:', e);
@@ -748,3 +803,22 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 });
+
+/* -------------------------------------------------------------------------- */
+/*                        INGREDIENT SORTING HELPER                           */
+/* -------------------------------------------------------------------------- */
+function sortIngredientsByType(ids: number[], ingredientMap: Map<number, Ingredient>): number[] {
+  const priority: Record<string, number> = {
+    alcohol: 0,
+    mixer: 1,
+    'sweet & sour': 2,
+  };
+  return [...ids].sort((a, b) => {
+    const typeA = ingredientMap.get(a)?.type?.toLowerCase() || '';
+    const typeB = ingredientMap.get(b)?.type?.toLowerCase() || '';
+    const prioA = priority[typeA] ?? 99;
+    const prioB = priority[typeB] ?? 99;
+    if (prioA !== prioB) return prioA - prioB;
+    return a - b;
+  });
+}

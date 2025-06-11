@@ -135,7 +135,13 @@ export default function Index() {
 
   /* ──────────────────────── fetch events ──────────────────────── */
   const fetchEvents = useCallback(async () => {
-    if (!currentUser) return; // guests skip
+    let isMounted = true;
+    // Double-check currentUser before running
+    if (!currentUser) {
+      setUpcomingEvents([]);
+      setEventsLoading(false);
+      return;
+    }
 
     try {
       const { data } = await generateClient().graphql({
@@ -150,6 +156,8 @@ export default function Index() {
         },
         authMode: 'userPool',
       });
+
+      if (!isMounted) return;
 
       const now = new Date();
       const filtered = data.listEvents.items
@@ -166,11 +174,22 @@ export default function Index() {
         );
 
       setUpcomingEvents(filtered);
-    } catch (error) {
-      console.error('Error fetching events:', error);
+    } catch (error: any) {
+      // Only log error if user is still signed in and not a NoSignedUser error
+      if (
+        currentUser &&
+        !(error?.name === 'NoSignedUser' || error?.message?.includes('No current user'))
+      ) {
+        console.error('Error fetching events:', error);
+      }
+      // Otherwise, just clear events and loading
+      setUpcomingEvents([]);
     } finally {
       setEventsLoading(false);
     }
+    return () => {
+      isMounted = false;
+    };
   }, [currentUser]);
 
   // Run once currentUser is available
@@ -179,9 +198,10 @@ export default function Index() {
       setEventsLoading(true);          // start loader only when we actually fetch
       fetchEvents();
     } else {
+      setUpcomingEvents([]);
       setEventsLoading(false);         // ensure guests don't get stuck
     }
-  }, [currentUser, liquorbotId]);
+  }, [currentUser, liquorbotId, fetchEvents]);
 
   // Add useFocusEffect to reload events when page is focused
   useFocusEffect(
@@ -189,6 +209,9 @@ export default function Index() {
       if (currentUser && liquorbotId) {
         setEventsLoading(true);
         fetchEvents();
+      } else {
+        setUpcomingEvents([]);
+        setEventsLoading(false);
       }
       // No cleanup needed
     }, [currentUser, liquorbotId, fetchEvents])

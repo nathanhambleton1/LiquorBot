@@ -151,7 +151,8 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
 
   /* ---------------- FETCH EVENTS ---------------- */
   useEffect(() => {
-    // don’t fetch if not signed in
+    let isMounted = true;
+
     if (!currentUser) {
       setEvents([]); // clear events if user logs out
       setLoading(false);
@@ -166,6 +167,8 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
           variables: { filter: eventFilter(currentUser) },
           authMode:  'userPool',
         }) as { data: any };
+
+        if (!isMounted) return;
 
         const refreshedEvents = data.listEvents.items.map((i: any): Event => ({
           id:          i.id,
@@ -212,14 +215,16 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
           // admins keep their existing pairing unchanged
         }
       } catch (err) {
-        // Only show alert if still signed in
-        if (currentUser) {
-          Alert.alert('Couldn\'t load events');
-        }
+        // Suppress load errors silently (no alert on error)
+        console.warn("Could not load events:", err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     })();
+
+    return () => {
+      isMounted = false;
+    };
   }, [currentUser, liquorbotId]);
 
   /* ---------------- STANDARD DRINKS & INGREDIENTS JSON ---------------- */
@@ -754,11 +759,20 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
               <Text style={styles.sectionTitle}>Drink Menu</Text>
               {item.drinkIDs.map(id => {
                 const drink = standardDrinks.find(d => d.id === id);
-                return <Text key={id} style={styles.drinkName}>{drink ? drink.name : `Drink #${id}`}</Text>;
+                return (
+                  <Text key={id} style={styles.drinkName}>
+                    {drink ? drink.name : `Drink #${id}`}
+                  </Text>
+                );
               })}
               {item.customRecipeIDs?.map(id => {
                 const recipe = customRecipes.find(r => r.id === id);
-                return <Text key={id} style={styles.drinkName}>{recipe ? recipe.name : `Custom Recipe #${id}`}</Text>;
+                return (
+                  <Text key={id} style={styles.drinkName}>
+                    {recipe ? recipe.name : `Custom Recipe #${id}`}
+                    <Text style={{ color: '#888', fontSize: 12 }}> (custom)</Text>
+                  </Text>
+                );
               })}
             </View>
 
@@ -774,7 +788,12 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
                 <TouchableOpacity
                   onPress={() => {
                     const link = `${INVITE_BASE_URL}/join/${item.inviteCode}`;
-                    setQrLoading(true);
+                    // Only set loading if the link is new
+                    if (qrLink !== link) {
+                      setQrLoading(true);
+                    } else {
+                      setQrLoading(false);
+                    }
                     setQrLink(link);
                     setQrModalVisible(true);
                     copyToClipboard(link, item.id);
@@ -794,11 +813,15 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
         {/* footer */}
         <View style={styles.foot}>
           <View style={{flexDirection:'row',alignItems:'center'}}>
-            <Text style={styles.code}>Code: {item.inviteCode}</Text>
-            <TouchableOpacity onPress={() => copyToClipboard(item.inviteCode, item.id)} style={{marginLeft:8}}>
-              <Ionicons name="copy-outline" size={14} color="#CE975E"/>
-            </TouchableOpacity>
-            {copiedEventId === item.id && <Text style={styles.copiedText}>Code Copied</Text>}
+            {!isPast && (
+              <>
+                <Text style={styles.code}>Code: {item.inviteCode}</Text>
+                <TouchableOpacity onPress={() => copyToClipboard(item.inviteCode, item.id)} style={{marginLeft:8}}>
+                  <Ionicons name="copy-outline" size={14} color="#CE975E"/>
+                </TouchableOpacity>
+                {copiedEventId === item.id && <Text style={styles.copiedText}>Code Copied</Text>}
+              </>
+            )}
           </View>
           <Text style={styles.drinks}>{item.drinkIDs.length + (item.customRecipeIDs?.length ?? 0)} drinks</Text>
         </View>
@@ -923,8 +946,7 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={["#CE975E"]}
-            tintColor="#CE975E"
+            colors={["#141414"]}
           />
         }
       />
@@ -1002,11 +1024,17 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
         visible={qrModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setQrModalVisible(false)}
+        onRequestClose={() => {
+          setQrModalVisible(false);
+          setQrLoading(false);
+        }}
       >
         <View style={styles.overlay}>
           <View style={[styles.filtCard, { alignItems: 'center' }]}> 
-            <TouchableOpacity style={styles.filtClose} onPress={() => setQrModalVisible(false)}>
+            <TouchableOpacity style={styles.filtClose} onPress={() => {
+              setQrModalVisible(false);
+              setQrLoading(false);
+            }}>
               <Ionicons name="close" size={24} color="#DFDCD9"/>
             </TouchableOpacity>
             <Text style={styles.filtTitle}>Scan to Join Event</Text>
@@ -1017,7 +1045,11 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
                     uri: `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrLink)}&size=200x200&color=fff&bgcolor=1F1F1F`
                   }}
                   style={{ width:200, height:200, position: 'absolute' }}
-                  onLoadStart={() => setQrLoading(true)}
+                  onLoadStart={() => {
+                    // Only set loading if the link is new
+                    // (prevents spinner if image is cached and instantly available)
+                    if (qrLoading) setQrLoading(true);
+                  }}
                   onLoadEnd={()   => setQrLoading(false)}
                 />
                 {qrLoading && (
