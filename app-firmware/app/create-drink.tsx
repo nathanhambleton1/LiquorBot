@@ -136,15 +136,14 @@ const CANVAS_W = 300, CANVAS_H = 300, THUMB = 70;
 export default function CreateDrinkScreen() {
   const router = useRouter();
   const navigation = useNavigation();
-  const params = useLocalSearchParams<{
-    edit?: string; recipeId?: string; name?: string;
-    desc?: string; ingredients?: string; imageKey?: string;
-    // Add this new param to track where we came from
-    from?: 'event' | 'drink-list';
-  }>();
+  const params = useLocalSearchParams();
 
   const isEditing = params.edit === '1';
   const recipeId  = params.recipeId ?? '';
+
+  // Parse glassIdx/colourIdx from params if present
+  const initialGlassIdx = isEditing && params.glassIdx !== undefined ? Number(params.glassIdx) : 0;
+  const initialColourIdx = isEditing && params.colourIdx !== undefined ? Number(params.colourIdx) : 0;
 
   /* ----------- state: meta ----------- */
   const [drinkName, setDrinkName]         = useState<string>(isEditing ? String(params.name ?? '') : '');
@@ -181,8 +180,8 @@ export default function CreateDrinkScreen() {
   const [saving, setSaving] = useState(false);
 
   /* ----------- state: image builder ----------- */
-  const [glassIdx,   setGlassIdx]   = useState(0);
-  const [colourIdx,  setColourIdx]  = useState(0);
+  const [glassIdx,   setGlassIdx]   = useState(initialGlassIdx);
+  const [colourIdx,  setColourIdx]  = useState(initialColourIdx);
 
   /* ----------- edit-mode existing image ----------- */
   const [existingImageKey] = useState<string|null>(
@@ -342,7 +341,7 @@ export default function CreateDrinkScreen() {
         await client.graphql({
           query:updateCustomRecipe,
           variables:{ input:{
-            id:recipeId,
+            id: Array.isArray(recipeId) ? recipeId[0] : recipeId,
             name:drinkName.trim(),
             image:imageKey,
             ingredients:ingredientsInput,

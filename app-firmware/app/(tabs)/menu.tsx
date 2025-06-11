@@ -652,21 +652,29 @@ function DrinkItem({
 
         {canEdit && (
           <TouchableOpacity
-            onPress={() => router.push({
+            style={styles.editButton}
+            onPress={() => {
+              let extraParams: any = {};
+              const idxs = getGlassAndColourIdx(drink.imageKey ?? '');
+              if (idxs) {
+                extraParams.glassIdx = idxs.glassIdx;
+                extraParams.colourIdx = idxs.colourIdx;
+              }
+              router.push({
                 pathname: '/create-drink',
                 params: {
                   edit: '1',
-                  recipeId: drink.recipeId,
+                  recipeId: drink.recipeId ?? drink.id,
                   name: drink.name,
                   desc: drink.description ?? '',
                   ingredients: drink.ingredients ?? '',
                   imageKey: drink.imageKey ?? '',
+                  ...extraParams,
                 },
-              })
-            }
-            style={styles.editButton}
+              });
+            }}
           >
-            <Ionicons name="create-outline" size={24} color="#DFDCD9" />
+            <Ionicons name="create-outline" size={22} color="#DFDCD9" />
           </TouchableOpacity>
         )}
 
@@ -783,6 +791,29 @@ function DrinkItem({
       <Text style={[styles.categoryText, grayStyle]}>{drink.category}</Text>
     </TouchableOpacity>
   );
+}
+
+// Helper to get glassIdx and colourIdx from imageKey (same logic as DrinkList)
+function getGlassAndColourIdx(imageKey?: string | null): { glassIdx: number; colourIdx: number } | null {
+  if (!imageKey) return null;
+  const glassTypes = ['rocks', 'highball', 'martini', 'coupe', 'margarita'];
+  const colors = ['white', 'amber', 'red', 'green', 'blue'];
+  for (let g = 0; g < glassTypes.length; g++) {
+    for (let c = 0; c < colors.length; c++) {
+      if (imageKey.endsWith(`${glassTypes[g]}_${colors[c]}.png`)) {
+        return { glassIdx: g, colourIdx: c };
+      }
+      if (imageKey === `drinkMenu/drinkPictures/${glassTypes[g]}_${colors[c]}.png`) {
+        return { glassIdx: g, colourIdx: c };
+      }
+    }
+  }
+  for (let g = 0; g < glassTypes.length; g++) {
+    if (imageKey.includes(glassTypes[g])) {
+      return { glassIdx: g, colourIdx: 0 };
+    }
+  }
+  return null;
 }
 
 /* -------------------------------------------------------------------------- */

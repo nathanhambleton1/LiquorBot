@@ -208,12 +208,45 @@ export default function CustomDrinkListScreen() {
     const [src,setSrc]=useState<{uri:string}>({uri:''});
     useEffect(()=>{ getDrinkImageSource(drink).then(setSrc); },[drink]);
 
+    function getGlassAndColourIdx(imageKey?: string | null): { glassIdx: number; colourIdx: number } | null {
+      if (!imageKey) return null;
+      // List of glass types and colors must match create-drink.tsx
+      const glassTypes = ['rocks', 'highball', 'martini', 'coupe', 'margarita'];
+      const colors = ['white', 'amber', 'red', 'green', 'blue'];
+      // Try to find which glass and color this imageKey matches
+      for (let g = 0; g < glassTypes.length; g++) {
+        for (let c = 0; c < colors.length; c++) {
+          const expected = `drinkMenu/drinkPictures/${glassTypes[g]}_${colors[c]}.png`;
+          if (imageKey.endsWith(`${glassTypes[g]}_${colors[c]}.png`)) {
+            return { glassIdx: g, colourIdx: c };
+          }
+          // Also support full path match
+          if (imageKey === expected) {
+            return { glassIdx: g, colourIdx: c };
+          }
+        }
+      }
+      // fallback: try to match by partial glass name
+      for (let g = 0; g < glassTypes.length; g++) {
+        if (imageKey.includes(glassTypes[g])) {
+          return { glassIdx: g, colourIdx: 0 };
+        }
+      }
+      return null;
+    }
+
     return (
       <AnimatedTouchable
         activeOpacity={0.9}
         onPressIn={onPressIn}
         onPressOut={onPressOut}
-        onPress={() =>
+        onPress={() => {
+          let extraParams: any = {};
+          const idxs = getGlassAndColourIdx(drink.imageKey ?? '');
+          if (idxs) {
+            extraParams.glassIdx = idxs.glassIdx;
+            extraParams.colourIdx = idxs.colourIdx;
+          }
           router.push({
             pathname: '/create-drink',
             params: {
@@ -223,9 +256,10 @@ export default function CustomDrinkListScreen() {
               desc: drink.description ?? '',
               ingredients: drink.ingredients,
               imageKey: drink.imageKey ?? '',
+              ...extraParams,
             },
-          })
-        }
+          });
+        }}
         style={[styles.card, { transform: [{ scale }] }]}
       >
         {/* DELETE BUTTON WITH SPINNER */}
@@ -245,7 +279,13 @@ export default function CustomDrinkListScreen() {
         <TouchableOpacity
           style={styles.editBtn}
           disabled={!!deletingId}
-          onPress={() => 
+          onPress={() => {
+            let extraParams: any = {};
+            const idxs = getGlassAndColourIdx(drink.imageKey ?? '');
+            if (idxs) {
+              extraParams.glassIdx = idxs.glassIdx;
+              extraParams.colourIdx = idxs.colourIdx;
+            }
             router.push({
               pathname: '/create-drink',
               params: {
@@ -255,9 +295,10 @@ export default function CustomDrinkListScreen() {
                 desc: drink.description ?? '',
                 ingredients: drink.ingredients,
                 imageKey: drink.imageKey ?? '',
+                ...extraParams,
               },
-            })
-          }
+            });
+          }}
         >
           <Ionicons name="create-outline" size={22} color="#CE975E" />
         </TouchableOpacity>
