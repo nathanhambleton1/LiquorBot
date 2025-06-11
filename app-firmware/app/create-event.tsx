@@ -850,7 +850,19 @@ export default function EventsScreen(){
         <Modal visible={pickerVis} animationType="slide"
           onRequestClose={()=>setPV(false)}
           presentationStyle={Platform.OS==='ios'?'pageSheet':'fullScreen'}>
-          <PickerModal {...{cat,setCat,q,setQ,filtered,loading,addDrink,close:()=>setPV(false), allDrinks}}/>
+          <PickerModal
+            cat={cat}
+            setCat={setCat}
+            q={q}
+            setQ={setQ}
+            filtered={filtered}
+            loading={loading}
+            addDrink={addDrink}
+            close={()=>setPV(false)}
+            allDrinks={allDrinks}
+            canAddDrink={canAddDrink}
+            menu={menu}
+          />
         </Modal>
         
         {/* time‑info modal */}
@@ -1004,8 +1016,23 @@ const TimeBox=forwardRef(({label,onPress,tag}:{label:string;onPress:()=>void;tag
   </TouchableOpacity>
 ));
 
-const PickerModal = ({ cat, setCat, q, setQ, filtered, loading, addDrink, close, allDrinks }: any) => {
+ const PickerModal = ({ cat, setCat, q, setQ, filtered, loading, addDrink, close, allDrinks, canAddDrink, menu }: any) => {
   const router = useRouter();
+  // split items: makeable vs non-makeable
+  const filteredMakeable = filtered;
+  // Define a predicate interface for clarity
+  interface DrinkFilter {
+    (drink: Drink): boolean;
+  }
+
+  const filteredNonMakeable: Drink[] = allDrinks.filter(
+    (d: Drink): boolean => 
+      (cat === 'All' || d.category === cat) &&
+      d.name.toLowerCase().includes(q.toLowerCase()) &&
+      !menu.some((m: Drink) => m.id === d.id) &&
+      !canAddDrink(d)
+  );
+  const combined = [...filteredMakeable, ...filteredNonMakeable];
 
   function openCustomDrink() {
     close(); // Close the picker modal first
@@ -1065,22 +1092,27 @@ const PickerModal = ({ cat, setCat, q, setQ, filtered, loading, addDrink, close,
       <ActivityIndicator size="large" color="#CE975E" style={{ marginTop: 20 }} />
     ) : (
       <FlatList
-        data={filtered}
+        data={combined}
         keyExtractor={i => String(i.id)}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.drinkItem} onPress={() => addDrink(item)}>
-            <Text style={styles.drinkItemText}>{item.name}</Text>
-          </TouchableOpacity>
-        )}
+        renderItem={({ item }) => {
+          const disabled = !canAddDrink(item);
+          return (
+            <TouchableOpacity
+              style={[styles.drinkItem, disabled && { opacity: 0.5 }]} 
+              onPress={() => { if (!disabled) addDrink(item); }}
+              disabled={disabled}
+            >
+              <Text style={[styles.drinkItemText, disabled && { color: '#777' }]}>{item.name}</Text>
+            </TouchableOpacity>
+          );
+        }}
         contentContainerStyle={styles.listContent}
         ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
-        ListFooterComponent={
-          filtered.length < allDrinks.length ? (
-            <Text style={{ color: '#4F4F4F', fontSize: 10, textAlign: 'center', marginTop: 24, marginBottom: 8, paddingHorizontal: 16 }}>
-              Drinks heres are filtered based on the unique ingredients your LiquorBot can hold. As you add drinks, only those that fit within your remaining ingredient slots are shown.
-            </Text>
-          ) : null
-        }
+        ListFooterComponent={() => (
+          <Text style={{ color: '#4F4F4F', fontSize: 10, textAlign: 'center', marginTop: 24, marginBottom: 8, paddingHorizontal: 16 }}>
+            Drinks here are filtered based on the unique ingredients your LiquorBot can hold. Drinks you cannot make are shown below and disabled.
+          </Text>
+        )}
       />
     )}
   </View>
