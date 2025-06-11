@@ -92,7 +92,7 @@
     "name": "Margarita",
     "category": "Tequila",
     "description": "The timeless trio of tequila, orange liqueur, and lime.",
-    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/margarita.png",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/classic_margarita.png",
     "ingredients": "7:2:1,9:1:1,36:1:1"
   },
   {
