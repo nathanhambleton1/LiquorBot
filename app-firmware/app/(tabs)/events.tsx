@@ -794,11 +794,15 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
         {/* footer */}
         <View style={styles.foot}>
           <View style={{flexDirection:'row',alignItems:'center'}}>
-            <Text style={styles.code}>Code: {item.inviteCode}</Text>
-            <TouchableOpacity onPress={() => copyToClipboard(item.inviteCode, item.id)} style={{marginLeft:8}}>
-              <Ionicons name="copy-outline" size={14} color="#CE975E"/>
-            </TouchableOpacity>
-            {copiedEventId === item.id && <Text style={styles.copiedText}>Code Copied</Text>}
+            {!isPast && (
+              <>
+                <Text style={styles.code}>Code: {item.inviteCode}</Text>
+                <TouchableOpacity onPress={() => copyToClipboard(item.inviteCode, item.id)} style={{marginLeft:8}}>
+                  <Ionicons name="copy-outline" size={14} color="#CE975E"/>
+                </TouchableOpacity>
+                {copiedEventId === item.id && <Text style={styles.copiedText}>Code Copied</Text>}
+              </>
+            )}
           </View>
           <Text style={styles.drinks}>{item.drinkIDs.length + (item.customRecipeIDs?.length ?? 0)} drinks</Text>
         </View>
@@ -923,8 +927,7 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={["#CE975E"]}
-            tintColor="#CE975E"
+            colors={["#141414"]}
           />
         }
       />
