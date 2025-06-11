@@ -848,22 +848,28 @@ export default function MenuScreen() {
   // Automatically re-request config when screen is focused
   useEffect(() => {
     if (!isFocused) return;
-    
-    // Only request if it's been at least 1 second since last request
-    const timeSinceLastFocus = Date.now() - lastFocusedTime.current;
-    if (timeSinceLastFocus > 1000) {
-      requestSlotConfig();
-      // Only send one request, skip retry
-      return;
-    }
 
-    // Otherwise, schedule a single retry after 2s
-    const retryTimer = setTimeout(() => {
-      if (!configReceived) requestSlotConfig();
-    }, 2000);
-    
-    return () => clearTimeout(retryTimer);
-  }, [isFocused, configReceived, requestSlotConfig]); // updated deps
+    // Add a 500ms delay before requesting slot config
+    const delayTimer = setTimeout(() => {
+      // Only request if it's been at least 1 second since last request
+      const timeSinceLastFocus = Date.now() - lastFocusedTime.current;
+      if (timeSinceLastFocus > 1000) {
+        requestSlotConfig();
+        // Only send one request, skip retry
+        return;
+      }
+
+      // Otherwise, schedule a single retry after 2s
+      const retryTimer = setTimeout(() => {
+        if (!configReceived) requestSlotConfig();
+      }, 2000);
+      // Clean up retry timer if effect re-runs
+      return () => clearTimeout(retryTimer);
+    }, 500);
+
+    // Clean up delay timer if effect re-runs
+    return () => clearTimeout(delayTimer);
+  }, [isFocused, configReceived, requestSlotConfig]);
 
   // If the grid is empty for >5 s, prod both config & event refresh
   useEffect(() => {
