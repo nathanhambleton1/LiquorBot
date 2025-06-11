@@ -346,18 +346,26 @@ export default function SessionLoading(): ReactElement {
         await cacheEventsData(session);
         bump(0.10);                                    // 45 %
 
-        /* ⑦ Custom drink image keys */
-        setStatus('Loading your custom drinks…');
-        let customKeys: string[] = [];
+        /* ⑦  ALL custom-drink images (any owner, any event) */
+        setStatus('Loading custom drinks…');
+        const toNumericId = (uuid: string) =>
+          2_000_000 + parseInt(uuid.slice(-6), 36);
+
+        type CustomItem = { id: string; image: string|null };
+        let customItems: CustomItem[] = [];
         try {
           const { data } = await generateClient().graphql({
-            query: /* GraphQL */ `query ListMine { listCustomRecipes { items { image } } }`,
-            authMode: 'userPool',
+            query: /* GraphQL */ `
+              query AllCustomImages {        # returns every recipe that has an image
+                listCustomRecipes(limit: 1000) {
+                  items { id image }
+                }
+              }`,
+            authMode: 'apiKey',
           }) as any;
-          customKeys = data.listCustomRecipes.items
-            .map((it: any) => it.image)
-            .filter((k: string|null) => !!k);
-        } catch {/* ignore guests */}
+          customItems = (data.listCustomRecipes.items as CustomItem[])
+            .filter(it => !!it.image);
+        } catch { /* offline or first-launch – ignore */ }
 
         /* ⑧ Build descriptor list & cache images */
         setStatus('Caching images…');
@@ -390,9 +398,9 @@ export default function SessionLoading(): ReactElement {
 
         /* signed URLs for custom‑drink images */
         const customDesc = await Promise.all(
-          customKeys.map(async (k, idx) => {
-            const { url } = await getUrl({ key: k });
-            return { id: 10_000 + idx, image: url.toString() };
+          customItems.map(async it => {
+            const { url } = await getUrl({ key: it.image! });
+            return { id: toNumericId(it.id), image: url.toString() };
           }),
         );
 

@@ -127,23 +127,28 @@ function getLocalDrinkImagePath(drinkId: number, imageUrl: string) {
 }
 
 // Helper to check if local image exists and return correct source
-async function getDrinkImageSource(drink: Drink): Promise<{ uri: string }> {
-  if (!drink.image) return { uri: '' };
+function getDrinkImageSource(drink: Drink): Promise<{ uri: string }> {
+  if (!drink.image) return Promise.resolve({ uri: '' });
   const localUri = getLocalDrinkImagePath(drink.id, drink.image);
-  try {
-    const fileInfo = await FileSystem.getInfoAsync(localUri);
-    if (fileInfo.exists) {
-      return { uri: localUri };
-    } else {
-      // Download and save for future
-      await FileSystem.makeDirectoryAsync(localUri.substring(0, localUri.lastIndexOf('/')), { intermediates: true });
+  return FileSystem.getInfoAsync(localUri)
+    .then((info) => info.exists ? { uri: localUri } : null)
+    .then(async (hit) => {
+      if (hit) return hit;                          // cached OK
+      /* ① try basename from S3 key – works for pre-v1 caches */
+      const basename = drink.image.split('/').pop()!.split('?')[0];
+      const altUri   = `${FileSystem.cacheDirectory || FileSystem.documentDirectory}drink-images/${basename}`;
+      const altInfo  = await FileSystem.getInfoAsync(altUri).catch(()=>({exists:false}));
+      if (altInfo.exists) return { uri: altUri };
+
+      /* ② nothing local – download and store under the *correct* filename */
+      await FileSystem.makeDirectoryAsync(
+        localUri.substring(0, localUri.lastIndexOf('/')),
+        { intermediates: true },
+      );
       await FileSystem.downloadAsync(drink.image, localUri);
       return { uri: localUri };
-    }
-  } catch {
-    // fallback to remote
-    return { uri: drink.image };
-  }
+    })
+  .catch(() => ({ uri: drink.image }));           // totally offline
 }
 
 const toNumericId = (uuid: string) =>

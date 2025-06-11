@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// File: custom-drink-list.tsx
+// File: DrinkList.tsx
 // Description: Shows the signed‑in user’s CustomRecipe drinks and lets them
 //              create new ones, edit existing recipes, or delete them.
 // Author: Nathan Hambleton
@@ -24,7 +24,7 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useIsFocused } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-
+import * as FileSystem from 'expo-file-system';
 import { Amplify } from 'aws-amplify';
 import { generateClient } from 'aws-amplify/api';
 import { getUrl } from 'aws-amplify/storage';
@@ -135,6 +135,35 @@ export default function CustomDrinkListScreen() {
   useEffect(() => { fetchCustomDrinks(); }, []);
   useEffect(() => { isFocused && fetchCustomDrinks(); }, [isFocused]);
 
+  /** Build the local cache path for drink_<id>.<ext> */
+  function getLocalDrinkImagePath(id: string, imageUrl: string): string {
+    const ext = imageUrl.split('.').pop()?.split('?')[0] || 'jpg';
+    const dir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
+    return `${dir}drink-images/drink_${id}.${ext}`;
+  }
+
+  /** Try cache → download → fallback to remote */
+  async function getDrinkImageSource(drink: { id: string; image: string; }): Promise<{ uri: string }> {
+    if (!drink.image) return { uri: '' };
+
+    const localUri = getLocalDrinkImagePath(drink.id, drink.image);
+    try {
+      const info = await FileSystem.getInfoAsync(localUri);
+      if (info.exists) return { uri: localUri };
+    } catch { /* ignore */ }
+
+    // ensure folder
+    await FileSystem.makeDirectoryAsync(
+      localUri.substring(0, localUri.lastIndexOf('/')),
+      { intermediates: true },
+    ).catch(()=>{});
+
+    // download (or fall back)
+    return FileSystem.downloadAsync(drink.image, localUri)
+      .then(() => ({ uri: localUri }))
+      .catch(() => ({ uri: drink.image }));
+  }
+
   /* ----------------------- DELETE HELPER ---------------------- */
   async function handleDelete(drink: CustomDrink) {
     Alert.alert(
@@ -175,6 +204,9 @@ export default function CustomDrinkListScreen() {
 
     const onPressIn  = () => Animated.spring(scale, { toValue: 0.96, useNativeDriver: true }).start();
     const onPressOut = () => Animated.spring(scale, { toValue: 1,    useNativeDriver: true }).start();
+
+    const [src,setSrc]=useState<{uri:string}>({uri:''});
+    useEffect(()=>{ getDrinkImageSource(drink).then(setSrc); },[drink]);
 
     return (
       <AnimatedTouchable
@@ -230,8 +262,8 @@ export default function CustomDrinkListScreen() {
           <Ionicons name="create-outline" size={22} color="#CE975E" />
         </TouchableOpacity>
 
-        <Image
-          source={{ uri: drink.image }}
+        {/* DRINK IMAGE AND TITLE */}
+        <Image source={src}
           style={styles.cardImage}
           resizeMode="contain"
         />
