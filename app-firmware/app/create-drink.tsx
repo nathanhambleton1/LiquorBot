@@ -158,7 +158,6 @@ export default function CreateDrinkScreen() {
   /* ----------- state: image builder ----------- */
   const [glassIdx,   setGlassIdx]   = useState(0);
   const [colourIdx,  setColourIdx]  = useState(0);
-  const [exporting, setExporting]   = useState(false);
 
   /* ----------- edit-mode existing image ----------- */
   const [existingImageKey] = useState<string|null>(
@@ -168,6 +167,12 @@ export default function CreateDrinkScreen() {
 
   /* ----------- Skia images ----------- */
   const baseImage   = useImage(GLASS_COLOUR_ASSETS[glassIdx][colourIdx]);
+  const CANONICAL_KEYS: string[][] = GLASS_COLOUR_ASSETS.map((row, g) =>
+    row.map((_, c) => `drinkAssets/${['rocks','highball','martini','coupe','margarita'][g]}_${['white','amber','red','green','blue'][c]}.png`)
+  );
+  function canonicalKey(gIdx: number, cIdx: number) {
+    return CANONICAL_KEYS[gIdx][cIdx];
+  }
 
   const roundToQuarter = (value: number): number => {
     return Math.round(value * 4) / 4;
@@ -275,26 +280,6 @@ export default function CreateDrinkScreen() {
   const adjustPriority = (idx:number, d:number) => setRows(p=>
     p.map((r,i)=>i===idx?{...r,priority:Math.min(9,Math.max(1,r.priority+d))}:r));
 
-  /* ═════════════  IMAGE EXPORT  ═════════════ */
-  const exportAndUploadImage = useCallback(async ():Promise<string|null>=>{
-    if (!baseImage) return null;
-    try{
-      setExporting(true);
-      const surface=Skia.Surface.MakeOffscreen(CANVAS_W,CANVAS_H);
-      if(!surface)throw new Error('Surface fail');
-      const ctx=surface.getCanvas(), paint=Skia.Paint();
-
-      ctx.drawImageRect(baseImage,{x:0,y:0,width:baseImage.width(),height:baseImage.height()},
-        {x:0,y:0,width:CANVAS_W,height:CANVAS_H},paint);
-
-      const pngBytes=surface.makeImageSnapshot().encodeToBytes();
-      const key=`drinkImages/${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
-      await uploadData({key,data:new Uint8Array(pngBytes),options:{contentType:'image/png'}}).result;
-      return key;
-    }catch(e){console.error(e); return null;}
-    finally{setExporting(false);}
-  },[baseImage]);
-
   /* ═════════════  SAVE  ═════════════ */
   const handleSave = async () => {
     if (saving) return;
@@ -307,8 +292,7 @@ export default function CreateDrinkScreen() {
 
 
     // Always export and upload the image based on the current glassIdx and colourIdx, even if it's the default
-    let imageKey: string | null = null;
-    imageKey = await exportAndUploadImage();
+    const imageKey = canonicalKey(glassIdx, colourIdx);
     if (!imageKey) {
       alert('Could not save image');
       setSaving(false);
@@ -598,16 +582,16 @@ const COLOUR_SWATCH_SELECTED = Math.floor(COLOUR_SWATCH * 0.7);
           style={[
             styles.saveButton,
             { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }, // 👈 NEW
-            (drinkName.trim() === '' || saving || exporting) && { opacity: 0.4 }
+            (drinkName.trim() === '' || saving) && { opacity: 0.4 }
           ]}
-          disabled={drinkName.trim() === '' || saving || exporting}
+          disabled={drinkName.trim() === '' || saving}
           onPress={handleSave}
         >
-          {(saving || exporting) && (
+          {saving && (
             <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
           )}
           <Text style={styles.saveButtonText}>
-            {saving || exporting ? 'Saving…' : isEditing ? 'Update Drink' : 'Save Drink'}
+            {saving ? 'Saving…' : isEditing ? 'Update Drink' : 'Save Drink'}
           </Text>
         </TouchableOpacity>
       </ScrollView>

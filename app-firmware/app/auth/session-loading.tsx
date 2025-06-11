@@ -284,10 +284,26 @@ export default function SessionLoading(): ReactElement {
         await cacheEventsData(session);
         bump(0.10);                                        // 45 %
 
-        /* 6️⃣ pre-cache images to disk */
+        /* 6️⃣ Load custom drinks from user pool */
+        setStatus('Loading your custom drinks…');
+        let customKeys: string[] = [];
+        try {
+          const { data } = await generateClient().graphql({
+            query: /* GraphQL */ `query ListMine { listCustomRecipes { items { image } } }`,
+            authMode: 'userPool',
+          }) as any;
+          customKeys = data.listCustomRecipes.items
+                      .map((it: any) => it.image)
+                      .filter((k: string|null) => !!k);
+        } catch { /* ignore – offline or guest */ }
+
+        // Cache custom drink images
         setStatus('Caching images…');
         const drinks = drinksJson ? JSON.parse(drinksJson) as { image: string, id: number }[] : [];
-        await cacheDrinkImagesToDisk(drinks, setPct, 0.45, 0.55);
+        await cacheDrinkImagesToDisk(
+          [...drinks, ...customKeys.map((k,i)=>({id:10_000+i,image:k}))],
+          setPct, 0.45, 0.55);
+
 /*
  * Save all drink images to local file system for offline/fast access
  * - drinks: array of { image: string, id: number }
