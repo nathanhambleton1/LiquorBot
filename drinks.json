@@ -164,7 +164,7 @@
     "name": "Martini",
     "category": "Gin",
     "description": "Classic dry martini with gin and a hint of vermouth.",
-    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/martini.png",
+    "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/classic_martini.png",
     "ingredients": "2:2.5:1,16:0.5:1"
   },
   {
