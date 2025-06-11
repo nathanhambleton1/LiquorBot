@@ -797,7 +797,12 @@ export default function EventsScreen(){
             </View>
             {menu.map(d=>(
               <View key={d.id} style={styles.drinkRow}>
-                <Text style={styles.drinkTxt}>{d.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={styles.drinkTxt}>
+                    {d.name}
+                    {d.isCustom && <Text style={styles.customTag}> (custom)</Text>}
+                  </Text>
+                </View>
                 <TouchableOpacity onPress={() => removeDrink(d.id)}>
                   <Ionicons name="trash" size={20} color="#D9534F"/>
                 </TouchableOpacity>
@@ -1102,9 +1107,13 @@ const TimeBox=forwardRef(({label,onPress,tag}:{label:string;onPress:()=>void;tag
               onPress={() => { if (!disabled) addDrink(item); }}
               disabled={disabled}
             >
-              <Text style={[styles.drinkItemText, disabled && { color: '#777' }]}>{item.name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={[styles.drinkItemText, disabled && { color: '#777' }]}>{item.name}</Text>
+                {item.isCustom && <Text style={styles.customTag}> (custom)</Text>}
+              </View>
             </TouchableOpacity>
           );
+// customTag style is defined below in the StyleSheet
         }}
         contentContainerStyle={styles.listContent}
         ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
@@ -1125,6 +1134,7 @@ function fmt(d:Date){return`${String(d.getMonth()+1).padStart(2,'0')}/${
 
 const{width:W}=Dimensions.get('window');
 const styles = StyleSheet.create({
+  customTag: { marginLeft: 6, color: '#888', fontSize: 12 },
   modalHeader:      { paddingTop: 20, paddingHorizontal: 20, backgroundColor: '#141414', zIndex: 1 },
   headerRow:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 30 },
   chevronButton:    { /* Keeps the chevron on the left */ },

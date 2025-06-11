@@ -754,11 +754,20 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
               <Text style={styles.sectionTitle}>Drink Menu</Text>
               {item.drinkIDs.map(id => {
                 const drink = standardDrinks.find(d => d.id === id);
-                return <Text key={id} style={styles.drinkName}>{drink ? drink.name : `Drink #${id}`}</Text>;
+                return (
+                  <Text key={id} style={styles.drinkName}>
+                    {drink ? drink.name : `Drink #${id}`}
+                  </Text>
+                );
               })}
               {item.customRecipeIDs?.map(id => {
                 const recipe = customRecipes.find(r => r.id === id);
-                return <Text key={id} style={styles.drinkName}>{recipe ? recipe.name : `Custom Recipe #${id}`}</Text>;
+                return (
+                  <Text key={id} style={styles.drinkName}>
+                    {recipe ? recipe.name : `Custom Recipe #${id}`}
+                    <Text style={{ color: '#888', fontSize: 12 }}> (custom)</Text>
+                  </Text>
+                );
               })}
             </View>
 
