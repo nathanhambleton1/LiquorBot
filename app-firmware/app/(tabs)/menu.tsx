@@ -25,6 +25,7 @@ import {
   PanResponder,
   RefreshControl,
 } from 'react-native';
+import * as FileSystem from 'expo-file-system';
 import Ionicons      from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
@@ -117,6 +118,32 @@ function parseIngredientString(
     const name = ingObj ? ingObj.name : `Ingredient #${id}`;
     return { id, name, amount, priority };
   });
+}
+
+// Helper to get local file path for a drink image
+function getLocalDrinkImagePath(drinkId: number, imageUrl: string) {
+  const ext = imageUrl.split('.').pop()?.split('?')[0] || 'jpg';
+  return `${FileSystem.cacheDirectory || FileSystem.documentDirectory}drink-images/drink_${drinkId}.${ext}`;
+}
+
+// Helper to check if local image exists and return correct source
+async function getDrinkImageSource(drink: Drink): Promise<{ uri: string }> {
+  if (!drink.image) return { uri: '' };
+  const localUri = getLocalDrinkImagePath(drink.id, drink.image);
+  try {
+    const fileInfo = await FileSystem.getInfoAsync(localUri);
+    if (fileInfo.exists) {
+      return { uri: localUri };
+    } else {
+      // Download and save for future
+      await FileSystem.makeDirectoryAsync(localUri.substring(0, localUri.lastIndexOf('/')), { intermediates: true });
+      await FileSystem.downloadAsync(drink.image, localUri);
+      return { uri: localUri };
+    }
+  } catch {
+    // fallback to remote
+    return { uri: drink.image };
+  }
 }
 
 const toNumericId = (uuid: string) =>
@@ -573,10 +600,17 @@ function DrinkItem({
   const canEdit = drink.isCustom && currentUserId && currentUserId === drink.owner;
 
   /* ---------------------------- RENDER --------------------------- */
+
   if (isExpanded) {
     // Gray effect for non-makeable drinks (expanded)
     const grayStyle = !isMakeable ? { opacity: 0.4 } : {};
     const grayIconStyle = !isMakeable ? { opacity: 0.4 } : {};
+    const [imgSource, setImgSource] = useState<{ uri: string }>({ uri: '' });
+    useEffect(() => {
+      let mounted = true;
+      getDrinkImageSource(drink).then(src => { if (mounted) setImgSource(src); });
+      return () => { mounted = false; };
+    }, [drink]);
     return (
       <Animated.View
         onLayout={(e) => onExpandedLayout?.(e.nativeEvent.layout)}
@@ -637,7 +671,9 @@ function DrinkItem({
             <Text style={[styles.expandedboxText, grayStyle]}>{drink.name}</Text>
             <Text style={[styles.expandedcategoryText, grayStyle]}>{drink.category}</Text>
           </View>
-          <Image source={{ uri: drink.image }} style={[styles.expandedImage, grayStyle]} />
+          {imgSource.uri ? (
+            <Image source={imgSource} style={[styles.expandedImage, grayStyle]} />
+          ) : null}
         </View>
 
         <View style={styles.expandeddetailContainer}>
@@ -707,6 +743,12 @@ function DrinkItem({
   // Gray effect for non-makeable drinks (collapsed)
   const grayStyle = !isDrinkMakeable(drink) ? { opacity: 0.4 } : {};
   const grayIconStyle = !isDrinkMakeable(drink) ? { opacity: 0.4 } : {};
+  const [imgSource, setImgSource] = useState<{ uri: string }>({ uri: '' });
+  useEffect(() => {
+    let mounted = true;
+    getDrinkImageSource(drink).then(src => { if (mounted) setImgSource(src); });
+    return () => { mounted = false; };
+  }, [drink]);
   return (
     <TouchableOpacity
       activeOpacity={0.9}
@@ -718,18 +760,20 @@ function DrinkItem({
       }
       style={styles.box}
     >
-    <TouchableOpacity onPress={handleToggleLike} style={styles.favoriteButton}>
-      <Ionicons
-        name={isLiked ? 'heart' : 'heart-outline'}
-        size={24}
-        color={isLiked ? '#CE975E' : '#4F4F4F'}
-        style={grayIconStyle}
-      />
-    </TouchableOpacity>
-      <Image
-        source={{ uri: drink.image }}
-        style={[styles.image, grayStyle]}
-      />
+      <TouchableOpacity onPress={handleToggleLike} style={styles.favoriteButton}>
+        <Ionicons
+          name={isLiked ? 'heart' : 'heart-outline'}
+          size={24}
+          color={isLiked ? '#CE975E' : '#4F4F4F'}
+          style={grayIconStyle}
+        />
+      </TouchableOpacity>
+      {imgSource.uri ? (
+        <Image
+          source={imgSource}
+          style={[styles.image, grayStyle]}
+        />
+      ) : null}
       <Text style={[styles.boxText, grayStyle]}>{drink.name}</Text>
       <Text style={[styles.categoryText, grayStyle]}>{drink.category}</Text>
     </TouchableOpacity>
@@ -890,6 +934,7 @@ export default function MenuScreen() {
   useEffect(() => {
     (async () => {
       try {
+        // Always load from cache first for instant UI
         const [dJson, iJson] = await AsyncStorage.multiGet([
           'drinksJson',
           'ingredientsJson',
@@ -900,14 +945,60 @@ export default function MenuScreen() {
         if (drinksStr && ingredientsStr) {
           const builtIn = JSON.parse(drinksStr);
           setDrinks(prev => {
-            const customs = prev.filter(d => d.isCustom);           // keep any that
-            return [...builtIn, ...customs];                        // already loaded
+            const customs = prev.filter(d => d.isCustom);
+            return [...builtIn, ...customs];
           });
           setAllIngredients(JSON.parse(ingredientsStr));
           setLoading(false);
         }
+
+        // In background, check for updates using S3 Last-Modified
+        async function getLastModified(url: string): Promise<string | null> {
+          try {
+            const res = await fetch(url, { method: 'HEAD' });
+            const lastMod = res.headers.get('Last-Modified');
+            return lastMod;
+          } catch {
+            return null;
+          }
+        }
+
+        const [drinksUrl, ingUrl] = await Promise.all([
+          getUrl({ key: 'drinkMenu/drinks.json' }),
+          getUrl({ key: 'drinkMenu/ingredients.json' }),
+        ]);
+        const [remoteDrinksMod, remoteIngMod] = await Promise.all([
+          getLastModified(drinksUrl.url.toString()),
+          getLastModified(ingUrl.url.toString()),
+        ]);
+        const [localDrinksMod, localIngMod] = await AsyncStorage.multiGet([
+          'drinksJsonLastMod',
+          'ingredientsJsonLastMod',
+        ]);
+
+        let updated = false;
+        if (!localDrinksMod[1] || localDrinksMod[1] !== remoteDrinksMod) {
+          const res = await fetch(drinksUrl.url);
+          const newDrinks = await res.text();
+          await AsyncStorage.setItem('drinksJson', newDrinks);
+          await AsyncStorage.setItem('drinksJsonLastMod', remoteDrinksMod || '');
+          setDrinks(prev => {
+            const customs = prev.filter(d => d.isCustom);
+            return [...JSON.parse(newDrinks), ...customs];
+          });
+          updated = true;
+        }
+        if (!localIngMod[1] || localIngMod[1] !== remoteIngMod) {
+          const res = await fetch(ingUrl.url);
+          const newIngs = await res.text();
+          await AsyncStorage.setItem('ingredientsJson', newIngs);
+          await AsyncStorage.setItem('ingredientsJsonLastMod', remoteIngMod || '');
+          setAllIngredients(JSON.parse(newIngs));
+          updated = true;
+        }
+        if (updated) setLoading(false); // ensure spinner is hidden if update was slow
       } catch (e) {
-        console.warn('Cache read error', e);
+        console.warn('Cache read/update error', e);
       }
     })();
   }, []);

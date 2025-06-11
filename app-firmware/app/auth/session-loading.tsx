@@ -34,6 +34,7 @@ import { getUrl }           from 'aws-amplify/storage';
 import AsyncStorage         from '@react-native-async-storage/async-storage';
 import config               from '../../src/amplifyconfiguration.json';
 import { Asset }            from 'expo-asset';
+import * as FileSystem      from 'expo-file-system';
 import { generateClient }   from 'aws-amplify/api';
 import { listEvents }       from '../../src/graphql/queries';
 import {
@@ -192,12 +193,7 @@ export default function SessionLoading(): ReactElement {
           }
           setStatus('Loading cached images…');
           const drinks = drinksJson[1] ? JSON.parse(drinksJson[1]) : [];
-          for (const d of drinks) {
-            if (d.image) {
-              try { await Image.prefetch(d.image); } catch {}
-            }
-          }
-          bump(0.55);
+          await cacheDrinkImagesToDisk(drinks, bump, 0.45, 0.55);
         } catch {}
         // finish
         setPct(1);
@@ -227,22 +223,60 @@ export default function SessionLoading(): ReactElement {
         await attachIoTPolicy();
         bump(0.05);                                        // 22 %
 
-        /* 4️⃣ pull latest JSON */
-        setStatus('Downloading recipes…');
+        /* 4️⃣ pull latest JSON with update detection */
+        setStatus('Checking for menu updates…');
         const [drinksUrl, ingUrl] = await Promise.all([
           getUrl({ key: DRINKS_KEY }),
           getUrl({ key: INGREDIENTS_KEY }),
         ]);
-        const [drinksRes, ingRes] = await Promise.all([
-          fetch(drinksUrl.url),
-          fetch(ingUrl.url),
+
+        // Helper to get S3 Last-Modified header
+        async function getLastModified(url: string): Promise<string | null> {
+          try {
+            const res = await fetch(url, { method: 'HEAD' });
+            const lastMod = res.headers.get('Last-Modified');
+            return lastMod;
+          } catch {
+            return null;
+          }
+        }
+
+        // Get remote last-modified
+        const [drinksLastMod, ingLastMod] = await Promise.all([
+          getLastModified(drinksUrl.url.toString()),
+          getLastModified(ingUrl.url.toString()),
         ]);
-        const drinksJson = await drinksRes.text();
-        const ingJson    = await ingRes.text();
-        await AsyncStorage.multiSet([
-          ['drinksJson',      drinksJson],
-          ['ingredientsJson', ingJson ],
+
+        // Get local last-modified
+        const [localDrinksMod, localIngMod] = await AsyncStorage.multiGet([
+          'drinksJsonLastMod',
+          'ingredientsJsonLastMod',
         ]);
+
+        // Download if missing or changed
+        let drinksJson: string | null = null;
+        let ingJson: string | null = null;
+
+        if (!localDrinksMod[1] || localDrinksMod[1] !== drinksLastMod) {
+          setStatus('Updating drink menu…');
+          const res = await fetch(drinksUrl.url);
+          drinksJson = await res.text();
+          await AsyncStorage.setItem('drinksJson', drinksJson);
+          await AsyncStorage.setItem('drinksJsonLastMod', drinksLastMod || '');
+        } else {
+          drinksJson = await AsyncStorage.getItem('drinksJson');
+        }
+
+        if (!localIngMod[1] || localIngMod[1] !== ingLastMod) {
+          setStatus('Updating ingredients…');
+          const res = await fetch(ingUrl.url);
+          ingJson = await res.text();
+          await AsyncStorage.setItem('ingredientsJson', ingJson);
+          await AsyncStorage.setItem('ingredientsJsonLastMod', ingLastMod || '');
+        } else {
+          ingJson = await AsyncStorage.getItem('ingredientsJson');
+        }
+
         bump(0.13);                                        // 35 %
 
         /* 5️⃣ Fetch events data */
@@ -250,19 +284,50 @@ export default function SessionLoading(): ReactElement {
         await cacheEventsData(session);
         bump(0.10);                                        // 45 %
 
-        /* 6️⃣ pre-cache images */
+        /* 6️⃣ pre-cache images to disk */
         setStatus('Caching images…');
-        const drinks = JSON.parse(drinksJson) as { image: string }[];
-        const total  = drinks.length || 1;
-        let done     = 0;
-
-        for (const d of drinks) {
-          if (d.image) {
-            try { await Image.prefetch(d.image); } catch {}
-          }
-          done += 1;
-          setPct(0.45 + (done / total) * 0.55);
+        const drinks = drinksJson ? JSON.parse(drinksJson) as { image: string, id: number }[] : [];
+        await cacheDrinkImagesToDisk(drinks, setPct, 0.45, 0.55);
+/*
+ * Save all drink images to local file system for offline/fast access
+ * - drinks: array of { image: string, id: number }
+ * - setPct: function to update progress (0-1)
+ * - start: progress start (e.g. 0.45)
+ * - range: progress range (e.g. 0.55)
+ */
+async function cacheDrinkImagesToDisk(
+  drinks: { image: string, id: number }[],
+  setPct: (n: number) => void,
+  start: number = 0,
+  range: number = 1
+) {
+  const total = drinks.length || 1;
+  let done = 0;
+  for (const d of drinks) {
+    if (d.image) {
+      try {
+        const localUri = getLocalDrinkImagePath(d.id, d.image);
+        const fileInfo = await FileSystem.getInfoAsync(localUri);
+        if (!fileInfo.exists) {
+          // Download and save
+          await FileSystem.makeDirectoryAsync(localUri.substring(0, localUri.lastIndexOf('/')), { intermediates: true });
+          await FileSystem.downloadAsync(d.image, localUri);
         }
+      } catch (e) {
+        // ignore individual failures
+      }
+    }
+    done += 1;
+    setPct(start + (done / total) * range);
+  }
+}
+
+// Helper to get local file path for a drink image
+function getLocalDrinkImagePath(drinkId: number, imageUrl: string) {
+  // Use drinkId and extension from imageUrl
+  const ext = imageUrl.split('.').pop()?.split('?')[0] || 'jpg';
+  return `${FileSystem.cacheDirectory || FileSystem.documentDirectory}drink-images/drink_${drinkId}.${ext}`;
+}
       } catch (err) {
         console.warn('session-loading:', err);
       } finally {
@@ -441,3 +506,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
 });
+function cacheDrinkImagesToDisk(drinks: any, bump: (f: number) => void, arg2: number, arg3: number) {
+  throw new Error('Function not implemented.');
+}
+
