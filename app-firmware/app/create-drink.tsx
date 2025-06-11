@@ -31,6 +31,7 @@ import { generateClient } from 'aws-amplify/api';
 import { createCustomRecipe, updateCustomRecipe } from '../src/graphql/mutations';
 import config from '../src/amplifyconfiguration.json';
 import { emit } from '../src/event-bus';
+import * as FileSystem from 'expo-file-system';
 
 // ---- Skia --------------------------------------------------
 import {
@@ -41,54 +42,6 @@ import { Skia } from '@shopify/react-native-skia';
 Amplify.configure(config);
 const client = generateClient();
 
-/* ═════════════  STATIC ASSETS  ═════════════ */
-const GLASS_COLOUR_ASSETS: any[][] = [
-  [ // rocks
-    require('../assets/images/glasses/rocks_white.png'),  // white
-    require('../assets/images/glasses/rocks_amber.png'),  // amber
-    require('../assets/images/glasses/rocks_red.png'),    // red
-    require('../assets/images/glasses/rocks_green.png'),  // green
-    require('../assets/images/glasses/rocks_blue.png'),   // blue
-  ],
-  [ // highball
-    require('../assets/images/glasses/highball_white.png'),
-    require('../assets/images/glasses/highball_amber.png'),
-    require('../assets/images/glasses/highball_red.png'),
-    require('../assets/images/glasses/highball_green.png'),
-    require('../assets/images/glasses/highball_blue.png'),
-  ],
-  [ // martini
-    require('../assets/images/glasses/martini_white.png'),
-    require('../assets/images/glasses/martini_amber.png'),
-    require('../assets/images/glasses/martini_red.png'),
-    require('../assets/images/glasses/martini_green.png'),
-    require('../assets/images/glasses/martini_blue.png'),
-  ],
-  [ // coupe
-    require('../assets/images/glasses/coupe_white.png'),
-    require('../assets/images/glasses/coupe_amber.png'),
-    require('../assets/images/glasses/coupe_red.png'),
-    require('../assets/images/glasses/coupe_green.png'),
-    require('../assets/images/glasses/coupe_blue.png'),
-  ],
-  [ // margarita
-    require('../assets/images/glasses/margarita_white.png'),
-    require('../assets/images/glasses/margarita_amber.png'),
-    require('../assets/images/glasses/margarita_red.png'),
-    require('../assets/images/glasses/margarita_green.png'),
-    require('../assets/images/glasses/margarita_blue.png'),
-  ],
-];
-
-const GLASS_PLACEHOLDERS = [
-  require('../assets/images/glasses/rocks.png'),
-  require('../assets/images/glasses/highball.png'),
-  require('../assets/images/glasses/martini.png'),
-  require('../assets/images/glasses/coupe.png'),
-  require('../assets/images/glasses/margarita.png'),
-];
-
-const PLACEHOLDER_IMAGE = require('../assets/images/glasses/rocks.png');
 // Update drink color names and values
 const DRINK_COLOURS = [
   '#FFFFFF', // white
@@ -97,6 +50,78 @@ const DRINK_COLOURS = [
   '#57c84d', // green
   '#1e90ff', // blue
 ];
+
+/* ═════════════  REMOTE ASSET KEYS  ═════════════ */
+// Matches files now sitting in “drinkMenu/drinkPictures/” on S3
+const GLASS_KEYS = [
+  [ // rocks
+    'drinkMenu/drinkPictures/rocks_white.png',
+    'drinkMenu/drinkPictures/rocks_amber.png',
+    'drinkMenu/drinkPictures/rocks_red.png',
+    'drinkMenu/drinkPictures/rocks_green.png',
+    'drinkMenu/drinkPictures/rocks_blue.png',
+  ],
+  [ // highball
+    'drinkMenu/drinkPictures/highball_white.png',
+    'drinkMenu/drinkPictures/highball_amber.png',
+    'drinkMenu/drinkPictures/highball_red.png',
+    'drinkMenu/drinkPictures/highball_green.png',
+    'drinkMenu/drinkPictures/highball_blue.png',
+  ],
+  [ // martini
+    'drinkMenu/drinkPictures/martini_white.png',
+    'drinkMenu/drinkPictures/martini_amber.png',
+    'drinkMenu/drinkPictures/martini_red.png',
+    'drinkMenu/drinkPictures/martini_green.png',
+    'drinkMenu/drinkPictures/martini_blue.png',
+  ],
+  [ // coupe
+    'drinkMenu/drinkPictures/coupe_white.png',
+    'drinkMenu/drinkPictures/coupe_amber.png',
+    'drinkMenu/drinkPictures/coupe_red.png',
+    'drinkMenu/drinkPictures/coupe_green.png',
+    'drinkMenu/drinkPictures/coupe_blue.png',
+  ],
+  [ // margarita
+    'drinkMenu/drinkPictures/margarita_white.png',
+    'drinkMenu/drinkPictures/margarita_amber.png',
+    'drinkMenu/drinkPictures/margarita_red.png',
+    'drinkMenu/drinkPictures/margarita_green.png',
+    'drinkMenu/drinkPictures/margarita_blue.png',
+  ],
+];
+
+const GLASS_PLACEHOLDER_KEYS = [
+  'drinkMenu/drinkPictures/rocks.png',
+  'drinkMenu/drinkPictures/highball.png',
+  'drinkMenu/drinkPictures/martini.png',
+  'drinkMenu/drinkPictures/coupe.png',
+  'drinkMenu/drinkPictures/margarita.png',
+];
+
+// Helper → signed URL or cached local file (see §2)
+async function getGlassUri(key: string): Promise<string> {
+  /* 1️⃣ check cache */
+  const filename = key.split('/').pop()!;
+  const localUri =
+    `${FileSystem.cacheDirectory || FileSystem.documentDirectory}glass/${filename}`;
+  try {
+    const info = await FileSystem.getInfoAsync(localUri);
+    if (info.exists) return localUri;
+  } catch {}
+
+  /* 2️⃣ download from S3 (first call gives signed URL) */
+  const { url } = await getUrl({ key });
+  try {
+    await FileSystem.makeDirectoryAsync(localUri.replace(filename, ''), {
+      intermediates: true,
+    });
+    await FileSystem.downloadAsync(url.toString(), localUri);
+    return localUri;
+  } catch {
+    return url.toString();   // fallback if download failed
+  }
+}
 
 /* ═════════════  TYPES  ═════════════ */
 interface Ingredient {
@@ -166,7 +191,20 @@ export default function CreateDrinkScreen() {
   const [existingImageUrl, setExistingImageUrl] = useState<string|null>(null);
 
   /* ----------- Skia images ----------- */
-  const baseImage   = useImage(GLASS_COLOUR_ASSETS[glassIdx][colourIdx]);
+  const [baseUri, setBaseUri] = useState<string | null>(null);
+  const baseImage = useImage(baseUri ?? '');
+  useEffect(() => {
+    getGlassUri(GLASS_KEYS[glassIdx][colourIdx]).then(setBaseUri);
+  }, [glassIdx, colourIdx]);
+
+  const [placeholderUris, setPlaceholderUris] = useState<string[]>(Array(5).fill(''));
+  useEffect(() => {
+    Promise.all(GLASS_PLACEHOLDER_KEYS.map(getGlassUri)).then(setPlaceholderUris);
+  }, []);
+
+  // Alias for glass/colour asset keys
+  const GLASS_COLOUR_ASSETS = GLASS_KEYS;
+
   const CANONICAL_KEYS: string[][] = GLASS_COLOUR_ASSETS.map((row, g) =>
     row.map((_, c) => `drinkAssets/${['rocks','highball','martini','coupe','margarita'][g]}_${['white','amber','red','green','blue'][c]}.png`)
   );
@@ -292,7 +330,7 @@ export default function CreateDrinkScreen() {
 
 
     // Always export and upload the image based on the current glassIdx and colourIdx, even if it's the default
-    const imageKey = canonicalKey(glassIdx, colourIdx);
+    const imageKey = GLASS_KEYS[glassIdx][colourIdx];
     if (!imageKey) {
       alert('Could not save image');
       setSaving(false);
@@ -332,24 +370,6 @@ export default function CreateDrinkScreen() {
   // Update the close button handlers
   const handleClose = () => {
     navigation.goBack();
-  };
-
-  /* ═════════════  VOLUME BLUR  ═════════════ */
-  const handleVolumeBlur = (idx: number) => {
-    setRows(prev => prev.map((r, i) => {
-      if (i === idx) {
-        let newValue = r.volume;
-        
-        // Ensure value is within range
-        newValue = Math.max(0.25, Math.min(99.75, newValue));
-        
-        // Round to nearest 0.25
-        newValue = roundToQuarter(newValue);
-        
-        return { ...r, volume: newValue };
-      }
-      return r;
-    }));
   };
 
   // Animated ingredient item for drop-down animation (copied from device-settings.tsx)
@@ -438,7 +458,17 @@ const COLOUR_SWATCH_SELECTED = Math.floor(COLOUR_SWATCH * 0.7);
                   style={[styles.selectorThumb, glassIdx === idx && styles.selectedThumb, { width: SELECTOR_THUMB, height: SELECTOR_THUMB, marginRight: idx < GLASS_COUNT-1 ? 12 : 0 }]
                   }
                 >
-                  <Image source={GLASS_PLACEHOLDERS[idx]} style={[styles.thumbImage, { width: SELECTOR_THUMB * 0.8, height: SELECTOR_THUMB * 0.8 }]} />
+                  {placeholderUris[idx] !== '' && (
+                    <Image
+                      source={{ uri: placeholderUris[idx] }}
+                      style={[
+                        styles.thumbImage,
+                        { width: SELECTOR_THUMB * 0.8,
+                          height: SELECTOR_THUMB * 0.8 },
+                      ]}
+                      resizeMode="contain"
+                    />
+                  )}
                 </TouchableOpacity>
               ))}
             </View>
