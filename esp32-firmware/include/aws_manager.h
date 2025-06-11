@@ -2,7 +2,7 @@
 #define AWS_MANAGER_H
 
 /* ───────  SET YOUR BOT NUMBER HERE  ─────── */
-#define LIQUORBOT_ID       "111111"          //  ← change this and re‑flash
+#define LIQUORBOT_ID       "123456"
 /* ───────────────────────────────────────────*/
 
 #define AWS_IOT_ENDPOINT   "a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com"
