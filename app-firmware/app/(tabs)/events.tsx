@@ -151,7 +151,8 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
 
   /* ---------------- FETCH EVENTS ---------------- */
   useEffect(() => {
-    // don’t fetch if not signed in
+    let isMounted = true;
+
     if (!currentUser) {
       setEvents([]); // clear events if user logs out
       setLoading(false);
@@ -166,6 +167,8 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
           variables: { filter: eventFilter(currentUser) },
           authMode:  'userPool',
         }) as { data: any };
+
+        if (!isMounted) return;
 
         const refreshedEvents = data.listEvents.items.map((i: any): Event => ({
           id:          i.id,
@@ -212,14 +215,16 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
           // admins keep their existing pairing unchanged
         }
       } catch (err) {
-        // Only show alert if still signed in
-        if (currentUser) {
-          Alert.alert('Couldn\'t load events');
-        }
+        // Suppress load errors silently (no alert on error)
+        console.warn("Could not load events:", err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     })();
+
+    return () => {
+      isMounted = false;
+    };
   }, [currentUser, liquorbotId]);
 
   /* ---------------- STANDARD DRINKS & INGREDIENTS JSON ---------------- */
