@@ -155,7 +155,7 @@ export default function SignUp() {
 
       if (isSignUpComplete) {
         await signIn({ username, password });
-        router.replace('/(tabs)');
+        router.replace('/auth/session-loading');
         return;
       }
 

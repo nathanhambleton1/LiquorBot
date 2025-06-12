@@ -78,7 +78,7 @@ export default function ConfirmCode() {
     }
     try {
       await signIn({ username: username!, password: pwd });
-      router.replace('/(tabs)');
+      router.replace('/auth/session-loading');
     } catch {
       router.replace('/auth/sign-in');
     }
