@@ -80,7 +80,7 @@ const pubsub = new PubSub({
 export default function EventManager() {
   const router  = useRouter();
   const params  = useLocalSearchParams<{ join?: string }>();
-  const { liquorbotId, temporaryOverrideId, restorePreviousId, isConnected, isOverridden, setLiquorbotId } = useLiquorBot();
+  const { liquorbotId, temporaryOverrideId, restorePreviousId, isConnected, isOverridden, setLiquorbotId, hardReset, clearPrevLiquorbotId } = useLiquorBot();
 
   /* ---------------- AUTH ---------------- */
   const [currentUser, setCurrentUser] = useState<string | null>(null);
@@ -210,7 +210,8 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
             restorePreviousId();
           } else if (!isAdmin) {
             // guests still get a hard reset
-            if (liquorbotId !== '000') setLiquorbotId('000');
+            clearPrevLiquorbotId();
+            hardReset();
           }
           // admins keep their existing pairing unchanged
         }
@@ -655,52 +656,57 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      if (currentUser) {
-        const { data } = await client.graphql({
-          query: listEvents,
-          variables: { filter: eventFilter(currentUser) },
-          authMode:  'userPool',
-        }) as { data: any };
-        const refreshedEvents = data.listEvents.items.map((i: any): Event => ({
-          id:          i.id,
-          name:        i.name,
-          location:    i.location ?? undefined,
-          description: i.description ?? undefined,
-          startTime:   i.startTime,
-          endTime:     i.endTime,
-          liquorbotId: i.liquorbotId,
-          inviteCode:  i.inviteCode,
-          drinkIDs:    i.drinkIDs ?? [],
-          customRecipeIDs: i.customRecipeIDs ?? [],
-          owner:       i.owner,
-          guestOwners: i.guestOwners ?? [],
-        }));
-        setEvents(refreshedEvents);
+      if (!currentUser) return;
 
-        // --- Sync LiquorBotProvider with current event status ---
-        const now = new Date();
-        let activeEvent: Event | undefined = undefined;
-        for (const ev of refreshedEvents) {
-          const s = new Date(ev.startTime);
-          const e = new Date(ev.endTime);
-          const isCurrent = s <= now && e >= now;
-          const isOwner = ev.owner === currentUser;
-          const isGuest = ev.guestOwners?.includes?.(currentUser ?? '') ?? false;
-          if (isCurrent && (isOwner || isGuest)) {
-            activeEvent = ev;
-            break;
-          }
-        }
-        if (activeEvent) {
-          setLiquorbotId(String(activeEvent.liquorbotId));
-        } else {
-          setLiquorbotId('000');
+      /* --- refetch events --------------------------------------------------- */
+      const { data } = await client.graphql({
+        query: listEvents,
+        variables: { filter: eventFilter(currentUser) },
+        authMode:  'userPool',
+      }) as { data: any };
+
+      const refreshedEvents: Event[] = data.listEvents.items.map((i: any) => ({
+        id:          i.id,
+        name:        i.name,
+        location:    i.location ?? undefined,
+        description: i.description ?? undefined,
+        startTime:   i.startTime,
+        endTime:     i.endTime,
+        liquorbotId: i.liquorbotId,
+        inviteCode:  i.inviteCode,
+        drinkIDs:    i.drinkIDs ?? [],
+        customRecipeIDs: i.customRecipeIDs ?? [],
+        owner:       i.owner,
+        guestOwners: i.guestOwners ?? [],
+      }));
+      setEvents(refreshedEvents);
+
+      /* --- SAME sync logic as the mount-effect ------------------------------ */
+      const now = new Date();
+      let active: Event | undefined;
+      for (const ev of refreshedEvents) {
+        const s = new Date(ev.startTime);
+        const e = new Date(ev.endTime);
+        const youOwn   = ev.owner === currentUser;
+        const youGuest = ev.guestOwners?.includes?.(currentUser) ?? false;
+        if (s <= now && e >= now && (youOwn || youGuest)) { active = ev; break; }
+      }
+
+      if (active) {
+        const wantedId = String(active.liquorbotId);
+        if (liquorbotId !== wantedId) setLiquorbotId(wantedId);
+      } else {
+        /* no current event — handle each role separately */
+        if (isOverridden) {        
+          restorePreviousId();          // leave admin’s pairing alone
+        } else if (!isAdmin) {
+          // clear backup and drop the connection
+          clearPrevLiquorbotId();
+          hardReset();
         }
       }
-    } catch (err) {
-      if (currentUser) {
-        Alert.alert("Couldn't refresh events");
-      }
+    } catch {
+      Alert.alert("Couldn't refresh events");
     } finally {
       setRefreshing(false);
     }
