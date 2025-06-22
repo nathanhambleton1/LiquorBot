@@ -24,18 +24,33 @@ const LIST_USERNAMES = /* GraphQL */ `
 `;
 
 const isUsernameTaken = async (name: string): Promise<boolean> => {
-  const res: any = await client.graphql({
-    query: LIST_USERNAMES,
-    variables: { username: name },
-  });
-  if (res?.data?.listUserProfiles?.items?.length) return true;
+  try {
+    console.log('Checking username:', name);
+    const res: any = await client.graphql({
+      query: LIST_USERNAMES,
+      variables: { username: name },
+    });
+    console.log('GraphQL response:', res);
+    if (res?.data?.listUserProfiles?.items?.length) {
+      console.log('Username found in database:', name);
+      return true;
+    }
+  } catch (error) {
+    console.log('GraphQL query error:', error);
+    // If GraphQL fails, fall back to sign-in attempt
+  }
 
   try {
+    console.log('Attempting sign-in check for username:', name);
     await signIn({ username: name, password: dummyPwd });
+    console.log('Sign-in succeeded, username taken:', name);
     return true;
   } catch (e: any) {
+    console.log('Sign-in error:', e);
     const n = e?.name;
-    return n === 'NotAuthorizedException' || n === 'UserNotConfirmedException';
+    const isTaken = n === 'NotAuthorizedException' || n === 'UserNotConfirmedException';
+    console.log('Username taken based on error:', isTaken);
+    return isTaken;
   }
 };
 
@@ -100,7 +115,6 @@ export default function SignUp() {
   };
 
   const validateEmailFormat = (e: string) => emailRegex.test(e);
-
   const startUsernameCheck = (name: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setUsername(name);
@@ -108,27 +122,37 @@ export default function SignUp() {
     setUsernameSuggestion('');
 
     const trimmed = name.trim();
+    console.log('Starting username check for:', trimmed);
     if (!trimmed) { setIsCheckingUsername(false); setUsernameValid(null); return; }
 
     const isFormatOk = usernameRegex.test(trimmed);
     setUsernameValid(isFormatOk);
+    console.log('Username format valid:', isFormatOk);
     if (!isFormatOk) { setIsCheckingUsername(false); return; }
 
     debounceRef.current = setTimeout(async () => {
+      console.log('Debounce timeout reached, checking username:', trimmed);
       setIsCheckingUsername(true);
       try {
         const taken = await isUsernameTaken(trimmed);
+        console.log('Username taken result:', taken);
         setUsernameAvailable(!taken);
 
         if (taken) {
+          console.log('Finding suggestion for taken username:', trimmed);
           let suggestion = '';
           for (let i = 1; i <= 999; i++) {
             const candidate = `${trimmed}${i}`;
-            if (!(await isUsernameTaken(candidate))) { suggestion = candidate; break; }
+            if (!(await isUsernameTaken(candidate))) { 
+              suggestion = candidate; 
+              console.log('Found suggestion:', suggestion);
+              break; 
+            }
           }
           setUsernameSuggestion(suggestion);
         }
-      } catch {
+      } catch (error) {
+        console.log('Error in username check:', error);
         setUsernameAvailable(null);
         setUsernameSuggestion('');
       } finally {
