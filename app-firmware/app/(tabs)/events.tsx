@@ -24,6 +24,8 @@ import { Hub } from 'aws-amplify/utils';
 import { Amplify } from 'aws-amplify';
 import config from '../../src/amplifyconfiguration.json';
 import { PubSub } from '@aws-amplify/pubsub';
+import { ActionSheetIOS } from 'react-native';
+import * as Linking from 'expo-linking';
 
 const client = generateClient();
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -803,6 +805,39 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
                     setQrLink(link);
                     setQrModalVisible(true);
                     copyToClipboard(link, item.id);
+                  }}
+                  onLongPress={() => {
+                    const link = `${INVITE_BASE_URL}/join/${item.inviteCode}`;
+                    if (Platform.OS === 'ios') {
+                      ActionSheetIOS.showActionSheetWithOptions(
+                        {
+                          options: ['Cancel', 'Copy Link', 'Open Link', 'Show QR Code'],
+                          cancelButtonIndex: 0,
+                        },
+                        (buttonIndex) => {
+                          if (buttonIndex === 1) {
+                            Clipboard.setStringAsync(link);
+                          } else if (buttonIndex === 2) {
+                            Linking.openURL(link);
+                          } else if (buttonIndex === 3) {
+                            setQrLink(link);
+                            setQrModalVisible(true);
+                          }
+                        }
+                      );
+                    } else {
+                      Alert.alert(
+                        'Event Link',
+                        '',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Copy Link', onPress: () => Clipboard.setStringAsync(link) },
+                          { text: 'Open Link', onPress: () => Linking.openURL(link) },
+                          { text: 'Show QR Code', onPress: () => { setQrLink(link); setQrModalVisible(true); } },
+                        ],
+                        { cancelable: true }
+                      );
+                    }
                   }}
                   activeOpacity={0.8}
                 >

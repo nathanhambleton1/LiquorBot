@@ -1675,7 +1675,7 @@ const styles = StyleSheet.create({
   expandedContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   expandedTitleContainer: { flex: 1, marginTop: 50, marginRight: 10, alignSelf: 'flex-start' },
   expandeddetailContainer: { flex: 1, marginTop: 10, marginRight: 10 },
-  boxText: { color: '#DFDCD9', fontSize: 18, paddingLeft: 10, marginBottom: 0, textAlign: 'left', alignSelf: 'flex-start' },
+  boxText: { color: '#DFDCD9', fontSize: 18, paddingLeft: 10, marginBottom: 0, textAlign: 'left', alignSelf: 'flex-start', paddingRight: 10, },
   categoryText: { color: '#CE975E', fontSize: 14, marginBottom: 10, paddingLeft: 10, textAlign: 'left', alignSelf: 'flex-start' },
   quantityContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 30 },
   quantityButton: { backgroundColor: '#4f4f4f', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 5, alignItems: 'center' },

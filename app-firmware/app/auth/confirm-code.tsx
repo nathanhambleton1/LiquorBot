@@ -6,8 +6,8 @@
 // Author: Nathan Hambleton
 // Updated: Apr 23 2025
 // -----------------------------------------------------------------------------
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { confirmSignUp, signIn, resendSignUpCode } from 'aws-amplify/auth';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +25,10 @@ export default function ConfirmCode() {
   const [confirmationSuccess, setConfirmationSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [timer, setTimer] = useState(30); // 30 seconds industry standard
+  const [canResend, setCanResend] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const pwd = routePwd ?? '';
 
   // Resend logic with sign-up context check
@@ -52,10 +56,44 @@ export default function ConfirmCode() {
     handleResend();
   }, []);
 
+  // Timer logic
+  useEffect(() => {
+    if (confirmationSuccess) return;
+    setCanResend(false);
+    setTimer(30);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current!);
+          setCanResend(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [infoMessage, confirmationSuccess]);
+
+  const handleResendCode = async () => {
+    if (!username) return;
+    setCanResend(false);
+    setTimer(30);
+    setInfoMessage('');
+    setErrorMessage('');
+    try {
+      await resendSignUpCode({ username });
+      setInfoMessage('A new verification code has been sent to your email.');
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Failed to resend code.');
+    }
+  };
+
   /* ───────────────────────── handlers ───────────────────────── */
   const doConfirm = async () => {
     setErrorMessage(''); 
     setInfoMessage('');
+    setIsLoading(true);
     try {
       await confirmSignUp({ username: username!, confirmationCode });
       setConfirmationSuccess(true);
@@ -68,6 +106,8 @@ export default function ConfirmCode() {
         return;
       }
       setErrorMessage(e?.message ?? 'Confirmation error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -105,6 +145,10 @@ export default function ConfirmCode() {
           </>
         ) : (
           <>
+            {/* Explanatory text for user guidance */}
+            <Text style={styles.explanation}>
+              {`We've sent a 6-digit confirmation code. Please check your email inbox and enter the code below.`}
+            </Text>
             <Text style={styles.label}>Confirmation Code</Text>
             <TextInput
               value={confirmationCode}
@@ -118,8 +162,23 @@ export default function ConfirmCode() {
             {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
             {!!infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
 
-            <TouchableOpacity style={styles.button} onPress={doConfirm}>
-              <Text style={styles.buttonText}>Confirm</Text>
+            {/* Timer and resend code UI */}
+            {!canResend ? (
+              <Text style={styles.timerText}>
+                Request another code in {timer} second{timer !== 1 ? 's' : ''}.
+              </Text>
+            ) : (
+              <Text style={styles.resendText} onPress={handleResendCode}>
+                Didn't get a code? <Text style={styles.resendLink}>Tap here to resend.</Text>
+              </Text>
+            )}
+
+            <TouchableOpacity style={styles.button} onPress={doConfirm} disabled={isLoading}>
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#DFDCD9" />
+              ) : (
+                <Text style={styles.buttonText}>Confirm</Text>
+              )}
             </TouchableOpacity>
           </>
         )}
@@ -154,4 +213,8 @@ const styles = StyleSheet.create({
   signInContainer:       { marginTop: 60, alignItems: 'center' },
   signInText:            { fontSize: 14, color: '#fff' },
   signInLink:            { color: '#CE975E', fontWeight: 'bold' },
+  explanation:           { color: '#aaa', fontSize: 14, marginBottom: 10, marginTop: 8, textAlign: 'center' },
+  timerText:             { color: '#aaa', fontSize: 12, marginBottom: 10, textAlign: 'left' },
+  resendText:            { color: '#aaa', fontSize: 12, marginBottom: 10, textAlign: 'left' },
+  resendLink:            { color: '#CE975E', fontWeight: 'bold', textDecorationLine: 'underline' },
 });
