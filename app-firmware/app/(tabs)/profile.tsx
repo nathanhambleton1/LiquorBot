@@ -143,17 +143,12 @@ export default function ProfileScreen() {
         } catch {}
 
         // fetch or create UserProfile row
-        let res: any = await client.graphql({
-          query: getUserProfile,
-          variables: { id: sub },
-          authMode: 'userPool'
-        });
+        let res: any = await client.graphql({ query: getUserProfile, variables: { id: sub }});
         let profile = res?.data?.getUserProfile;
         if (!profile) {
           res = await client.graphql({
             query: createUserProfile,
-            variables: { input: { id: sub, username: '', bio: '', role: 'USER', profilePicture: '' } },
-            authMode: 'userPool'
+            variables: { input: { id: sub, username: '', bio: '', role: 'USER', profilePicture: '' } }
           });
           profile = res.data.createUserProfile;
         }
@@ -205,7 +200,6 @@ export default function ProfileScreen() {
       const res: any = await client.graphql({
         query: listLikedDrinks,
         variables: { filter: { userID: { eq: userProfileId } } },
-        authMode: 'userPool'
       });
       const likedIds = (res?.data?.listLikedDrinks?.items ?? []).map((i: LikedDrinkRecord) => i.drinkID);
       setLikedDrinks(drinks.filter((d) => likedIds.includes(d.id)));
@@ -251,7 +245,7 @@ export default function ProfileScreen() {
   const handleSaveProfile = async () => {
     try {
       const fullName = `${firstName} ${lastName}`.trim();
-      await client.graphql({ query: updateUserProfile, variables: { input: { id: userProfileId, username: fullName, bio } }, authMode: 'userPool' });
+      await client.graphql({ query: updateUserProfile, variables: { input: { id: userProfileId, username: fullName, bio } } });
       setUser((p) => ({ ...p, username: fullName }));
       closePopup();
     } catch (e) { console.log('updateUserProfile error', e); }
@@ -272,7 +266,7 @@ export default function ProfileScreen() {
 
       await uploadData({ path: s3Path, data: blob });
       const { url } = await getUrl({ path: s3Path });
-      await client.graphql({ query: updateUserProfile, variables: { input: { id: userProfileId, profilePicture: url.toString() } }, authMode: 'userPool' });
+      await client.graphql({ query: updateUserProfile, variables: { input: { id: userProfileId, profilePicture: url.toString() } } });
       setUser((p) => ({ ...p, profilePicture: url.toString() }));
     } catch (err) { console.error('profile pic upload error', err); }
   };
