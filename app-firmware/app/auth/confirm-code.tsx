@@ -12,7 +12,11 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { confirmSignUp, signIn, resendSignUpCode } from 'aws-amplify/auth';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function ConfirmCode() {
+interface ConfirmCodeProps {
+  modalMode?: boolean;
+}
+
+export default function ConfirmCode({ modalMode }: ConfirmCodeProps) {
   const router = useRouter();
   const { username, password: routePwd, fromSignup } = 
     useLocalSearchParams<{ username?: string; password?: string; fromSignup?: string }>();
