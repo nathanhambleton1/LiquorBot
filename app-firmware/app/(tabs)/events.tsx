@@ -162,14 +162,42 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
   useEffect(() => {
     let isMounted = true;
 
-    if (!currentUser) {
-      setEvents([]); // clear events if user logs out
-      setLoading(false);
-      return;
-    }
+    async function loadEvents() {
+      if (!currentUser) {
+        setEvents([]); // clear events if user logs out
+        setLoading(false);
+        return;
+      }
 
-    (async () => {
-      setLoading(true);
+      // 1. Try to load cached events from AsyncStorage (preloaded by session loading)
+      let cacheWasUsed = false;
+      try {
+        const cached = await AsyncStorage.getItem('cachedEvents');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            setEvents(parsed.map((i: any): Event => ({
+              id:          i.id,
+              name:        i.name,
+              location:    i.location ?? undefined,
+              description: i.description ?? undefined,
+              startTime:   i.startTime,
+              endTime:     i.endTime,
+              liquorbotId: i.liquorbotId,
+              inviteCode:  i.inviteCode,
+              drinkIDs:    i.drinkIDs ?? [],
+              customRecipeIDs: i.customRecipeIDs ?? [],
+              owner:       i.owner,
+              guestOwners: i.guestOwners ?? [],
+            })));
+            setLoading(false); // Instantly show events, no spinner
+            cacheWasUsed = true;
+          }
+        }
+      } catch {/* ignore */}
+
+      // 2. Always fetch fresh events in the background
+      if (!cacheWasUsed) setLoading(true); // Only show spinner if no cache
       try {
         const { data } = await client.graphql({
           query: listEvents,
@@ -194,7 +222,8 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
           guestOwners: i.guestOwners ?? [],
         }));
         setEvents(refreshedEvents);
-
+        // Optionally update cache
+        await AsyncStorage.setItem('cachedEvents', JSON.stringify(refreshedEvents));
         // --- Sync LiquorBotProvider with current event status ---
         const now = new Date();
         let activeEvent: Event | undefined = undefined;
@@ -230,8 +259,9 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
       } finally {
         if (isMounted) setLoading(false);
       }
-    })();
+    }
 
+    loadEvents();
     return () => {
       isMounted = false;
     };

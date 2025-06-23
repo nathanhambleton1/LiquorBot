@@ -31,6 +31,7 @@ import { DeepLinkContext } from '../components/deep-link-provider';
 import { eventsByCode }   from '../../src/graphql/queries';
 import { joinEvent }      from '../../src/graphql/mutations';
 import { AuthModalContext } from '../components/AuthModalContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /* ---------- AWS IoT SDK (static import) ---------- */
 import {
@@ -135,32 +136,76 @@ export default function Index() {
     })();
   }, [pendingCode, currentUser]);
 
-  /* ──────────────────────── fetch events ──────────────────────── */
-  const fetchEvents = useCallback(async () => {
-    let isMounted = true;
-    // Double-check currentUser before running
+  // Helper to check if signed in
+  const isSignedIn = !!currentUser;
+
+  // --- Wait for sessionLoaded flag before loading events ---
+  const [sessionLoaded, setSessionLoaded] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      // Wait until sessionLoaded is true in AsyncStorage
+      while (mounted) {
+        const flag = await AsyncStorage.getItem('sessionLoaded');
+        if (flag === 'true') {
+          setSessionLoaded(true);
+          break;
+        }
+        await new Promise(res => setTimeout(res, 50)); // poll every 50ms
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  // --- Load cached events first, then fetch fresh events ---
+  const loadCachedEvents = useCallback(async () => {
     if (!currentUser) {
       setUpcomingEvents([]);
       setEventsLoading(false);
       return;
     }
+    try {
+      const cached = await AsyncStorage.getItem('cachedEvents');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          const now = new Date();
+          const filtered = parsed
+            .map((item: any) => ({
+              id: item.id,
+              name: item.name,
+              startTime: item.startTime,
+              endTime: item.endTime,
+            }))
+            .filter((event: Event) => new Date(event.endTime) > now)
+            .sort((a: Event, b: Event) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+          setUpcomingEvents(filtered);
+          setEventsLoading(false);
+        }
+      }
+    } catch {/* ignore */}
+  }, [currentUser]);
 
+  // --- Fetch fresh events and update cache ---
+  const fetchAndCacheEvents = useCallback(async () => {
+    if (!currentUser) {
+      setUpcomingEvents([]);
+      setEventsLoading(false);
+      return;
+    }
     try {
       const { data } = await generateClient().graphql({
         query: listEvents,
         variables: {
           filter: {
             or: [
-              { owner:       { eq: currentUser } },
+              { owner: { eq: currentUser } },
               { guestOwners: { contains: currentUser } },
             ],
           },
         },
         authMode: 'userPool',
       });
-
-      if (!isMounted) return;
-
       const now = new Date();
       const filtered = data.listEvents.items
         .map((item: any) => ({
@@ -170,112 +215,81 @@ export default function Index() {
           endTime: item.endTime,
         }))
         .filter((event: Event) => new Date(event.endTime) > now)
-        .sort(
-          (a: Event, b: Event) =>
-            new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-        );
-
+        .sort((a: Event, b: Event) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
       setUpcomingEvents(filtered);
+      await AsyncStorage.setItem('cachedEvents', JSON.stringify(data.listEvents.items));
     } catch (error: any) {
-      // Only log error if user is still signed in and not a NoSignedUser error
       if (
         currentUser &&
         !(error?.name === 'NoSignedUser' || error?.message?.includes('No current user'))
       ) {
         console.error('Error fetching events:', error);
       }
-      // Otherwise, just clear events and loading
       setUpcomingEvents([]);
     } finally {
       setEventsLoading(false);
     }
-    return () => {
-      isMounted = false;
-    };
   }, [currentUser]);
 
-  // Run once currentUser is available
+  // --- Listen for auth events to clear or reload events/cache ---
   useEffect(() => {
+    const unsubscribe = Hub.listen('auth', async ({ payload }) => {
+      if (payload.event === 'signedOut') {
+        await AsyncStorage.multiRemove(['sessionLoaded', 'cachedEvents']);
+        setSessionLoaded(false);
+        setUpcomingEvents([]);
+        setEventsLoading(false);
+      } else if (['signedIn', 'tokenRefresh'].includes(payload.event)) {
+        setSessionLoaded(false); // force re-check
+        setUpcomingEvents([]);
+        setEventsLoading(true);
+        // Wait for sessionLoaded to be set again
+        let tries = 0;
+        while (tries < 100) { // up to 5s
+          const flag = await AsyncStorage.getItem('sessionLoaded');
+          if (flag === 'true') {
+            setSessionLoaded(true);
+            break;
+          }
+          await new Promise(res => setTimeout(res, 50));
+          tries++;
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // --- On every currentUser change, reload events robustly ---
+  useEffect(() => {
+    if (!sessionLoaded) return;
     if (currentUser && liquorbotId) {
-      setEventsLoading(true);          // start loader only when we actually fetch
-      fetchEvents();
+      setEventsLoading(true);
+      loadCachedEvents().then(() => {
+        fetchAndCacheEvents();
+      });
     } else {
       setUpcomingEvents([]);
-      setEventsLoading(false);         // ensure guests don't get stuck
+      setEventsLoading(false);
     }
-  }, [currentUser, liquorbotId, fetchEvents]);
+  }, [sessionLoaded, currentUser, liquorbotId, loadCachedEvents, fetchAndCacheEvents]);
 
-  // Add useFocusEffect to reload events when page is focused
+  // --- On focus, reload events (cache first, then fresh) ---
   useFocusEffect(
     useCallback(() => {
+      if (!sessionLoaded) return;
       if (currentUser && liquorbotId) {
         setEventsLoading(true);
-        fetchEvents();
+        loadCachedEvents().then(() => {
+          fetchAndCacheEvents();
+        });
       } else {
         setUpcomingEvents([]);
         setEventsLoading(false);
       }
-      // No cleanup needed
-    }, [currentUser, liquorbotId, fetchEvents])
+    }, [sessionLoaded, currentUser, liquorbotId, loadCachedEvents, fetchAndCacheEvents])
   );
 
-  /* ---------- preload background ---------- */
-  useEffect(() => {
-    (async () => {
-      try {
-        await Asset.loadAsync(require('@/assets/images/home-background.jpg'));
-      } catch (error) {
-        console.warn('Error preloading image:', error);
-      }
-    })();
-  }, []);
-
-  /* ---------- glow animation & IoT-policy auto-attach ---------- */
-  useEffect(() => {
-    /* glow */
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnimation, { toValue: 1.2, duration: 800, useNativeDriver: true }),
-        Animated.timing(glowAnimation, { toValue: 1,   duration: 800, useNativeDriver: true }),
-      ]),
-    ).start();
-
-    /* IoT attach (run once) */
-    if (!attemptedAttach.current) {
-      attemptedAttach.current = true;
-      (async () => {
-        try {
-          /* 1 · get Identity-ID + temporary AWS creds */
-          const { identityId, credentials } = await fetchAuthSession();
-          console.log('Cognito Identity ID:', identityId);
-
-          /* 2 · create IoT client signed with these creds */
-          const iot = new IoTClient({ region: REGION, credentials });
-
-          /* 3 · skip if policy already attached */
-          const { policies = [] } = await iot.send(
-            new ListAttachedPoliciesCommand({ target: identityId }),
-          );
-          if (policies.some(p => p.policyName === POLICY_NAME)) return;
-
-          /* 4 · attach the policy */
-          await iot.send(
-            new AttachPolicyCommand({ policyName: POLICY_NAME, target: identityId }),
-          );
-          console.log('✔ IoT policy attached to', identityId);
-
-          // Force credentials refresh and reconnect
-          await fetchAuthSession({ forceRefresh: true });
-          reconnect();
-        } catch (err: any) {
-          if (err?.name !== 'ResourceAlreadyExistsException') {
-            console.warn('⚠ IoT policy attach failed:', err);
-          }
-        }
-      })();
-    }
-  }, []); // run once
-
+  // --- After joining an event, update cache and reload events ---
   const confirmDeepLinkJoin = async () => {
     if (!pendingCode) return;
     setLinkLoading(true); setLinkErr(null);
@@ -286,15 +300,15 @@ export default function Index() {
         authMode:  'userPool',
       });
       setLinkModalVisible(false);
-      // you may navigate or refresh events here if you like
-      router.push('/events');          // optional UX
+      // Update cache and reload events
+      setEventsLoading(true);
+      await fetchAndCacheEvents();
+      await loadCachedEvents();
+      router.push('/events');
     } catch (e:any) {
       setLinkErr(e.errors?.[0]?.message ?? 'Join failed');
     } finally { setLinkLoading(false); }
   };
-
-  // Helper to check if signed in
-  const isSignedIn = !!currentUser;
 
   /* ───────────────────────── UI ───────────────────────── */
   return (

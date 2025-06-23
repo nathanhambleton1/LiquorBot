@@ -451,9 +451,21 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
           await AsyncStorage.setItem('cachedEvents', JSON.stringify(data?.listEvents?.items ?? []));
         }
       } catch {/* ignore */ }
+      bump(0.90);
+
+      // 7.5 ▸ preload calendar/index page events (ensure ready for home screen)
+      setStatus('Preloading events and calendar…');
+      try {
+        const cached = await AsyncStorage.getItem('cachedEvents');
+        if (cached) {
+          // Optionally parse to ensure valid JSON and ready for index page
+          JSON.parse(cached);
+        }
+      } catch {/* ignore */ }
       bump(0.95);
 
       // 8 ▸ done
+      await AsyncStorage.setItem('sessionLoaded', 'true');
       if (!cancel.current) {
         setPct(1);
         setStatus('Ready!');
