@@ -119,6 +119,7 @@ export default function AuthModal() {
         onMoveShouldSetPanResponder : (_, g) => Math.abs(g.dy) > 2,
 
         onPanResponderGrant: () => {
+          Keyboard.dismiss(); // Instantly close the keyboard when dragging starts
           setScrollEnabled(false);
           translateY.stopAnimation();
           translateY.extractOffset();
