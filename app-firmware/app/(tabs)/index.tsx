@@ -490,15 +490,31 @@ export default function Index() {
             {/* error */}
             {linkErr && <Text style={styles.err}>{linkErr}</Text>}
 
+            {/* already in event message */}
+            {linkEvent && upcomingEvents.some(e => e.id === linkEvent.id) && (
+              <Text style={[styles.err, { color: '#63d44a', marginBottom: 8 }]}>You’re already in this event.</Text>
+            )}
+
             {/* join button */}
             <TouchableOpacity
-              style={styles.joinGo}
+              style={[
+                styles.joinGo,
+                (!!linkEvent && upcomingEvents.some(e => e.id === linkEvent.id)) && {
+                  backgroundColor: '#444',
+                  opacity: 0.6,
+                }
+              ]}
               onPress={confirmDeepLinkJoin}
-              disabled={linkLoading}
+              disabled={!!linkLoading || !!(linkEvent && upcomingEvents.some(e => e.id === linkEvent.id))}
             >
               {linkLoading
                 ? <ActivityIndicator color="#141414"/>
-                : <Text style={styles.joinGoTxt}>Join Event</Text>}
+                : <Text style={[
+                    styles.joinGoTxt,
+                    (!!linkEvent && upcomingEvents.some(e => e.id === linkEvent.id)) && { color: '#bbb' }
+                  ]}>
+                    Join Event
+                  </Text>}
             </TouchableOpacity>
           </View>
         </View>

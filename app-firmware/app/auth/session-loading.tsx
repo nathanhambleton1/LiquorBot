@@ -67,6 +67,18 @@ async function toSigned(remoteOrKey: string): Promise<string> {
   }
 }
 
+async function clearImageCache() {
+  try {
+    const dir = `${FileSystem.cacheDirectory}drink-images`;
+    const info = await FileSystem.getInfoAsync(dir);
+    if (info.exists) {
+      await FileSystem.deleteAsync(dir, { idempotent: true });
+    }
+  } catch (err) {
+    console.warn('Failed to clear image cache:', err);
+  }
+}
+
 async function cacheImages(
   list: { id: number; image: string }[],
   bump: (frac: number) => void,
@@ -91,7 +103,10 @@ async function cacheImages(
         );
         await FileSystem.downloadAsync(signed, local);
       }
-    } catch {/* ignore individual failures */ }
+    } catch (err) {
+      // Log error for debugging, but continue
+      console.warn(`Failed to cache image for id ${d.id}:`, err);
+    }
 
     done++; bump(start + (done / total) * range);
   }
@@ -119,6 +134,8 @@ export default function SessionLoading(): ReactElement {
   const [firstRun, setFirstRun] = useState<boolean>(false); // true ⇢ no cached JSON yet
   const progress = useRef(new RNAnimated.Value(0)).current;
   const cancel   = useRef<boolean>(false);                  // abort flag
+  const retryCount = useRef<number>(0);                    // retry counter
+  const maxRetries = 5;
 
   const bump = (f: number) => setPct(p => Math.min(p + f, 1));
 
@@ -142,6 +159,7 @@ export default function SessionLoading(): ReactElement {
 
   /* restart bootstrap when connectivity returns or app resumes */
   useEffect(() => {
+    let retryTimeout: NodeJS.Timeout | null = null;
     const runBootstrap = () => {
       if (!online) return;              // hold until internet
       if (pct > 0 && pct < 0.99) return; // already running
@@ -149,18 +167,31 @@ export default function SessionLoading(): ReactElement {
       bootstrap().catch(err => {
         console.warn('bootstrap error →', err);
         setStatus('Unexpected error – retrying…');
+        if (retryCount.current < maxRetries) {
+          const delay = Math.min(2000 * Math.pow(2, retryCount.current), 20000); // exponential backoff, max 20s
+          retryCount.current += 1;
+          retryTimeout = setTimeout(runBootstrap, delay);
+        } else {
+          setStatus('Failed to load after several attempts. Please restart the app.');
+        }
       });
     };
 
     const appStateCb = (s: AppStateStatus) => s === 'active' && runBootstrap();
     const unsubApp   = AppState.addEventListener('change', appStateCb);
     runBootstrap();
-    return () => unsubApp.remove();
+    return () => {
+      unsubApp.remove();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, [online]);
 
   /* --------------- main bootstrap --------------- */
   async function bootstrap(): Promise<void> {
     cancel.current = false;
+
+    // Clear image cache on every bootstrap (new user/session)
+    await clearImageCache();
 
     /* 1 ▸ immediate offline gate on *first-ever* launch */
     const [haveDrinks, haveIngs] = await AsyncStorage.multiGet(['drinksJson', 'ingredientsJson']);
@@ -258,6 +289,7 @@ export default function SessionLoading(): ReactElement {
       if (!cancel.current) {
         setPct(1);
         setStatus('Ready!');                                         // visual polish
+        retryCount.current = 0; // reset retry count on success
         setTimeout(() => router.replace('/(tabs)'), 350);
       }
     } catch (err: any) {

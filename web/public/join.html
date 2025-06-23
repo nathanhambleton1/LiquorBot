@@ -112,16 +112,18 @@
     // Attempt to open the app
     window.location = 'myapp://join/' + code;
 
-    // Fallback to App Store after 2 s, **unless** page is hidden
+    // Fallback to App Store after 1200 ms, only if still visible
     var t = setTimeout(function () {
-      window.location = 'https://apps.apple.com/app/id6746461095';
-    }, 2000);
+      if (document.visibilityState === 'visible') {
+        window.location = 'https://apps.apple.com/app/id6746461095';
+      }
+    }, 1200);
 
     document.addEventListener('visibilitychange', function () {
       if (document.hidden) clearTimeout(t);   // app opened → cancel fallback
     });
   })();
-</script>
+  </script>
 </head>
 <body>
   <div class="lb-container">
