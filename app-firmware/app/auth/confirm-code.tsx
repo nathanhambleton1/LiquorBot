@@ -143,7 +143,7 @@ export default function ConfirmCode() {
           <>
             {/* Explanatory text for user guidance */}
             <Text style={styles.explanation}>
-              {`We've sent a 6-digit confirmation code. Please check your email inbox and enter the code below.`}
+              {`We've sent a 6-digit confirmation code to your email. Check your inbox and enter the code below.`}
             </Text>
             <Text style={styles.label}>Confirmation Code</Text>
             <TextInput
@@ -197,7 +197,7 @@ export default function ConfirmCode() {
 
 const styles = StyleSheet.create({
   background:        { flex: 1, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center' },
-  modalContainer:    { backgroundColor: '#141414', borderRadius: 18, padding: 18, width: '92%', maxWidth: 420, alignSelf: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 16 },
+  modalContainer:    { backgroundColor: '#141414', borderRadius: 18, padding: 12, alignSelf: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 16 },
   title:             { fontSize: 38, color: '#DFDCD9', marginBottom: 18, fontWeight: 'bold', textAlign: 'center' },
   label:             { fontSize: 16, color: '#aaa', marginTop: 10 },
   input:             { backgroundColor: '#181818', marginVertical: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, color: '#DFDCD9', borderColor: '#333', borderWidth: 1 },
