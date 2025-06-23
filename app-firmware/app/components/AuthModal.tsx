@@ -33,10 +33,10 @@ export default function AuthModal() {
 
   /* pick the current page */
   let Content: JSX.Element | null = null;
-  if      (screen === 'signIn'        ) Content = <SignIn modalMode />;
-  else if (screen === 'signUp'        ) Content = <SignUp modalMode />;
+  if      (screen === 'signIn'        ) Content = <SignIn  modalMode />;
+  else if (screen === 'signUp'        ) Content = <SignUp  modalMode />;
   else if (screen === 'forgotPassword') Content = <ForgotPassword modalMode />;
-  else if (screen === 'confirmCode'   ) Content = <ConfirmCode modalMode />;
+  else if (screen === 'confirmCode'   ) Content = <ConfirmCode    modalMode />;
 
   /* ───────── drag & animation state ───────── */
   const translateY    = useRef(new Animated.Value(MAX_SHEET_HEIGHT + 40)).current;
@@ -46,7 +46,7 @@ export default function AuthModal() {
   const [canClose, setCanClose] = useState(false);
   useEffect(() => {
     if (!visible) return;
-    setCanClose(false);                            // block taps right after opening
+    setCanClose(false);
     const t = setTimeout(() => setCanClose(true), 250);
     return () => clearTimeout(t);
   }, [visible]);
@@ -84,8 +84,9 @@ export default function AuthModal() {
         translateY.extractOffset();
       },
       onPanResponderMove           : (_, g) => {
-        // pull down as-is, push up with resistance
-        translateY.setValue(g.dy > 0 ? g.dy : g.dy / 3);
+        /* Clamp upward drags at 0 px so the sheet never reveals content below */
+        const dy = g.dy > 0 ? g.dy : 0;
+        translateY.setValue(dy);
       },
       onPanResponderRelease        : (_, g) => {
         translateY.flattenOffset();
@@ -136,7 +137,7 @@ export default function AuthModal() {
         {/* bottom-sheet */}
         <Animated.View
           {...pan.panHandlers}
-          onStartShouldSetResponderCapture={() => true} // prevent tap-through
+          onStartShouldSetResponderCapture={() => true}
           style={[
             styles.sheet,
             {
@@ -175,20 +176,20 @@ const styles = StyleSheet.create({
     backgroundColor     : '#141414',
     borderTopLeftRadius : 24,
     borderTopRightRadius: 24,
-    shadowColor : '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.18,
-    shadowRadius : 16,
-    elevation    : 16,
+    shadowColor   : '#000',
+    shadowOffset  : { width: 0, height: -4 },
+    shadowOpacity : 0.18,
+    shadowRadius  : 16,
+    elevation     : 16,
   },
 
   handleBox: { alignItems: 'center', height: 40 },
   handle   : {
-    width       : 48,
-    height      : 6,
-    borderRadius: 3,
+    width          : 48,
+    height         : 6,
+    borderRadius   : 3,
     backgroundColor: '#444',
-    marginVertical: 8,
+    marginVertical : 8,
   },
 
   content: { paddingHorizontal: 8, paddingBottom: 24 },
