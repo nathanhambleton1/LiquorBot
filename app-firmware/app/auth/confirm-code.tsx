@@ -11,7 +11,6 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator 
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { confirmSignUp, signIn, resendSignUpCode } from 'aws-amplify/auth';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { AuthModalContext } from '../components/AuthModalContext';
 
 const BG_TOP = '#4f4f4f';
@@ -130,8 +129,81 @@ export default function ConfirmCode({ modalMode }: { modalMode?: boolean }) {
   };
 
   /* ───────────────────────── UI ───────────────────────── */
+  if (modalMode) {
+    return (
+      <View style={styles.modalContainer}>
+        <Text style={[styles.title, { color: '#DFDCD9' }]}>Confirm Account</Text>
+
+        {confirmationSuccess ? (
+          <>
+            <Ionicons
+              name="checkmark-circle"
+              size={48}
+              color="#44e627"
+              style={{ alignSelf: 'center', marginVertical: 24 }}
+            />
+            <Text style={[styles.info, styles.confirmationMessage]}>{infoMessage}</Text>
+            <TouchableOpacity style={styles.button} onPress={doSignIn}>
+              <Text style={styles.buttonText}>Sign In</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            {/* Explanatory text for user guidance */}
+            <Text style={styles.explanation}>
+              {`We've sent a 6-digit confirmation code. Please check your email inbox and enter the code below.`}
+            </Text>
+            <Text style={styles.label}>Confirmation Code</Text>
+            <TextInput
+              value={confirmationCode}
+              onChangeText={setConfirmationCode}
+              style={styles.input}
+              keyboardType="number-pad"
+              placeholder="Enter 6-digit code"
+              placeholderTextColor="#666"
+            />
+
+            {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+            {!!infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
+
+            {/* Timer and resend code UI */}
+            {!canResend ? (
+              <Text style={styles.timerText}>
+                Request another code in {timer} second{timer !== 1 ? 's' : ''}.
+              </Text>
+            ) : (
+              <Text style={styles.resendText} onPress={handleResendCode}>
+                Didn't get a code? <Text style={styles.resendLink}>Tap here to resend.</Text>
+              </Text>
+            )}
+
+            <TouchableOpacity style={styles.button} onPress={doConfirm} disabled={isLoading}>
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#DFDCD9" />
+              ) : (
+                <Text style={styles.buttonText}>Confirm</Text>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* Back link */}
+        {!confirmationSuccess && (
+          <View style={styles.signInContainer}>
+            <Text style={styles.signInText}>
+              Need a different account?{' '}
+              <Text style={styles.signInLink} onPress={() => modalMode && authModal?.open ? authModal.open('signIn') : router.replace('/auth/sign-in')}>
+                Sign In
+              </Text>
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  }
+
   return (
-    <LinearGradient colors={[BG_TOP, BG_BTM]} style={styles.background}>
+    <View style={[styles.background, { backgroundColor: '#232323' }]}> 
       <View style={styles.container}>
         <Text style={styles.title}>Confirm Account</Text>
 
@@ -200,13 +272,14 @@ export default function ConfirmCode({ modalMode }: { modalMode?: boolean }) {
           </View>
         )}
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  background:            { flex: 1 },
+  background:            { flex: 1, backgroundColor: '#232323' },
   container:             { flex: 1, justifyContent: 'center', padding: 24 },
+  modalContainer:        { backgroundColor: '#181818', borderRadius: 18, padding: 12 },
   title:                 { fontSize: 42, color: '#fff', marginBottom: 24, fontWeight: 'bold' },
   label:                 { fontSize: 16, color: '#fff', marginTop: 10 },
   input:                 { backgroundColor: 'rgba(20, 20, 20, 0.5)', marginVertical: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, color: '#DFDCD9' },

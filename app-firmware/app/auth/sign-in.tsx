@@ -13,11 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import { signIn, getCurrentUser } from 'aws-amplify/auth';
 import { MaterialIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { AuthModalContext } from '../components/AuthModalContext';
-
-const BG_TOP = '#4f4f4f';
-const BG_BTM = '#000';
 
 export default function SignIn({ modalMode }: { modalMode?: boolean }) {
   const router = useRouter();
@@ -82,21 +78,31 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
 
   const Inner = (
     <View style={modalMode ? styles.modalContainer : styles.container}>
-      <Text style={styles.title}>Sign In</Text>
-      <Text style={styles.label}>Username</Text>
+      <Text style={[styles.title, modalMode && { color: '#DFDCD9' }]}>Sign In</Text>
+      <Text style={[styles.label, modalMode && { color: '#aaa' }]}>Username</Text>
       <TextInput
         value={username}
         onChangeText={setUsername}
-        style={styles.input}
+        style={[
+          styles.input,
+          modalMode && { backgroundColor: '#181818', color: '#DFDCD9', borderColor: '#333', borderWidth: 1 },
+        ]}
         autoCapitalize="none"
+        placeholder="Username"
+        placeholderTextColor="#666"
       />
-      <Text style={styles.label}>Password</Text>
+      <Text style={[styles.label, modalMode && { color: '#aaa' }]}>Password</Text>
       <View style={styles.inputContainer}>
         <TextInput
           value={password}
           onChangeText={setPassword}
-          style={styles.input}
+          style={[
+            styles.input,
+            modalMode && { backgroundColor: '#181818', color: '#DFDCD9', borderColor: '#333', borderWidth: 1 },
+          ]}
           secureTextEntry={!isPasswordVisible}
+          placeholder="Password"
+          placeholderTextColor="#666"
         />
         <TouchableOpacity
           onPress={() => setIsPwVis(!isPasswordVisible)}
@@ -105,7 +111,7 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
           <MaterialIcons
             name={isPasswordVisible ? 'visibility' : 'visibility-off'}
             size={24}
-            color="#4f4f4f"
+            color={modalMode ? '#aaa' : '#4f4f4f'}
           />
         </TouchableOpacity>
       </View>
@@ -113,16 +119,15 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
         onPress={() => modalMode && authModal?.open ? authModal.open('forgotPassword') : router.push('./forgot-password')}
         style={styles.forgotPassword}
       >
-        <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+        <Text style={[styles.forgotPasswordText, modalMode && { color: '#CE975E' }]}>Forgot Password?</Text>
       </TouchableOpacity>
       {!!error && <Text style={{ color: 'red', marginTop: 10 }}>{error}</Text>}
-      <TouchableOpacity style={styles.button} onPress={onSignInPress}>
-        <Text style={styles.buttonText}>Sign In</Text>
+      <TouchableOpacity style={[styles.button, modalMode && { backgroundColor: '#CE975E' }]} onPress={onSignInPress}>
+        <Text style={[styles.buttonText, modalMode && { color: '#232323' }]}>Sign In</Text>
       </TouchableOpacity>
       <View style={styles.signUpContainer}>
-        <Text style={styles.signUpText}>
-          Don’t have an account?{' '}
-          <Text style={styles.signUpLink} onPress={() => modalMode && authModal?.open ? authModal.open('signUp') : router.push('/auth/sign-up')}>
+        <Text style={[styles.signUpText, modalMode && { color: '#aaa' }]}>Don’t have an account?{' '}
+          <Text style={[styles.signUpLink, modalMode && { color: '#CE975E' }]} onPress={() => modalMode && authModal?.open ? authModal.open('signUp') : router.push('/auth/sign-up')}>
             Sign Up
           </Text>
         </Text>
@@ -131,7 +136,7 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
   );
 
   if (modalMode) {
-    return <>{Inner}</>;
+    return <View style={styles.modalContainer}>{Inner}</View>;
   }
 
   return (
@@ -139,16 +144,17 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <LinearGradient colors={[BG_TOP, BG_BTM]} style={{ flex: 1 }}>
+      <View style={styles.background}>
         {Inner}
-      </LinearGradient>
+      </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container:          { flex: 1, justifyContent: 'center', padding: 24 },
-  modalContainer:     { padding: 0, marginTop: 8, marginBottom: 8 },
+  background: { flex: 1, resizeMode: 'cover' },
+  container: { flex: 1, justifyContent: 'center', padding: 24 },
+  modalContainer: { backgroundColor: '#181818', borderRadius: 18, padding: 12 },
   title:              { fontSize: 48, color: '#fff', marginBottom: 24, fontWeight: 'bold' },
   label:              { fontSize: 16, color: '#fff', marginTop: 10 },
   input:              { backgroundColor: 'rgba(20,20,20,0.5)', marginVertical: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, color: '#DFDCD9' },
