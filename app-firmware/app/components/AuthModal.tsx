@@ -38,15 +38,15 @@ export default function AuthModal() {
   const insets = useSafeAreaInsets();
   const ctx    = useContext(AuthModalContext);
   if (!ctx) return null;
-  const { visible, screen, close } = ctx;
+  const { visible, screen, close, params } = ctx;
 
   /* which page? */
   const Content = (() => {
     switch (screen) {
-      case 'signIn'        : return <SignIn  modalMode />;
-      case 'signUp'        : return <SignUp  modalMode />;
-      case 'forgotPassword': return <ForgotPassword modalMode />;
-      case 'confirmCode'   : return <ConfirmCode    modalMode />;
+      case 'signIn'        : return <SignIn  modalMode {...params} />;
+      case 'signUp'        : return <SignUp  modalMode {...params} />;
+      case 'forgotPassword': return <ForgotPassword modalMode {...params} />;
+      case 'confirmCode'   : return <ConfirmCode    modalMode {...params} />;
       default              : return null;
     }
   })();

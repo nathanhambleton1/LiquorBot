@@ -152,12 +152,12 @@ export default function SignUp({ modalMode }: { modalMode?: boolean }) {
         options: { userAttributes: { email: email.trim(), birthdate: mdyToDash(birthday) } },
       });
       if (isSignUpComplete) {
-        if (modalMode && authModal?.open) authModal.open('confirmCode');
+        if (modalMode && authModal?.open) authModal.open('confirmCode', { username, password, fromSignup: '1' });
         else router.push({ pathname: './confirm-code', params: { username, password, fromSignup: '1' } });
         return;
       }
       if (nextStep?.signUpStep === 'CONFIRM_SIGN_UP') {
-        if (modalMode && authModal?.open) authModal.open('confirmCode');
+        if (modalMode && authModal?.open) authModal.open('confirmCode', { username, password, fromSignup: '1' });
         else router.push({ pathname: './confirm-code', params: { username, password, fromSignup: '1' } });
         return;
       }

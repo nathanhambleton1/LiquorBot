@@ -13,15 +13,20 @@ import { confirmSignUp, signIn, resendSignUpCode } from 'aws-amplify/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthModalContext } from '../components/AuthModalContext';
 
-interface ConfirmCodeProps {
+export interface ConfirmCodeProps {
   modalMode?: boolean;
+  username?: string;
+  password?: string;
+  fromSignup?: string;
 }
 
-export default function ConfirmCode({ modalMode }: ConfirmCodeProps) {
+export default function ConfirmCode({ modalMode, username: propUsername, password: propPassword, fromSignup: propFromSignup }: ConfirmCodeProps) {
   const router = useRouter();
   const authModal = React.useContext(AuthModalContext);
-  const { username, password: routePwd, fromSignup } = 
-    useLocalSearchParams<{ username?: string; password?: string; fromSignup?: string }>();
+  const routeParams = useLocalSearchParams<{ username?: string; password?: string; fromSignup?: string }>();
+  const username = propUsername ?? routeParams.username;
+  const pwd = propPassword ?? routeParams.password ?? '';
+  const fromSignup = propFromSignup ?? routeParams.fromSignup;
 
   const [confirmationCode, setConfirmationCode] = useState('');
   const [confirmationSuccess, setConfirmationSuccess] = useState(false);
@@ -31,7 +36,6 @@ export default function ConfirmCode({ modalMode }: ConfirmCodeProps) {
   const [timer, setTimer] = useState(30); // 30 seconds industry standard
   const [canResend, setCanResend] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const pwd = routePwd ?? '';
 
   // Resend logic with sign-up context check
   useEffect(() => {

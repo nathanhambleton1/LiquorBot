@@ -51,7 +51,7 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
       }
 
       if (nextStep?.signInStep === 'CONFIRM_SIGN_UP') {
-        if (modalMode && authModal?.open) authModal.open('confirmCode');
+        if (modalMode && authModal?.open) authModal.open('confirmCode', { username, password });
         else router.push({ pathname: './confirm-code', params: { username, password } });
         return;
       }
@@ -59,7 +59,7 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
       setError('Additional authentication required (not implemented yet).');
     } catch (e: any) {
       if (e?.code === 'UserNotConfirmedException') {
-        if (modalMode && authModal?.open) authModal.open('confirmCode');
+        if (modalMode && authModal?.open) authModal.open('confirmCode', { username, password });
         else router.push({ pathname: './confirm-code', params: { username, password } });
         return;
       }

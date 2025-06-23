@@ -5,7 +5,8 @@ export type AuthScreen = 'signIn' | 'signUp' | 'forgotPassword' | 'confirmCode';
 interface AuthModalContextType {
   visible: boolean;
   screen: AuthScreen;
-  open: (screen: AuthScreen) => void;
+  params: any;
+  open: (screen: AuthScreen, params?: any) => void;
   close: () => void;
 }
 
@@ -14,16 +15,18 @@ export const AuthModalContext = createContext<AuthModalContextType | undefined>(
 export function AuthModalProvider({ children }: { children: ReactNode }) {
   const [visible, setVisible] = useState(false);
   const [screen, setScreen] = useState<AuthScreen>('signIn');
+  const [params, setParams] = useState<any>({});
 
-  const open = useCallback((screen: AuthScreen) => {
+  const open = useCallback((screen: AuthScreen, params?: any) => {
     setScreen(screen);
+    setParams(params || {});
     setVisible(true);
   }, []);
 
   const close = useCallback(() => setVisible(false), []);
 
   return (
-    <AuthModalContext.Provider value={{ visible, screen, open, close }}>
+    <AuthModalContext.Provider value={{ visible, screen, params, open, close }}>
       {children}
     </AuthModalContext.Provider>
   );
