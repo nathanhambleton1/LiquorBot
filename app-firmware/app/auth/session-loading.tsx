@@ -60,7 +60,10 @@ const getLocalPath = (id: number, remote: string) => {
 async function toSigned(remoteOrKey: string): Promise<string> {
   if (/^https?:/i.test(remoteOrKey)) return remoteOrKey;
   try {
-    const { url } = await getUrl({ key: remoteOrKey });
+    const { url } = await getUrl({
+      key: remoteOrKey,
+      options: { accessLevel: 'guest', expiresIn: 60 * 60 * 24 }, // 24 h
+    });
     return url.toString();
   } catch {
     return remoteOrKey; // fallback (will 404 if truly invalid)
@@ -190,8 +193,14 @@ export default function SessionLoading(): ReactElement {
   async function bootstrap(): Promise<void> {
     cancel.current = false;
 
-    // Clear image cache on every bootstrap (new user/session)
-    await clearImageCache();
+    /* only clear if we ever need to invalidate the cache
+       (e.g. bundle update or you bump IMG_CACHE_VER) */
+    const IMG_CACHE_VER = 1;                      // ↑ bump when assets change
+    const ver = await AsyncStorage.getItem('imgCacheVer');
+    if (parseInt(ver ?? '0', 10) < IMG_CACHE_VER) {
+      await clearImageCache();
+      await AsyncStorage.setItem('imgCacheVer', String(IMG_CACHE_VER));
+    }
 
     /* 1 ▸ immediate offline gate on *first-ever* launch */
     const [haveDrinks, haveIngs] = await AsyncStorage.multiGet(['drinksJson', 'ingredientsJson']);
@@ -306,20 +315,14 @@ export default function SessionLoading(): ReactElement {
       <Image source={LOGO} style={styles.logo} resizeMode="contain" />
       <Text style={styles.app}>{APP_NAME}</Text>
       <View style={styles.barWrap}>
-        <LinearGradient
-          colors={[COL_BAR, '#e0a56f']}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-          style={StyleSheet.absoluteFill}
-        />
+        <View style={StyleSheet.absoluteFill}/>  {/* grey background */}
         <RNAnimated.View
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              backgroundColor: COL_BAR_BG,
-              width: progress.interpolate({ inputRange:[0,1], outputRange:['0%','100%'] }),
-            },
-          ]}
-        />
+          style={{ width: progress.interpolate({ inputRange:[0,1], outputRange:['0%','100%'] }) }}
+        >
+          <LinearGradient /* gold fill */ colors={[COL_BAR, '#e0a56f']}
+                          start={{x:0,y:0}} end={{x:1,y:0}}
+                          style={StyleSheet.absoluteFill}/>
+        </RNAnimated.View>
       </View>
       <Text style={styles.percent}>{percent}%</Text>
       <Text style={styles.status}>
