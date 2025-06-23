@@ -103,12 +103,21 @@ export default function ConfirmCode({ modalMode, username: propUsername, passwor
     try {
       await confirmSignUp({ username: username!, confirmationCode });
       setConfirmationSuccess(true);
-      setInfoMessage('Your account has been confirmed!');
+      if (modalMode && authModal?.close) {
+        authModal.close();
+      } else {
+        router.replace('/auth/sign-in');
+      }
+      return;
     } catch (e: any) {
       if ((e?.code === 'NotAuthorizedException' || e?.name === 'NotAuthorizedException') &&
           /already.*confirmed/i.test(e?.message ?? '')) {
         setConfirmationSuccess(true);
-        setInfoMessage('Your account is already confirmed!');
+        if (modalMode && authModal?.close) {
+          authModal.close();
+        } else {
+          router.replace('/auth/sign-in');
+        }
         return;
       }
       setErrorMessage(e?.message ?? 'Confirmation error');
@@ -140,20 +149,8 @@ export default function ConfirmCode({ modalMode, username: propUsername, passwor
       <View style={styles.modalContainer}>
         <Text style={styles.title}>Confirm Account</Text>
 
-        {confirmationSuccess ? (
-          <>
-            <Ionicons
-              name="checkmark-circle"
-              size={48}
-              color="#44e627"
-              style={{ alignSelf: 'center', marginVertical: 24 }}
-            />
-            <Text style={[styles.info, styles.confirmationMessage]}>{infoMessage}</Text>
-            <TouchableOpacity style={styles.button} onPress={doSignIn}>
-              <Text style={styles.buttonText}>Sign In</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
+        {/* Only show form if not confirmed yet */}
+        {!confirmationSuccess && (
           <>
             {/* Explanatory text for user guidance */}
             <Text style={styles.explanation}>
