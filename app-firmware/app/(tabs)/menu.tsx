@@ -17,7 +17,7 @@
 // Author: Nathan Hambleton
 // Updated: May 28 2025 – redundant get‑config requests on screen focus
 // -----------------------------------------------------------------------------
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useContext, useMemo } from 'react';
 import {
   Text, View, StyleSheet, ScrollView, Image, TouchableOpacity,
   Dimensions, LayoutAnimation, Platform, UIManager, Animated,
@@ -46,6 +46,7 @@ import { getUrl }          from 'aws-amplify/storage';
 // LiquorBot context
 import { useLiquorBot } from '../components/liquorbot-provider';
 import * as Haptics from 'expo-haptics';
+import { AuthModalContext } from '../components/AuthModalContext';
 
 Amplify.configure(config);
 const client = generateClient();
@@ -835,6 +836,7 @@ function getGlassAndColourIdx(imageKey?: string | null): { glassIdx: number; col
 
 export default function MenuScreen() {
   const router = useRouter();
+  const authModal = useContext(AuthModalContext); // FIXED
   const scrollViewRef = useRef<ScrollView>(null);
   const { isConnected, slots, liquorbotId, isAdmin } = useLiquorBot();
   const isFocused = useIsFocused();
@@ -870,15 +872,19 @@ export default function MenuScreen() {
   /*                       NEW: sign-in prompt helper                    */
   /* ------------------------------------------------------------------ */
   const promptSignIn = useCallback(() => {
-    Alert.alert(
-      'Sign in required',
-      'Please sign in to view details and use this feature.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign In', onPress: () => router.push('../auth/sign-in') },
-      ],
-    );
-  }, [router]);
+    if (authModal?.open) {
+      authModal.open('signIn');
+    } else {
+      Alert.alert(
+        'Sign in required',
+        'Please sign in to view details and use this feature.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => router.push('../auth/sign-in') },
+        ],
+      );
+    }
+  }, [router, authModal]);
 
   /* ------------------------------------------------------------------ */
   /*                       NEW: guarded expand handler                  */
@@ -1241,7 +1247,21 @@ export default function MenuScreen() {
         setUserID(null);   // not signed in
       }
     })();
-  }, []);
+    // Listen for auth modal close to refresh user state
+    if (authModal) {
+      const unsub = authModal;
+      // Listen for modal close and re-check user
+      const interval = setInterval(async () => {
+        try {
+          const user = await getCurrentUser();
+          if (user?.username !== userID) setUserID(user?.username ?? null);
+        } catch {
+          setUserID(null);
+        }
+      }, 1200);
+      return () => clearInterval(interval);
+    }
+  }, [authModal]);
 
   /* -------------------- liked drinks ----------------------- */
   useEffect(() => {
