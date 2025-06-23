@@ -1,257 +1,306 @@
-// ────────────────────────────────── AuthModal.tsx ──────────────────────────────────
+// -----------------------------------------------------------------------------
+// File: confirm-code.tsx               (fully rewritten – drop-in replacement)
+// -----------------------------------------------------------------------------
+// Confirms the account, then shows ✅ & a Sign-In button.
+// • Always sends/ resends verification code on entry + on demand
+// • Resend link restarts 30-s timer; larger hit-area via Pressable
+// Author: Nathan Hambleton    Updated: Jun 23 2025
+// -----------------------------------------------------------------------------
 import React, {
-  useContext,
-  useRef,
-  useEffect,
   useState,
-  useMemo,
-  useCallback,
+  useEffect,
+  useRef,
+  useContext,
 } from 'react';
 import {
-  Modal,
   View,
+  Text,
+  TextInput,
+  TouchableOpacity,
   StyleSheet,
-  Platform,
+  ActivityIndicator,
   Pressable,
-  ScrollView,
-  Animated,
-  Dimensions,
-  PanResponder,
-  Easing,
-  Keyboard,                 // NEW
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-import { AuthModalContext } from './AuthModalContext';
-import SignIn         from '../auth/sign-in';
-import SignUp         from '../auth/sign-up';
-import ForgotPassword from '../auth/forgot-password';
-import ConfirmCode    from '../auth/confirm-code';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import {
+  confirmSignUp,
+  signIn,
+  resendSignUpCode,
+} from 'aws-amplify/auth';
+import { Ionicons } from '@expo/vector-icons';
+import { AuthModalContext } from '../components/AuthModalContext';
 
 /* ───────────────────────── constants ───────────────────────── */
-const { height: WINDOW_HEIGHT } = Dimensions.get('window');
-const TARGET_HEIGHT  = WINDOW_HEIGHT * 0.9;   // 90 % of the screen
-const MAX_STRETCH    = WINDOW_HEIGHT * 0.97;  // upward stretch limit
-const SLIDE_DURATION = 280;                   // ms
+const RESEND_DELAY = 30;          // seconds
+const COLOR_PRIMARY = '#CE975E';
+const COLOR_TEXT    = '#DFDCD9';
 
-export default function AuthModal() {
-  const insets = useSafeAreaInsets();
-  const ctx    = useContext(AuthModalContext);
-  if (!ctx) return null;
-  const { visible, screen, close } = ctx;
+/* ───────────────────────── component ───────────────────────── */
+export default function ConfirmCode({ modalMode }: { modalMode?: boolean }) {
+  const router  = useRouter();
+  const { username, password: routePwd } =
+    useLocalSearchParams<{ username?: string; password?: string }>();
 
-  /* which page? */
-  const Content = (() => {
-    switch (screen) {
-      case 'signIn'        : return <SignIn  modalMode />;
-      case 'signUp'        : return <SignUp  modalMode />;
-      case 'forgotPassword': return <ForgotPassword modalMode />;
-      case 'confirmCode'   : return <ConfirmCode    modalMode />;
-      default              : return null;
+  /* ───────── local state ───────── */
+  const [confirmationCode, setConfirmationCode]   = useState('');
+  const [confirmationSuccess, setConfirmationSuccess] = useState(false);
+
+  const [errorMessage, setErrorMessage] = useState('');
+  const [infoMessage,  setInfoMessage]  = useState('');
+
+  const [isLoading, setIsLoading] = useState(false);
+
+  const [timer, setTimer]       = useState(RESEND_DELAY);
+  const [canResend, setCanResend] = useState(false);
+  const [resendCount, setResendCount] = useState(0);      // forces timer reset
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const pwd       = routePwd ?? '';
+  const authModal = useContext(AuthModalContext);
+
+  /* ───────── helper to (re)send verification code ───────── */
+  const sendVerificationCode = async () => {
+    if (!username) return;
+    try {
+      await resendSignUpCode({ username });
+      setInfoMessage('A verification code has been sent to your email.');
+      setErrorMessage('');
+      setResendCount((c) => c + 1);          // trigger timer reset
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to send code. Try again later.');
     }
-  })();
+  };
 
-  /* refs that must survive re-renders */
-  const translateY   = useRef(new Animated.Value(TARGET_HEIGHT + 40)).current;
-  const sheetHeight  = useRef(new Animated.Value(TARGET_HEIGHT)).current;
-  const maxHeightRef = useRef(TARGET_HEIGHT);
-
-  const [scrollEnabled, setScrollEnabled] = useState(true);
-  const [canClose,      setCanClose]      = useState(false);
-  const [kbdHeight,     setKbdHeight]     = useState(0);   // NEW
-
-  /* keyboard listeners (push content up) ────────────────────── */
+  /* ───────── initial code send ───────── */
   useEffect(() => {
-    const show = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => setKbdHeight(e.endCoordinates.height)
-    );
-    const hide = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => setKbdHeight(0)
-    );
-    return () => {
-      show.remove();
-      hide.remove();
-    };
+    sendVerificationCode();                  // unconditionally – Cognito throttles if needed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* update the live height every time the modal is about to show */
+  /* ───────── 30-s cooldown timer ───────── */
   useEffect(() => {
-    if (!visible) return;
+    if (confirmationSuccess) return;
 
-    maxHeightRef.current = TARGET_HEIGHT;
-    translateY.setValue(TARGET_HEIGHT + 40);
-    sheetHeight.setValue(TARGET_HEIGHT);
+    // reset & start countdown
+    setCanResend(false);
+    setTimer(RESEND_DELAY);
+    if (timerRef.current) clearInterval(timerRef.current);
 
-    Animated.timing(translateY, {
-      toValue        : 0,
-      duration       : SLIDE_DURATION,
-      easing         : Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [visible, translateY, sheetHeight]);
+    timerRef.current = setInterval(() => {
+      setTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current!);
+          setCanResend(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
-  /* gate backdrop taps for 250 ms after open */
-  useEffect(() => {
-    if (!visible) return;
-    setCanClose(false);
-    const t = setTimeout(() => setCanClose(true), 250);
-    return () => clearTimeout(t);
-  }, [visible]);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [resendCount, confirmationSuccess]);
 
-  /* slide-out helper */
-  const slideOutAndClose = useCallback(() => {
-    Animated.timing(translateY, {
-      toValue        : maxHeightRef.current + 40,
-      duration       : SLIDE_DURATION,
-      easing         : Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start(({ finished }) => finished && close());
-  }, [close, translateY]);
+  /* ───────── actions ───────── */
+  const handleConfirm = async () => {
+    setErrorMessage('');
+    setInfoMessage('');
+    setIsLoading(true);
+    try {
+      await confirmSignUp({ username: username!, confirmationCode });
+      setConfirmationSuccess(true);
+      setInfoMessage('Your account has been confirmed!');
+    } catch (e: any) {
+      if (
+        (e?.code === 'NotAuthorizedException' || e?.name === 'NotAuthorizedException') &&
+        /already.*confirmed/i.test(e?.message ?? '')
+      ) {
+        setConfirmationSuccess(true);
+        setInfoMessage('Your account is already confirmed!');
+      } else {
+        setErrorMessage(e?.message ?? 'Confirmation error');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  /* fresh PanResponder that always reads maxHeightRef.current */
-  const pan = useMemo(
-    () =>
-      PanResponder.create({
-        // start only on the top-handle (first 40 px)
-        onStartShouldSetPanResponder: (e) => e.nativeEvent.locationY < 40,
-        onMoveShouldSetPanResponder : (_, g) => Math.abs(g.dy) > 2,
+  const handleResend = async () => {
+    if (!canResend) return;          // guard against multiple taps
+    await sendVerificationCode();
+  };
 
-        onPanResponderGrant: () => {
-          Keyboard.dismiss(); // Instantly close the keyboard when dragging starts
-          setScrollEnabled(false);
-          translateY.stopAnimation();
-          translateY.extractOffset();
-          sheetHeight.stopAnimation();
-        },
+  const handleSignIn = async () => {
+    if (!pwd) {
+      modalMode && authModal?.open ? authModal.open('signIn') : router.replace('/auth/sign-in');
+      return;
+    }
+    try {
+      await signIn({ username: username!, password: pwd });
+      modalMode && authModal?.close ? authModal.close() : router.replace('/auth/session-loading');
+    } catch {
+      modalMode && authModal?.open ? authModal.open('signIn') : router.replace('/auth/sign-in');
+    }
+  };
 
-        onPanResponderMove: (_, g) => {
-          const base = maxHeightRef.current;
-          if (g.dy >= 0) {
-            // dragging down
-            translateY.setValue(g.dy);
-            sheetHeight.setValue(base);
-          } else {
-            // dragging up
-            translateY.setValue(0);
-            sheetHeight.setValue(Math.min(base - g.dy, MAX_STRETCH));
-          }
-        },
+  /* ───────── reusable chunks ───────── */
+  const ResendSection = () =>
+    canResend ? (
+      <Pressable onPress={handleResend}>
+        <Text style={styles.resendText}>
+          Didn&apos;t get a code? <Text style={styles.resendLink}>Tap here to resend.</Text>
+        </Text>
+      </Pressable>
+    ) : (
+      <Text style={styles.timerText}>
+        Request another code in {timer} second{timer !== 1 ? 's' : ''}.
+      </Text>
+    );
 
-        onPanResponderRelease: (_, g) => {
-          translateY.flattenOffset();
-          setScrollEnabled(true);
+  const ConfirmBody = () => (
+    <>
+      <Text style={styles.explanation}>
+        We&apos;ve sent a 6-digit confirmation code. Please check your e-mail and enter it below.
+      </Text>
 
-          const shouldClose = g.dy > 120 || g.vy > 1.2;
-          if (shouldClose) {
-            slideOutAndClose();
-            return;
-          }
+      <Text style={styles.label}>Confirmation Code</Text>
+      <TextInput
+        value={confirmationCode}
+        onChangeText={setConfirmationCode}
+        style={[styles.input, modalMode && { borderColor: '#333', borderWidth: 1 }]}
+        keyboardType="number-pad"
+        placeholder="Enter 6-digit code"
+        placeholderTextColor="#666"
+      />
 
-          Animated.parallel([
-            Animated.spring(translateY,  { toValue: 0, useNativeDriver: false }),
-            Animated.spring(sheetHeight, { toValue: maxHeightRef.current, useNativeDriver: false }),
-          ]).start();
-        },
+      {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+      {!!infoMessage  && <Text style={styles.info}>{infoMessage}</Text>}
 
-        onPanResponderTerminate: () => {
-          translateY.flattenOffset();
-          setScrollEnabled(true);
-          Animated.parallel([
-            Animated.spring(translateY,  { toValue: 0, useNativeDriver: false }),
-            Animated.spring(sheetHeight, { toValue: maxHeightRef.current, useNativeDriver: false }),
-          ]).start();
-        },
-      }),
-    [slideOutAndClose, translateY, sheetHeight]
+      <ResendSection />
+
+      <TouchableOpacity
+        style={styles.button}
+        onPress={handleConfirm}
+        disabled={isLoading}
+      >
+        {isLoading ? (
+          <ActivityIndicator size="small" color={COLOR_TEXT} />
+        ) : (
+          <Text style={styles.buttonText}>Confirm</Text>
+        )}
+      </TouchableOpacity>
+    </>
   );
 
-  /* backdrop opacity */
-  const overlayOpacity = translateY.interpolate({
-    inputRange : [0, WINDOW_HEIGHT * 0.7],
-    outputRange: [0.7, 0],
-    extrapolate: 'clamp',
-  });
+  const SuccessBody = () => (
+    <>
+      <Ionicons
+        name="checkmark-circle"
+        size={48}
+        color="#44e627"
+        style={{ alignSelf: 'center', marginVertical: 24 }}
+      />
+      <Text style={[styles.info, styles.confirmationMessage]}>{infoMessage}</Text>
+      <TouchableOpacity style={styles.button} onPress={handleSignIn}>
+        <Text style={styles.buttonText}>Sign In</Text>
+      </TouchableOpacity>
+    </>
+  );
 
-  /* ───────────────────────── render ───────────────────────── */
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={slideOutAndClose}
-    >
-      <View style={styles.container} pointerEvents="box-none">
-        {/* backdrop */}
-        <Pressable
-          disabled={!canClose}
-          onPress={slideOutAndClose}
-          style={StyleSheet.absoluteFill}
-        >
-          <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]} />
-        </Pressable>
+  /* ───────── render ───────── */
+  const Inner = () => (
+    confirmationSuccess ? <SuccessBody /> : <ConfirmBody />
+  );
 
-        {/* bottom sheet */}
-        <Animated.View
-          style={[
-            styles.sheet,
-            {
-              height       : sheetHeight,
-              paddingBottom: (Platform.OS === 'ios' ? 24 : 16) + insets.bottom, // ← no kbdHeight here
-              transform    : [{ translateY }],
-            },
-          ]}
-        >
-          {/* drag handle */}
-          <View style={styles.handleBox} {...pan.panHandlers}>
-            <View style={styles.handle} hitSlop={{ top: 8, bottom: 8 }} />
+  if (modalMode) {
+    return (
+      <View style={styles.modalContainer}>
+        <Text style={[styles.title, { color: COLOR_TEXT }]}>Confirm Account</Text>
+        <Inner />
+
+        {!confirmationSuccess && (
+          <View style={styles.signInContainer}>
+            <Text style={styles.signInText}>
+              Need a different account?{' '}
+              <Text
+                style={styles.signInLink}
+                onPress={() =>
+                  modalMode && authModal?.open
+                    ? authModal.open('signIn')
+                    : router.replace('/auth/sign-in')
+                }
+              >
+                Sign In
+              </Text>
+            </Text>
           </View>
-
-          {/* page body */}
-          <ScrollView
-            scrollEnabled={scrollEnabled}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={[
-              styles.content,
-              { paddingBottom: 24 + kbdHeight },         // ← add kbdHeight here
-            ]}
-          >
-            {Content}
-          </ScrollView>
-        </Animated.View>
+        )}
       </View>
-    </Modal>
+    );
+  }
+
+  /* ---- full-page version ---- */
+  return (
+    <View style={[styles.background, { backgroundColor: '#232323' }]}>
+      <View style={styles.container}>
+        <Text style={styles.title}>Confirm Account</Text>
+        <Inner />
+        {!confirmationSuccess && (
+          <View style={styles.signInContainer}>
+            <Text style={styles.signInText}>
+              Need a different account?{' '}
+              <Text
+                style={styles.signInLink}
+                onPress={() => router.replace('/auth/sign-in')}
+              >
+                Sign In
+              </Text>
+            </Text>
+          </View>
+        )}
+      </View>
+    </View>
   );
 }
 
 /* ───────────────────────── styles ───────────────────────── */
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'flex-end' },
-  overlay  : { flex: 1, backgroundColor: 'rgba(20,20,20,0.7)' },
+  /* layout */
+  background:      { flex: 1, backgroundColor: '#232323' },
+  container:       { flex: 1, justifyContent: 'center', padding: 24 },
+  modalContainer:  { backgroundColor: '#141414', borderRadius: 18, padding: 12 },
 
-  sheet: {
-    backgroundColor     : '#141414',
-    borderTopLeftRadius : 24,
-    borderTopRightRadius: 24,
-    overflow            : 'hidden',
-    shadowColor   : '#000',
-    shadowOffset  : { width: 0, height: -4 },
-    shadowOpacity : 0.18,
-    shadowRadius  : 16,
-    elevation     : 16,
+  /* text + UI */
+  title:           { fontSize: 42, color: '#fff', marginBottom: 24, fontWeight: 'bold' },
+  label:           { fontSize: 16, color: '#fff', marginTop: 10 },
+  input:           {
+    backgroundColor: 'rgba(20,20,20,0.5)',
+    marginVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    fontSize: 16,
+    color: COLOR_TEXT,
   },
-
-  handleBox: { alignItems: 'center', height: 48, paddingTop: 12 },
-  handle   : {
-    width          : 48,
-    height         : 6,
-    borderRadius   : 3,
-    backgroundColor: '#444',
-    marginVertical : 8,
+  button:          {
+    backgroundColor: COLOR_PRIMARY,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
   },
+  buttonText:      { color: COLOR_TEXT, fontSize: 18, fontWeight: 'bold' },
 
-  content: { paddingHorizontal: 8, paddingBottom: 24 },
+  error:           { color: 'red', marginTop: 8 },
+  info:            { color: COLOR_PRIMARY, marginTop: 8 },
+  confirmationMessage: { fontSize: 20, color: '#fff', textAlign: 'center', marginBottom: 16 },
+
+  signInContainer: { marginTop: 60, alignItems: 'center' },
+  signInText:      { fontSize: 14, color: '#fff' },
+  signInLink:      { color: COLOR_PRIMARY, fontWeight: 'bold' },
+
+  explanation:     { color: '#aaa', fontSize: 14, marginBottom: 10, marginTop: 8, textAlign: 'center' },
+
+  timerText:       { color: '#aaa', fontSize: 12, marginBottom: 10, textAlign: 'left' },
+  resendText:      { color: '#aaa', fontSize: 12, marginBottom: 10, textAlign: 'left' },
+  resendLink:      { color: COLOR_PRIMARY, fontWeight: 'bold' },
 });
