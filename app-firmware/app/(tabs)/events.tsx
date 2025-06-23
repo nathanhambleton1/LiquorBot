@@ -86,6 +86,8 @@ export default function EventManager() {
   const params  = useLocalSearchParams<{ join?: string }>();
   const { liquorbotId, temporaryOverrideId, restorePreviousId, isConnected, isOverridden, setLiquorbotId, hardReset, clearPrevLiquorbotId } = useLiquorBot();
 
+  const authModal = useContext(AuthModalContext);
+
   /* ---------------- AUTH ---------------- */
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [isAdmin,      setIsAdmin]    = useState(false);
@@ -955,7 +957,6 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
   /* ------------------- GUEST VIEW ------------------- */
   const signedIn = !!currentUser;
   if (!signedIn) {
-    const authModal = useContext(AuthModalContext);
     return (
       <View style={[styles.container, styles.centered]}>
         <Ionicons name="calendar-outline" size={96} color="#CE975E" />
