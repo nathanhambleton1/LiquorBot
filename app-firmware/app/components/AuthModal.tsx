@@ -22,7 +22,8 @@ import ConfirmCode    from '../auth/confirm-code';
 
 /* ───────────────────────── static & dynamic sizes ───────────────────────── */
 const { height: WINDOW_HEIGHT } = Dimensions.get('window');
-const MAX_SHEET_HEIGHT = WINDOW_HEIGHT * 0.80;      // 80 % of screen
+const MAX_SHEET_HEIGHT = WINDOW_HEIGHT * 0.80; // 80 % of the screen
+const SLIDE_DURATION   = 280;                  // ms — used for both in/out
 
 export default function AuthModal() {
   const insets = useSafeAreaInsets();
@@ -37,57 +38,69 @@ export default function AuthModal() {
   else if (screen === 'forgotPassword') Content = <ForgotPassword modalMode />;
   else if (screen === 'confirmCode'   ) Content = <ConfirmCode modalMode />;
 
-  /* ───────── drag state ───────── */
-  const translateY = useRef(new Animated.Value(0)).current;
+  /* ───────── drag & animation state ───────── */
+  const translateY    = useRef(new Animated.Value(MAX_SHEET_HEIGHT + 40)).current;
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
-  /* ───────── “backdrop clickable?” state ───────── */
+  /* ───────── backdrop-clickable gating ───────── */
   const [canClose, setCanClose] = useState(false);
   useEffect(() => {
     if (!visible) return;
-    setCanClose(false);                         // ① block taps right after opening
+    setCanClose(false);                            // block taps right after opening
     const t = setTimeout(() => setCanClose(true), 250);
     return () => clearTimeout(t);
   }, [visible]);
 
-  /* reset position every time the modal opens */
-  useEffect(() => { if (visible) translateY.setValue(0); }, [visible]);
+  /* ───────── slide IN whenever modal becomes visible ───────── */
+  useEffect(() => {
+    if (!visible) return;
+    translateY.setValue(MAX_SHEET_HEIGHT + 40);    // start below the screen
+    Animated.timing(translateY, {
+      toValue        : 0,
+      duration       : SLIDE_DURATION,
+      easing         : Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [visible, translateY]);
 
-  /* pan-handler */
+  /* helper: slide OUT, then unmount */
+  const slideOutAndClose = () => {
+    Animated.timing(translateY, {
+      toValue        : MAX_SHEET_HEIGHT + 40,
+      duration       : SLIDE_DURATION,
+      easing         : Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => finished && close());
+  };
+
+  /* ───────── pan-handler for drag-to-close ───────── */
   const pan = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder     : () => true,
-      onMoveShouldSetPanResponder      : (_, g) => Math.abs(g.dy) > 2,
-      onPanResponderGrant              : () => { setScrollEnabled(false); translateY.stopAnimation(); translateY.extractOffset(); },
-      onPanResponderMove               : (_, g) => translateY.setValue(g.dy > 0 ? g.dy : g.dy / 3),
-      onPanResponderRelease: (_, g) => {
+      onStartShouldSetPanResponder : () => true,
+      onMoveShouldSetPanResponder  : (_, g) => Math.abs(g.dy) > 2,
+      onPanResponderGrant          : () => {
+        setScrollEnabled(false);
+        translateY.stopAnimation();
+        translateY.extractOffset();
+      },
+      onPanResponderMove           : (_, g) => {
+        // pull down as-is, push up with resistance
+        translateY.setValue(g.dy > 0 ? g.dy : g.dy / 3);
+      },
+      onPanResponderRelease        : (_, g) => {
         translateY.flattenOffset();
         setScrollEnabled(true);
 
         const shouldClose = g.dy > 120 || g.vy > 1.2;
+        if (shouldClose) return slideOutAndClose();
 
-        if (shouldClose) {
-          /* quick slide just past the bottom edge (180 ms) */
-          Animated.timing(translateY, {
-            toValue        : MAX_SHEET_HEIGHT + 40,
-            duration       : 180,
-            easing         : Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }).start();              // animation runs natively → no JS jank
-
-          /* unmount the Modal right away */
-          close();                 // ✨ instant touch-through
-          return;
-        }
-
-        /* otherwise, bounce back to open */
         Animated.spring(translateY, {
           toValue        : 0,
           bounciness     : 4,
           useNativeDriver: true,
         }).start();
       },
-      onPanResponderTerminate          : () => {
+      onPanResponderTerminate      : () => {
         translateY.flattenOffset();
         setScrollEnabled(true);
         Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
@@ -104,12 +117,17 @@ export default function AuthModal() {
 
   /* ───────────────────────── render ───────────────────────── */
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={close}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"           // disable native laggy slide
+      onRequestClose={slideOutAndClose}
+    >
       <View style={styles.container} pointerEvents="box-none">
-        {/* backdrop (only closes when canClose === true) */}
+        {/* backdrop */}
         <Pressable
           disabled={!canClose}
-          onPress={close}
+          onPress={slideOutAndClose}
           style={StyleSheet.absoluteFill}
         >
           <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]} />
@@ -118,13 +136,13 @@ export default function AuthModal() {
         {/* bottom-sheet */}
         <Animated.View
           {...pan.panHandlers}
-          onStartShouldSetResponderCapture={() => true}   /* ② prevent tap-through */
+          onStartShouldSetResponderCapture={() => true} // prevent tap-through
           style={[
             styles.sheet,
             {
-              height        : MAX_SHEET_HEIGHT,
-              paddingBottom : (Platform.OS === 'ios' ? 24 : 16) + insets.bottom,
-              transform     : [{ translateY }],
+              height       : MAX_SHEET_HEIGHT,
+              paddingBottom: (Platform.OS === 'ios' ? 24 : 16) + insets.bottom,
+              transform    : [{ translateY }],
             },
           ]}
         >
@@ -154,7 +172,7 @@ const styles = StyleSheet.create({
   overlay  : { flex: 1, backgroundColor: 'rgba(20,20,20,0.7)' },
 
   sheet: {
-    backgroundColor   : '#141414',
+    backgroundColor     : '#141414',
     borderTopLeftRadius : 24,
     borderTopRightRadius: 24,
     shadowColor : '#000',
@@ -165,7 +183,13 @@ const styles = StyleSheet.create({
   },
 
   handleBox: { alignItems: 'center', height: 40 },
-  handle   : { width: 48, height: 6, borderRadius: 3, backgroundColor: '#444', marginVertical: 8 },
+  handle   : {
+    width       : 48,
+    height      : 6,
+    borderRadius: 3,
+    backgroundColor: '#444',
+    marginVertical: 8,
+  },
 
   content: { paddingHorizontal: 8, paddingBottom: 24 },
 });
