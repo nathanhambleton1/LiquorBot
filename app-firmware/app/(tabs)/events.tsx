@@ -8,8 +8,9 @@ import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
   ActivityIndicator, Alert, Platform, TextInput, ScrollView,
   Modal, Switch, Dimensions, LayoutAnimation, Image,
-  RefreshControl,
+  RefreshControl, Animated, Easing,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Ionicons                       from '@expo/vector-icons/Ionicons';
 import { generateClient }             from 'aws-amplify/api';
@@ -142,6 +143,9 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const [qrLink,   setQrLink]   = useState<string|null>(null);
   const [qrLoading,setQrLoading]= useState(false);
+
+  // Animation for invite link long press
+  const inviteScale = React.useRef(new Animated.Value(1)).current;
 
   /* ---------------- GUEST JOIN PARAM ---------------- */
   useEffect(() => {
@@ -793,59 +797,89 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
                     <Text style={styles.deviceId}>Device ID: {item.liquorbotId}</Text>
                   )}
                 </View>
-                <TouchableOpacity
-                  onPress={() => {
-                    const link = `${INVITE_BASE_URL}/join/${item.inviteCode}`;
-                    // Only set loading if the link is new
-                    if (qrLink !== link) {
-                      setQrLoading(true);
-                    } else {
-                      setQrLoading(false);
-                    }
-                    setQrLink(link);
-                    setQrModalVisible(true);
-                    copyToClipboard(link, item.id);
-                  }}
-                  onLongPress={() => {
-                    const link = `${INVITE_BASE_URL}/join/${item.inviteCode}`;
-                    if (Platform.OS === 'ios') {
-                      ActionSheetIOS.showActionSheetWithOptions(
-                        {
-                          options: ['Cancel', 'Copy Link', 'Open Link', 'Show QR Code'],
-                          cancelButtonIndex: 0,
-                        },
-                        (buttonIndex) => {
-                          if (buttonIndex === 1) {
-                            Clipboard.setStringAsync(link);
-                          } else if (buttonIndex === 2) {
-                            Linking.openURL(link);
-                          } else if (buttonIndex === 3) {
-                            setQrLink(link);
-                            setQrModalVisible(true);
-                          }
-                        }
-                      );
-                    } else {
-                      Alert.alert(
-                        'Event Link',
-                        '',
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          { text: 'Copy Link', onPress: () => Clipboard.setStringAsync(link) },
-                          { text: 'Open Link', onPress: () => Linking.openURL(link) },
-                          { text: 'Show QR Code', onPress: () => { setQrLink(link); setQrModalVisible(true); } },
-                        ],
-                        { cancelable: true }
-                      );
-                    }
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.inviteRow}>
-                    <Text style={styles.inviteLink}>{`${INVITE_BASE_URL}/join/${item.inviteCode}`}</Text>
-                    <Ionicons name="qr-code-outline" size={20} color="#CE975E" style={{marginLeft:8}} />
-                  </View>
-                </TouchableOpacity>
+                <Animated.View style={{ transform: [{ scale: inviteScale }] }}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      // Only handle quick tap: open QR modal, no animation/haptic
+                      const link = `${INVITE_BASE_URL}/join/${item.inviteCode}`;
+                      if (qrLink !== link) {
+                        setQrLoading(true);
+                      } else {
+                        setQrLoading(false);
+                      }
+                      setQrLink(link);
+                      setQrModalVisible(true);
+                      copyToClipboard(link, item.id);
+                    }}
+                    onLongPress={async () => {
+                      // Animate shrink, then haptic, then open menu
+                      if (Platform.OS === 'ios') {
+                        Animated.timing(inviteScale, {
+                          toValue: 0.92,
+                          duration: 300,
+                          useNativeDriver: true,
+                          easing: Easing.out(Easing.quad),
+                        }).start();
+                        // Wait a bit before haptic and menu
+                        setTimeout(async () => {
+                          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          const link = `${INVITE_BASE_URL}/join/${item.inviteCode}`;
+                          ActionSheetIOS.showActionSheetWithOptions(
+                            {
+                              options: ['Cancel', 'Copy Link', 'Open Link', 'Show QR Code'],
+                              cancelButtonIndex: 0,
+                            },
+                            (buttonIndex) => {
+                              if (buttonIndex === 1) {
+                                Clipboard.setStringAsync(link);
+                              } else if (buttonIndex === 2) {
+                                Linking.openURL(link);
+                              } else if (buttonIndex === 3) {
+                                setQrLink(link);
+                                setQrModalVisible(true);
+                              }
+                            }
+                          );
+                        }, 300); // match animation duration
+                      } else {
+                        // Android fallback: just show menu
+                        const link = `${INVITE_BASE_URL}/join/${item.inviteCode}`;
+                        Alert.alert(
+                          'Event Link',
+                          '',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Copy Link', onPress: () => Clipboard.setStringAsync(link) },
+                            { text: 'Open Link', onPress: () => Linking.openURL(link) },
+                            { text: 'Show QR Code', onPress: () => { setQrLink(link); setQrModalVisible(true); } },
+                          ],
+                          { cancelable: true }
+                        );
+                      }
+                    }}
+                    onPressIn={() => {
+                      // Do nothing on press in (no animation/haptic for tap)
+                    }}
+                    onPressOut={() => {
+                      // Always animate back to normal
+                      if (Platform.OS === 'ios') {
+                        Animated.timing(inviteScale, {
+                          toValue: 1,
+                          duration: 120,
+                          useNativeDriver: true,
+                          easing: Easing.out(Easing.quad),
+                        }).start();
+                      }
+                    }}
+                    delayLongPress={400}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.inviteRow}>
+                      <Text style={styles.inviteLink}>{`${INVITE_BASE_URL}/join/${item.inviteCode}`}</Text>
+                      <Ionicons name="qr-code-outline" size={20} color="#CE975E" style={{marginLeft:8}} />
+                    </View>
+                  </TouchableOpacity>
+                </Animated.View>
               </View>
             )}
           </View>

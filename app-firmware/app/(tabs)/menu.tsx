@@ -45,6 +45,7 @@ import { getUrl }          from 'aws-amplify/storage';
 
 // LiquorBot context
 import { useLiquorBot } from '../components/liquorbot-provider';
+import * as Haptics from 'expo-haptics';
 
 Amplify.configure(config);
 const client = generateClient();
@@ -338,7 +339,7 @@ function DrinkItem({
     isPouring: boolean;
     statusDone: 'success' | 'error' | null;
   }) {
-    const CIRCLE = 48;                 // Ø of the draggable circle
+    const CIRCLE = 48;
     const x        = useRef(new Animated.Value(0)).current;
     const progress = useRef(new Animated.Value(0)).current;
     const [rowW, setRowW] = useState(0);
@@ -432,6 +433,10 @@ function DrinkItem({
               /* threshold = 90 % */
               if (pos >= max * 0.9) {
                 setDone(true);
+                // Haptic feedback: longer success vibration when pour starts
+                if (Platform.OS === 'ios') {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                }
                 Animated.timing(x, {
                   toValue: 0,
                   duration: 350,
@@ -566,6 +571,10 @@ function DrinkItem({
           // -----------------------
 
           if (status === 'success') {
+            // Haptic feedback: success jingle when pour is done
+            if (Platform.OS === 'ios') {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
             triggerStatus('success', 'Success! Your drink was poured – enjoy.');
             setCountdown(null); // clear countdown on success
             try {
@@ -582,6 +591,10 @@ function DrinkItem({
                 ? ` – ${payload.error}`
                 : '';
             triggerStatus('error', `Pour Failed${reason}.`);
+            // Haptic feedback: long error vibration on pour failure
+            if (Platform.OS === 'ios') {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            }
             setLogging(false);
             clearTimeout(timeoutId);
           }
