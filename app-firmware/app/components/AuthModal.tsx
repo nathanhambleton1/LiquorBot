@@ -1,5 +1,12 @@
 // ────────────────────────────────── AuthModal.tsx ──────────────────────────────────
-import React, { useContext, useRef, useEffect, useState } from 'react';
+import React, {
+  useContext,
+  useRef,
+  useEffect,
+  useState,
+  useMemo,
+  useCallback,
+} from 'react';
 import {
   Modal,
   View,
@@ -11,6 +18,7 @@ import {
   Dimensions,
   PanResponder,
   Easing,
+  Keyboard,                 // NEW
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,9 +30,9 @@ import ConfirmCode    from '../auth/confirm-code';
 
 /* ───────────────────────── constants ───────────────────────── */
 const { height: WINDOW_HEIGHT } = Dimensions.get('window');
-const MAX_SHEET_HEIGHT = WINDOW_HEIGHT * 0.9;   // default height (90 % of screen)
-const MAX_STRETCH      = WINDOW_HEIGHT * 0.97;  // upward stretch limit
-const SLIDE_DURATION   = 280;                   // ms
+const TARGET_HEIGHT  = WINDOW_HEIGHT * 0.9;   // 90 % of the screen
+const MAX_STRETCH    = WINDOW_HEIGHT * 0.97;  // upward stretch limit
+const SLIDE_DURATION = 280;                   // ms
 
 export default function AuthModal() {
   const insets = useSafeAreaInsets();
@@ -32,19 +40,57 @@ export default function AuthModal() {
   if (!ctx) return null;
   const { visible, screen, close } = ctx;
 
-  /* pick which page to show */
-  let Content: JSX.Element | null = null;
-  if      (screen === 'signIn'        ) Content = <SignIn  modalMode />;
-  else if (screen === 'signUp'        ) Content = <SignUp  modalMode />;
-  else if (screen === 'forgotPassword') Content = <ForgotPassword modalMode />;
-  else if (screen === 'confirmCode'   ) Content = <ConfirmCode    modalMode />;
+  /* which page? */
+  const Content = (() => {
+    switch (screen) {
+      case 'signIn'        : return <SignIn  modalMode />;
+      case 'signUp'        : return <SignUp  modalMode />;
+      case 'forgotPassword': return <ForgotPassword modalMode />;
+      case 'confirmCode'   : return <ConfirmCode    modalMode />;
+      default              : return null;
+    }
+  })();
 
-  /* animated values – all JS-driven (useNativeDriver: false) */
-  const translateY  = useRef(new Animated.Value(MAX_SHEET_HEIGHT + 40)).current;
-  const sheetHeight = useRef(new Animated.Value(MAX_SHEET_HEIGHT)).current;
+  /* refs that must survive re-renders */
+  const translateY   = useRef(new Animated.Value(TARGET_HEIGHT + 40)).current;
+  const sheetHeight  = useRef(new Animated.Value(TARGET_HEIGHT)).current;
+  const maxHeightRef = useRef(TARGET_HEIGHT);
 
   const [scrollEnabled, setScrollEnabled] = useState(true);
-  const [canClose, setCanClose]           = useState(false);
+  const [canClose,      setCanClose]      = useState(false);
+  const [kbdHeight,     setKbdHeight]     = useState(0);   // NEW
+
+  /* keyboard listeners (push content up) ────────────────────── */
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => setKbdHeight(e.endCoordinates.height)
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKbdHeight(0)
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  /* update the live height every time the modal is about to show */
+  useEffect(() => {
+    if (!visible) return;
+
+    maxHeightRef.current = TARGET_HEIGHT;
+    translateY.setValue(TARGET_HEIGHT + 40);
+    sheetHeight.setValue(TARGET_HEIGHT);
+
+    Animated.timing(translateY, {
+      toValue        : 0,
+      duration       : SLIDE_DURATION,
+      easing         : Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [visible, translateY, sheetHeight]);
 
   /* gate backdrop taps for 250 ms after open */
   useEffect(() => {
@@ -54,78 +100,73 @@ export default function AuthModal() {
     return () => clearTimeout(t);
   }, [visible]);
 
-  /* slide IN when visible */
-  useEffect(() => {
-    if (!visible) return;
-
-    translateY.setValue(MAX_SHEET_HEIGHT + 40);
-    sheetHeight.setValue(MAX_SHEET_HEIGHT);
-
+  /* slide-out helper */
+  const slideOutAndClose = useCallback(() => {
     Animated.timing(translateY, {
-      toValue        : 0,
-      duration       : SLIDE_DURATION,
-      easing         : Easing.out(Easing.cubic),
-      useNativeDriver: false,   // JS-driven
-    }).start();
-  }, [visible, translateY, sheetHeight]);
-
-  const slideOutAndClose = () => {
-    Animated.timing(translateY, {
-      toValue        : MAX_SHEET_HEIGHT + 40,
+      toValue        : maxHeightRef.current + 40,
       duration       : SLIDE_DURATION,
       easing         : Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start(({ finished }) => finished && close());
-  };
+  }, [close, translateY]);
 
-  /* ───────── drag handler (handle-only) ───────── */
-  const pan = useRef(
-    PanResponder.create({
-      /* only start if the user touched the handle area (first 40 px) */
-      onStartShouldSetPanResponder: (evt, _g) => evt.nativeEvent.locationY < 40,
-      onMoveShouldSetPanResponder : (_, g)    => Math.abs(g.dy) > 2,
-      onPanResponderGrant         : () => {
-        setScrollEnabled(false);
-        translateY.stopAnimation();
-        translateY.extractOffset();
-        sheetHeight.stopAnimation();
-      },
-      onPanResponderMove          : (_, g) => {
-        if (g.dy >= 0) {
-          translateY.setValue(g.dy);
-          sheetHeight.setValue(MAX_SHEET_HEIGHT);
-        } else {
-          translateY.setValue(0);
-          sheetHeight.setValue(Math.min(MAX_SHEET_HEIGHT - g.dy, MAX_STRETCH));
-        }
-      },
-      onPanResponderRelease       : (_, g) => {
-        translateY.flattenOffset();
-        setScrollEnabled(true);
+  /* fresh PanResponder that always reads maxHeightRef.current */
+  const pan = useMemo(
+    () =>
+      PanResponder.create({
+        // start only on the top-handle (first 40 px)
+        onStartShouldSetPanResponder: (e) => e.nativeEvent.locationY < 40,
+        onMoveShouldSetPanResponder : (_, g) => Math.abs(g.dy) > 2,
 
-        const shouldClose = g.dy > 120 || g.vy > 1.2;
-        if (shouldClose) {
-          slideOutAndClose();
-          return;
-        }
+        onPanResponderGrant: () => {
+          setScrollEnabled(false);
+          translateY.stopAnimation();
+          translateY.extractOffset();
+          sheetHeight.stopAnimation();
+        },
 
-        Animated.parallel([
-          Animated.spring(translateY,  { toValue: 0, useNativeDriver: false }),
-          Animated.spring(sheetHeight, { toValue: MAX_SHEET_HEIGHT, useNativeDriver: false }),
-        ]).start();
-      },
-      onPanResponderTerminate     : () => {
-        translateY.flattenOffset();
-        setScrollEnabled(true);
-        Animated.parallel([
-          Animated.spring(translateY,  { toValue: 0, useNativeDriver: false }),
-          Animated.spring(sheetHeight, { toValue: MAX_SHEET_HEIGHT, useNativeDriver: false }),
-        ]).start();
-      },
-    })
-  ).current;
+        onPanResponderMove: (_, g) => {
+          const base = maxHeightRef.current;
+          if (g.dy >= 0) {
+            // dragging down
+            translateY.setValue(g.dy);
+            sheetHeight.setValue(base);
+          } else {
+            // dragging up
+            translateY.setValue(0);
+            sheetHeight.setValue(Math.min(base - g.dy, MAX_STRETCH));
+          }
+        },
 
-  /* dim-background opacity */
+        onPanResponderRelease: (_, g) => {
+          translateY.flattenOffset();
+          setScrollEnabled(true);
+
+          const shouldClose = g.dy > 120 || g.vy > 1.2;
+          if (shouldClose) {
+            slideOutAndClose();
+            return;
+          }
+
+          Animated.parallel([
+            Animated.spring(translateY,  { toValue: 0, useNativeDriver: false }),
+            Animated.spring(sheetHeight, { toValue: maxHeightRef.current, useNativeDriver: false }),
+          ]).start();
+        },
+
+        onPanResponderTerminate: () => {
+          translateY.flattenOffset();
+          setScrollEnabled(true);
+          Animated.parallel([
+            Animated.spring(translateY,  { toValue: 0, useNativeDriver: false }),
+            Animated.spring(sheetHeight, { toValue: maxHeightRef.current, useNativeDriver: false }),
+          ]).start();
+        },
+      }),
+    [slideOutAndClose, translateY, sheetHeight]
+  );
+
+  /* backdrop opacity */
   const overlayOpacity = translateY.interpolate({
     inputRange : [0, WINDOW_HEIGHT * 0.7],
     outputRange: [0.7, 0],
@@ -156,12 +197,12 @@ export default function AuthModal() {
             styles.sheet,
             {
               height       : sheetHeight,
-              paddingBottom: (Platform.OS === 'ios' ? 24 : 16) + insets.bottom,
+              paddingBottom: (Platform.OS === 'ios' ? 24 : 16) + insets.bottom + kbdHeight, // CHANGED
               transform    : [{ translateY }],
             },
           ]}
         >
-          {/* drag handle (pan handlers attached here) */}
+          {/* drag handle */}
           <View style={styles.handleBox} {...pan.panHandlers}>
             <View style={styles.handle} hitSlop={{ top: 8, bottom: 8 }} />
           </View>
@@ -170,6 +211,7 @@ export default function AuthModal() {
           <ScrollView
             scrollEnabled={scrollEnabled}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.content}
           >
