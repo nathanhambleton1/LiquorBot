@@ -279,7 +279,7 @@ export default function ConfirmCode({ modalMode }: { modalMode?: boolean }) {
 const styles = StyleSheet.create({
   background:            { flex: 1, backgroundColor: '#232323' },
   container:             { flex: 1, justifyContent: 'center', padding: 24 },
-  modalContainer:        { backgroundColor: '#181818', borderRadius: 18, padding: 12 },
+  modalContainer:        { backgroundColor: '#141414', borderRadius: 18, padding: 12 },
   title:                 { fontSize: 42, color: '#fff', marginBottom: 24, fontWeight: 'bold' },
   label:                 { fontSize: 16, color: '#fff', marginTop: 10 },
   input:                 { backgroundColor: 'rgba(20, 20, 20, 0.5)', marginVertical: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, color: '#DFDCD9' },

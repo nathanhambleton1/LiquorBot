@@ -275,7 +275,7 @@ export default function ForgotPassword({ modalMode }: { modalMode?: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  background:            { flex: 1, backgroundColor: '#232323' },
+  background:            { flex: 1, backgroundColor: '#141414' },
   container:             { flex: 1, padding: 24, justifyContent: 'center' },
   backArrow:             { position: 'absolute', top: 60, left: 20, zIndex: 10 },
   title:                 { fontSize: 36, color: '#fff', marginBottom: 24, fontWeight: 'bold', textAlign: 'center' },
