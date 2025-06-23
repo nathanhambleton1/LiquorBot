@@ -103,7 +103,15 @@ export default function ConfirmCode({ modalMode, username: propUsername, passwor
     try {
       await confirmSignUp({ username: username!, confirmationCode });
       setConfirmationSuccess(true);
-      if (modalMode && authModal?.close) {
+      // New logic: If modalMode and password available, sign in automatically
+      if (modalMode && pwd) {
+        try {
+          await signIn({ username: username!, password: pwd });
+          if (authModal?.close) authModal.close();
+        } catch (signInErr: any) {
+          setErrorMessage(signInErr?.message || 'Account confirmed, but sign-in failed.');
+        }
+      } else if (modalMode && authModal?.close) {
         authModal.close();
       } else {
         router.replace('/auth/sign-in');
@@ -113,7 +121,15 @@ export default function ConfirmCode({ modalMode, username: propUsername, passwor
       if ((e?.code === 'NotAuthorizedException' || e?.name === 'NotAuthorizedException') &&
           /already.*confirmed/i.test(e?.message ?? '')) {
         setConfirmationSuccess(true);
-        if (modalMode && authModal?.close) {
+        // Try to sign in if possible, otherwise close modal or redirect
+        if (modalMode && pwd) {
+          try {
+            await signIn({ username: username!, password: pwd });
+            if (authModal?.close) authModal.close();
+          } catch (signInErr: any) {
+            setErrorMessage(signInErr?.message || 'Account already confirmed, but sign-in failed.');
+          }
+        } else if (modalMode && authModal?.close) {
           authModal.close();
         } else {
           router.replace('/auth/sign-in');
