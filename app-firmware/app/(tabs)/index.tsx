@@ -30,6 +30,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { DeepLinkContext } from '../components/deep-link-provider';
 import { eventsByCode }   from '../../src/graphql/queries';
 import { joinEvent }      from '../../src/graphql/mutations';
+import { AuthModalContext } from '../components/AuthModalContext';
 
 /* ---------- AWS IoT SDK (static import) ---------- */
 import {
@@ -46,6 +47,7 @@ export default function Index() {
   const router        = useRouter();
   const navigation = useNavigation();
   const glowAnimation = useRef(new Animated.Value(1)).current;
+  const authModal = useContext(AuthModalContext);
 
   /* LiquorBot connectivity (UI only) */
   const { isConnected, liquorbotId, reconnect, isAdmin } = useLiquorBot();
@@ -441,7 +443,7 @@ export default function Index() {
             // Guest - Sign In Button
             <TouchableOpacity
               style={styles.smallTile}
-              onPress={() => router.push('/auth/sign-in')}
+              onPress={() => authModal?.open('signIn')}
             >
               <View style={styles.iconTextContainer}>
                 <View style={styles.iconContainer}>

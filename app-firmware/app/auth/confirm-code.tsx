@@ -6,17 +6,18 @@
 // Author: Nathan Hambleton
 // Updated: Apr 23 2025
 // -----------------------------------------------------------------------------
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { confirmSignUp, signIn, resendSignUpCode } from 'aws-amplify/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { AuthModalContext } from '../components/AuthModalContext';
 
 const BG_TOP = '#4f4f4f';
 const BG_BTM = '#000';
 
-export default function ConfirmCode() {
+export default function ConfirmCode({ modalMode }: { modalMode?: boolean }) {
   const router = useRouter();
   const { username, password: routePwd, fromSignup } = 
     useLocalSearchParams<{ username?: string; password?: string; fromSignup?: string }>();
@@ -30,6 +31,7 @@ export default function ConfirmCode() {
   const [canResend, setCanResend] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const pwd = routePwd ?? '';
+  const authModal = useContext(AuthModalContext);
 
   // Resend logic with sign-up context check
   useEffect(() => {
@@ -113,14 +115,17 @@ export default function ConfirmCode() {
 
   const doSignIn = async () => {
     if (!pwd) {
-      router.replace('/auth/sign-in');     // fall back if password missing
+      if (modalMode && authModal?.open) authModal.open('signIn');
+      else router.replace('/auth/sign-in');
       return;
     }
     try {
       await signIn({ username: username!, password: pwd });
-      router.replace('/auth/session-loading');
+      if (modalMode && authModal?.close) authModal.close();
+      else router.replace('/auth/session-loading');
     } catch {
-      router.replace('/auth/sign-in');
+      if (modalMode && authModal?.open) authModal.open('signIn');
+      else router.replace('/auth/sign-in');
     }
   };
 
@@ -188,7 +193,7 @@ export default function ConfirmCode() {
           <View style={styles.signInContainer}>
             <Text style={styles.signInText}>
               Need a different account?{' '}
-              <Text style={styles.signInLink} onPress={() => router.replace('/auth/sign-in')}>
+              <Text style={styles.signInLink} onPress={() => modalMode && authModal?.open ? authModal.open('signIn') : router.replace('/auth/sign-in')}>
                 Sign In
               </Text>
             </Text>

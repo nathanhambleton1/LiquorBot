@@ -5,7 +5,7 @@
 // Author: Nathan Hambleton
 // Updated: 27 May 2025
 // -----------------------------------------------------------------------------
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity,
   ActivityIndicator, KeyboardAvoidingView, Platform,
@@ -14,12 +14,14 @@ import { useRouter } from 'expo-router';
 import { signIn, getCurrentUser } from 'aws-amplify/auth';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { AuthModalContext } from '../components/AuthModalContext';
 
 const BG_TOP = '#4f4f4f';
 const BG_BTM = '#000';
 
-export default function SignIn() {
+export default function SignIn({ modalMode }: { modalMode?: boolean }) {
   const router = useRouter();
+  const authModal = useContext(AuthModalContext);
 
   const [username, setUsername]         = useState('');
   const [password, setPassword]         = useState('');
@@ -30,8 +32,12 @@ export default function SignIn() {
   /* ── already signed-in? jump straight to tabs ── */
   useEffect(() => {
     (async () => {
-      try { if (await getCurrentUser()) router.replace('/(tabs)'); }
-      catch {}
+      try {
+        if (await getCurrentUser()) {
+          if (modalMode && authModal?.close) authModal.close();
+          else router.replace('/(tabs)');
+        }
+      } catch {}
       finally { setIsLoading(false); }
     })();
   }, []);
@@ -43,19 +49,22 @@ export default function SignIn() {
       const { isSignedIn, nextStep } = await signIn({ username, password });
 
       if (isSignedIn) {
-        router.replace('/auth/session-loading');
+        if (modalMode && authModal?.close) authModal.close();
+        else router.replace('/auth/session-loading');
         return;
       }
 
       if (nextStep?.signInStep === 'CONFIRM_SIGN_UP') {
-        router.push({ pathname: './confirm-code', params: { username, password } });
+        if (modalMode && authModal?.open) authModal.open('confirmCode');
+        else router.push({ pathname: './confirm-code', params: { username, password } });
         return;
       }
 
       setError('Additional authentication required (not implemented yet).');
     } catch (e: any) {
       if (e?.code === 'UserNotConfirmedException') {
-        router.push({ pathname: './confirm-code', params: { username, password } });
+        if (modalMode && authModal?.open) authModal.open('confirmCode');
+        else router.push({ pathname: './confirm-code', params: { username, password } });
         return;
       }
       setError(e?.message || 'Something went wrong');
@@ -65,10 +74,64 @@ export default function SignIn() {
   /* ───────────────────────── UI ───────────────────────── */
   if (isLoading) {
     return (
-      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+      <View style={[modalMode ? styles.modalContainer : styles.container, { alignItems: 'center', justifyContent: 'center' }]}> 
         <ActivityIndicator size="large" color="#CE975E" />
       </View>
     );
+  }
+
+  const Inner = (
+    <View style={modalMode ? styles.modalContainer : styles.container}>
+      <Text style={styles.title}>Sign In</Text>
+      <Text style={styles.label}>Username</Text>
+      <TextInput
+        value={username}
+        onChangeText={setUsername}
+        style={styles.input}
+        autoCapitalize="none"
+      />
+      <Text style={styles.label}>Password</Text>
+      <View style={styles.inputContainer}>
+        <TextInput
+          value={password}
+          onChangeText={setPassword}
+          style={styles.input}
+          secureTextEntry={!isPasswordVisible}
+        />
+        <TouchableOpacity
+          onPress={() => setIsPwVis(!isPasswordVisible)}
+          style={styles.eyeIcon}
+        >
+          <MaterialIcons
+            name={isPasswordVisible ? 'visibility' : 'visibility-off'}
+            size={24}
+            color="#4f4f4f"
+          />
+        </TouchableOpacity>
+      </View>
+      <TouchableOpacity
+        onPress={() => modalMode && authModal?.open ? authModal.open('forgotPassword') : router.push('./forgot-password')}
+        style={styles.forgotPassword}
+      >
+        <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+      </TouchableOpacity>
+      {!!error && <Text style={{ color: 'red', marginTop: 10 }}>{error}</Text>}
+      <TouchableOpacity style={styles.button} onPress={onSignInPress}>
+        <Text style={styles.buttonText}>Sign In</Text>
+      </TouchableOpacity>
+      <View style={styles.signUpContainer}>
+        <Text style={styles.signUpText}>
+          Don’t have an account?{' '}
+          <Text style={styles.signUpLink} onPress={() => modalMode && authModal?.open ? authModal.open('signUp') : router.push('/auth/sign-up')}>
+            Sign Up
+          </Text>
+        </Text>
+      </View>
+    </View>
+  );
+
+  if (modalMode) {
+    return <>{Inner}</>;
   }
 
   return (
@@ -77,59 +140,7 @@ export default function SignIn() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <LinearGradient colors={[BG_TOP, BG_BTM]} style={{ flex: 1 }}>
-        <View style={styles.container}>
-          <Text style={styles.title}>Sign In</Text>
-
-          <Text style={styles.label}>Username</Text>
-          <TextInput
-            value={username}
-            onChangeText={setUsername}
-            style={styles.input}
-            autoCapitalize="none"
-          />
-
-          <Text style={styles.label}>Password</Text>
-          <View style={styles.inputContainer}>
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              style={styles.input}
-              secureTextEntry={!isPasswordVisible}
-            />
-            <TouchableOpacity
-              onPress={() => setIsPwVis(!isPasswordVisible)}
-              style={styles.eyeIcon}
-            >
-              <MaterialIcons
-                name={isPasswordVisible ? 'visibility' : 'visibility-off'}
-                size={24}
-                color="#4f4f4f"
-              />
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity
-            onPress={() => router.push('./forgot-password')}
-            style={styles.forgotPassword}
-          >
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-          </TouchableOpacity>
-
-          {!!error && <Text style={{ color: 'red', marginTop: 10 }}>{error}</Text>}
-
-          <TouchableOpacity style={styles.button} onPress={onSignInPress}>
-            <Text style={styles.buttonText}>Sign In</Text>
-          </TouchableOpacity>
-
-          <View style={styles.signUpContainer}>
-            <Text style={styles.signUpText}>
-              Don’t have an account?{' '}
-              <Text style={styles.signUpLink} onPress={() => router.push('/auth/sign-up')}>
-                Sign Up
-              </Text>
-            </Text>
-          </View>
-        </View>
+        {Inner}
       </LinearGradient>
     </KeyboardAvoidingView>
   );
@@ -137,6 +148,7 @@ export default function SignIn() {
 
 const styles = StyleSheet.create({
   container:          { flex: 1, justifyContent: 'center', padding: 24 },
+  modalContainer:     { padding: 0, marginTop: 8, marginBottom: 8 },
   title:              { fontSize: 48, color: '#fff', marginBottom: 24, fontWeight: 'bold' },
   label:              { fontSize: 16, color: '#fff', marginTop: 10 },
   input:              { backgroundColor: 'rgba(20,20,20,0.5)', marginVertical: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, color: '#DFDCD9' },

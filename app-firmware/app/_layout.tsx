@@ -27,6 +27,8 @@ Amplify.configure(config);
 
 // 👇 ADD THIS: import the LiquorBotProvider
 import { LiquorBotProvider } from './components/liquorbot-provider';
+import { AuthModalProvider } from './components/AuthModalContext';
+import AuthModal from './components/AuthModal';
 
 export default function RootLayout() {
   return (
@@ -34,13 +36,16 @@ export default function RootLayout() {
       <DeepLinkProvider>
         <LiquorBotProvider>
           <UnitsProvider>
-            <StatusBar style="light" translucent />
-            <Stack
-              screenOptions={{ headerShown: false }}
-            >
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="auth" />
-            </Stack>
+            <AuthModalProvider>
+              <StatusBar style="light" translucent />
+              <AuthModal />
+              <Stack
+                screenOptions={{ headerShown: false }}
+              >
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="auth" />
+              </Stack>
+            </AuthModalProvider>
           </UnitsProvider>
         </LiquorBotProvider>
       </DeepLinkProvider>

@@ -1,7 +1,7 @@
 // ----------------------------------------------------------------------------
 // File: profile.tsx  (main tab screen – keeps high‑level state & routing)
 // ----------------------------------------------------------------------------
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useContext } from 'react';
 import {
   Animated,
   Text,
@@ -25,6 +25,7 @@ import LikedDrinksPopup from '../components/profile/LikedDrinksPopup';
 import PourHistoryPopup   from '../components/profile/PourHistoryPopup';
 import HelpPopup from '../components/profile/HelpPopup';
 import SettingsPopup from '../components/profile/SettingsPopup';
+import { AuthModalContext } from '../components/AuthModalContext';
 
 // Amplify + AWS imports –‑‑‑ identical to your original ----------------------
 import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
@@ -319,13 +320,14 @@ export default function ProfileScreen() {
 
   /* ───────────────  GUEST VIEW  ─────────────── */
   if (!signedIn) {
+    const authModal = useContext(AuthModalContext);
     return (
       <View style={[styles.container, styles.centered]}>
         <Ionicons name="person-circle-outline" size={96} color="#CE975E" />
         <Text style={styles.guestTitle}>Sign in to view your profile</Text>
         <TouchableOpacity
           style={styles.signInBtn}
-          onPress={() => router.push('/auth/sign-in')}
+          onPress={() => authModal?.open('signIn')}
         >
           <Text style={styles.signInText}>Sign In</Text>
         </TouchableOpacity>

@@ -7,18 +7,20 @@
 // Author: Nathan Hambleton
 // Created:  March 1, 2025
 // -----------------------------------------------------------------------------
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { resetPassword, confirmResetPassword } from 'aws-amplify/auth';
 import { LinearGradient } from 'expo-linear-gradient';
+import { AuthModalContext } from '../components/AuthModalContext';
 
 const BG_TOP = '#4f4f4f';
 const BG_BTM = '#000';
 
-export default function ForgotPassword() {
+export default function ForgotPassword({ modalMode }: { modalMode?: boolean }) {
   const router = useRouter();
+  const authModal = useContext(AuthModalContext);
 
   // Step can be "REQUEST" (username only) or "CONFIRM" (code + new password).
   const [step, setStep] = useState<'REQUEST' | 'CONFIRM'>('REQUEST');
@@ -62,7 +64,8 @@ export default function ForgotPassword() {
       });
       setInfoMessage('Password successfully reset! Please sign in with your new password.');
       setTimeout(() => {
-        router.push('/auth/sign-in');
+        if (modalMode && authModal?.open) authModal.open('signIn');
+        else router.push('/auth/sign-in');
       }, 1500);
     } catch (error: any) {
       setErrorMessage(error?.message || 'Something went wrong');
@@ -73,10 +76,11 @@ export default function ForgotPassword() {
     <LinearGradient colors={[BG_TOP, BG_BTM]} style={styles.background}>
       <View style={styles.container}>
         {/* Back Arrow */}
-        <TouchableOpacity style={styles.backArrow} onPress={() => router.replace('/auth/sign-in')}>
-          <Ionicons name="chevron-back-outline" size={28} color="#fff" />
-        </TouchableOpacity>
-
+        {!modalMode && (
+          <TouchableOpacity style={styles.backArrow} onPress={() => router.replace('/auth/sign-in')}>
+            <Ionicons name="chevron-back-outline" size={28} color="#fff" />
+          </TouchableOpacity>
+        )}
         <Text style={styles.title}>Forgot Password</Text>
 
         {step === 'REQUEST' && (

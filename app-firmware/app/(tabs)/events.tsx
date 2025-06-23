@@ -3,7 +3,7 @@
 // Shows only the user’s own / joined events and displays a guest prompt
 // without breaking the Rules of Hooks.
 // -----------------------------------------------------------------------------
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useContext } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
   ActivityIndicator, Alert, Platform, TextInput, ScrollView,
@@ -27,6 +27,7 @@ import config from '../../src/amplifyconfiguration.json';
 import { PubSub } from '@aws-amplify/pubsub';
 import { ActionSheetIOS } from 'react-native';
 import * as Linking from 'expo-linking';
+import { AuthModalContext } from '../components/AuthModalContext';
 
 const client = generateClient();
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -952,17 +953,14 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
   }
 
   /* ------------------- GUEST VIEW ------------------- */
-  if (!currentUser) {
+  const signedIn = !!currentUser;
+  if (!signedIn) {
+    const authModal = useContext(AuthModalContext);
     return (
       <View style={[styles.container, styles.centered]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={28} color="#DFDCD9" />
-        </TouchableOpacity>
-
         <Ionicons name="calendar-outline" size={96} color="#CE975E" />
         <Text style={styles.guestTitle}>Sign in to view your events</Text>
-
-        <TouchableOpacity style={styles.signInBtn} onPress={() => router.push('/auth/sign-in')}>
+        <TouchableOpacity style={styles.signInBtn} onPress={() => authModal?.open('signIn')}>
           <Text style={styles.signInTxt}>Sign In</Text>
         </TouchableOpacity>
       </View>

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useContext } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
@@ -8,6 +8,7 @@ import { signUp, signIn } from 'aws-amplify/auth';
 import { generateClient } from 'aws-amplify/api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { AuthModalContext } from '../components/AuthModalContext';
 
 const client = generateClient();
 const dummyPwd = 'DummyPa$$word123!';
@@ -42,8 +43,9 @@ const isUsernameTaken = async (name: string): Promise<boolean> => {
 const BG_TOP = '#4f4f4f';
 const BG_BTM = '#000';
 
-export default function SignUp() {
+export default function SignUp({ modalMode }: { modalMode?: boolean }) {
   const router = useRouter();
+  const authModal = useContext(AuthModalContext);
 
   const [username, setUsername] = useState('');
   const [usernameValid, setUsernameValid] = useState<boolean | null>(null);
@@ -148,161 +150,152 @@ export default function SignUp() {
 
     try {
       const { isSignUpComplete, nextStep } = await signUp({
-        username,
+        username: username.trim(),
         password,
-        options: { userAttributes: { email, birthdate: mdyToDash(birthday) } },
+        options: { userAttributes: { email: email.trim(), birthdate: mdyToDash(birthday) } },
       });
-
       if (isSignUpComplete) {
-        await signIn({ username, password });
-        router.replace('/auth/session-loading');
+        if (modalMode && authModal?.open) authModal.open('confirmCode');
+        else router.push({ pathname: './confirm-code', params: { username, password, fromSignup: '1' } });
         return;
       }
-
       if (nextStep?.signUpStep === 'CONFIRM_SIGN_UP') {
-        router.replace({
-          pathname: './confirm-code',
-          params: { username, password, role: 'EventAttendee', fromSignup: '1' }
-        });
+        if (modalMode && authModal?.open) authModal.open('confirmCode');
+        else router.push({ pathname: './confirm-code', params: { username, password, fromSignup: '1' } });
+        return;
       }
+      setErrorMessage('Additional sign-up step required (not implemented).');
     } catch (e: any) {
-      setErrorMessage(e?.message ?? 'Sign‑up error');
+      setErrorMessage(e?.message || 'Something went wrong');
     }
   };
 
   return (
-    <View style={{ flex: 1 }}>
-      <LinearGradient colors={[BG_TOP, BG_BTM]} style={styles.background}>
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={0}
-        >
-          <ScrollView
-            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
-            keyboardShouldPersistTaps="handled"
-            style={{ flex: 1, backgroundColor: 'transparent' }}
-          >
-            <View style={[styles.container, { backgroundColor: 'transparent', minHeight: '100%' }]}> 
-              <Text style={styles.title}>Sign Up</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <LinearGradient colors={[BG_TOP, BG_BTM]} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.container}>
+          <Text style={styles.title}>Sign Up</Text>
 
-              {/* Username Input */}
-              <Text style={styles.label}>Username</Text>
-              <View style={{ position: 'relative' }}>
-                <TextInput
-                  value={username}
-                  onChangeText={startUsernameCheck}
-                  style={[
-                    styles.input,
-                    (usernameValid === false || usernameAvailable === false) && styles.inputError,
-                  ]}
-                  autoCapitalize="none"
-                />
-                {isCheckingUsername && (
-                  <ActivityIndicator
-                    size="small"
-                    color="#CE975E"
-                    style={{ position: 'absolute', right: 12, top: '50%', marginTop: -8 }}
-                  />
-                )}
-              </View>
-              {username && usernameValid === false && (
-                <Text style={styles.error}>Only letters, numbers, and underscores are allowed.</Text>
-              )}
-              {username && usernameValid && usernameAvailable === false && (
-                <Text style={styles.suggestion}>
-                  {usernameSuggestion
-                    ? `Username already taken – try "${usernameSuggestion}".`
-                    : 'Username already taken'}
-                </Text>
-              )}
-              {username && usernameValid && usernameAvailable === true && (
-                <Text style={[styles.suggestion, { color: 'green' }]}>Username available ✓</Text>
-              )}
+          {/* Username Input */}
+          <Text style={styles.label}>Username</Text>
+          <View style={{ position: 'relative' }}>
+            <TextInput
+              value={username}
+              onChangeText={startUsernameCheck}
+              style={[
+                styles.input,
+                (usernameValid === false || usernameAvailable === false) && styles.inputError,
+              ]}
+              autoCapitalize="none"
+            />
+            {isCheckingUsername && (
+              <ActivityIndicator
+                size="small"
+                color="#CE975E"
+                style={{ position: 'absolute', right: 12, top: '50%', marginTop: -8 }}
+              />
+            )}
+          </View>
+          {username && usernameValid === false && (
+            <Text style={styles.error}>Only letters, numbers, and underscores are allowed.</Text>
+          )}
+          {username && usernameValid && usernameAvailable === false && (
+            <Text style={styles.suggestion}>
+              {usernameSuggestion
+                ? `Username already taken – try "${usernameSuggestion}".`
+                : 'Username already taken'}
+            </Text>
+          )}
+          {username && usernameValid && usernameAvailable === true && (
+            <Text style={[styles.suggestion, { color: 'green' }]}>Username available ✓</Text>
+          )}
 
-              {/* Password Input */}
-              <Text style={styles.label}>Password</Text>
-              <View>
-                <TextInput
-                  value={password}
-                  onChangeText={handlePasswordChange}
-                  style={styles.input}
-                  secureTextEntry={!isPasswordVisible}
-                  onFocus={() => setIsPasswordFocused(true)}
-                  onBlur={() => setIsPasswordFocused(false)}
-                />
-                <TouchableOpacity style={styles.eyeIcon} onPress={() => setIsPasswordVisible(!isPasswordVisible)}>
-                  <Ionicons name={isPasswordVisible ? 'eye' : 'eye-off'} size={24} color="#4F4F4F" />
-                </TouchableOpacity>
-              </View>
-              {isPasswordFocused && (
-                <View style={{ marginBottom: 10 }}>
-                  {(['minLength', 'upper', 'lower', 'number', 'symbol'] as const).map(k => (
-                    <View key={k} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Ionicons name={passwordValidity[k] ? 'checkmark' : 'close'} size={12} color={passwordValidity[k] ? 'green' : 'red'} />
-                      <Text style={{ color: '#4f4f4f', marginLeft: 8, fontSize: 12 }}>
-                        {k === 'minLength' ? 'At least 8 characters' :
-                          k === 'upper' ? 'Contains uppercase' :
-                            k === 'lower' ? 'Contains lowercase' :
-                              k === 'number' ? 'Contains a number' :
-                                'Contains a special symbol'}
-                      </Text>
-                    </View>
-                  ))}
+          {/* Password Input */}
+          <Text style={styles.label}>Password</Text>
+          <View>
+            <TextInput
+              value={password}
+              onChangeText={handlePasswordChange}
+              style={styles.input}
+              secureTextEntry={!isPasswordVisible}
+              onFocus={() => setIsPasswordFocused(true)}
+              onBlur={() => setIsPasswordFocused(false)}
+            />
+            <TouchableOpacity style={styles.eyeIcon} onPress={() => setIsPasswordVisible(!isPasswordVisible)}>
+              <Ionicons name={isPasswordVisible ? 'eye' : 'eye-off'} size={24} color="#4F4F4F" />
+            </TouchableOpacity>
+          </View>
+          {isPasswordFocused && (
+            <View style={{ marginBottom: 10 }}>
+              {(['minLength', 'upper', 'lower', 'number', 'symbol'] as const).map(k => (
+                <View key={k} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name={passwordValidity[k] ? 'checkmark' : 'close'} size={12} color={passwordValidity[k] ? 'green' : 'red'} />
+                  <Text style={{ color: '#4f4f4f', marginLeft: 8, fontSize: 12 }}>
+                    {k === 'minLength' ? 'At least 8 characters' :
+                      k === 'upper' ? 'Contains uppercase' :
+                        k === 'lower' ? 'Contains lowercase' :
+                          k === 'number' ? 'Contains a number' :
+                            'Contains a special symbol'}
+                  </Text>
                 </View>
-              )}
-
-              {/* Email Input */}
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                value={email}
-                onChangeText={setEmail}
-                onBlur={() => { setEmailTouched(true); setEmailValid(validateEmailFormat(email.trim())); }}
-                style={[styles.input, emailTouched && emailValid === false && styles.inputError]}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-              {emailTouched && email && emailValid === false && (
-                <Text style={styles.error}>Invalid e‑mail format. Try "name@example.com".</Text>
-              )}
-
-              {/* Birthday Input */}
-              <Text style={styles.label}>Birthday</Text>
-              <TextInput
-                value={birthday}
-                onChangeText={handleBirthdayInput}
-                style={[
-                  styles.input,
-                  !isAtLeast21(mdyToDash(birthday)) && birthday.length === 10 && styles.inputError,
-                ]}
-                keyboardType="numeric"
-                placeholder="MM/DD/YYYY"
-                placeholderTextColor="#666"
-                maxLength={10}
-              />
-              {!isAtLeast21(mdyToDash(birthday)) && birthday.length === 10 && (
-                <Text style={styles.error}>You must be at least 21 years old.</Text>
-              )}
-
-              {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
-
-              {/* Register Button */}
-              <TouchableOpacity style={styles.button} onPress={handleSignUp}>
-                <Text style={styles.buttonText}>Register</Text>
-              </TouchableOpacity>
-
-              {/* Sign In Link */}
-              <View style={styles.signUpContainer}>
-                <Text style={styles.signUpText}>
-                  Already have an account?{' '}
-                  <Text style={styles.signUpLink} onPress={() => router.replace('/auth/sign-in')}>Sign In</Text>
-                </Text>
-              </View>
+              ))}
             </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+          )}
+
+          {/* Email Input */}
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            onBlur={() => { setEmailTouched(true); setEmailValid(validateEmailFormat(email.trim())); }}
+            style={[styles.input, emailTouched && emailValid === false && styles.inputError]}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+          {emailTouched && email && emailValid === false && (
+            <Text style={styles.error}>Invalid e‑mail format. Try "name@example.com".</Text>
+          )}
+
+          {/* Birthday Input */}
+          <Text style={styles.label}>Birthday</Text>
+          <TextInput
+            value={birthday}
+            onChangeText={handleBirthdayInput}
+            style={[
+              styles.input,
+              !isAtLeast21(mdyToDash(birthday)) && birthday.length === 10 && styles.inputError,
+            ]}
+            keyboardType="numeric"
+            placeholder="MM/DD/YYYY"
+            placeholderTextColor="#666"
+            maxLength={10}
+          />
+          {!isAtLeast21(mdyToDash(birthday)) && birthday.length === 10 && (
+            <Text style={styles.error}>You must be at least 21 years old.</Text>
+          )}
+
+          {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+
+          {/* Register Button */}
+          <TouchableOpacity style={styles.button} onPress={handleSignUp}>
+            <Text style={styles.buttonText}>Sign Up</Text>
+          </TouchableOpacity>
+
+          {/* Sign In Link */}
+          <View style={styles.signInContainer}>
+            <Text style={styles.signInText}>
+              Already have an account?{' '}
+              <Text style={styles.signInLink} onPress={() => modalMode && authModal?.open ? authModal.open('signIn') : router.push('/auth/sign-in')}>
+                Sign In
+              </Text>
+            </Text>
+          </View>
+        </ScrollView>
       </LinearGradient>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -317,8 +310,8 @@ const styles = StyleSheet.create({
   button: { backgroundColor: '#CE975E', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginTop: 20 },
   buttonText: { color: '#DFDCD9', fontSize: 18, fontWeight: 'bold' },
   error: { color: 'red', marginTop: 8 },
-  signUpContainer: { marginTop: 60, alignItems: 'center' },
-  signUpText: { fontSize: 14, color: '#fff' },
-  signUpLink: { color: '#CE975E', fontWeight: 'bold' },
+  signInContainer: { marginTop: 60, alignItems: 'center' },
+  signInText: { fontSize: 14, color: '#fff' },
+  signInLink: { color: '#CE975E', fontWeight: 'bold' },
   eyeIcon: { position: 'absolute', right: 16, top: '50%', transform: [{ translateY: -12 }] },
 });
