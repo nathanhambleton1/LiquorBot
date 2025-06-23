@@ -34,25 +34,13 @@ import SessionLoading  from '../auth/session-loading';
 const { height: WINDOW_HEIGHT } = Dimensions.get('window');
 const TARGET_HEIGHT  = WINDOW_HEIGHT * 0.9;   // 90 % of the screen
 const MAX_STRETCH    = WINDOW_HEIGHT * 0.97;  // upward stretch limit
-const SLIDE_DURATION = 280;                   // ms
+const SLIDE_DURATION = 500;                   // ms (was 280)
 
 export default function AuthModal() {
   const insets = useSafeAreaInsets();
   const ctx    = useContext(AuthModalContext);
   if (!ctx) return null;
   const { visible, screen, close, params } = ctx;
-
-  /* which page? */
-  const Content = (() => {
-    switch (screen) {
-      case 'signIn'        : return <SignIn  modalMode {...params} />;
-      case 'signUp'        : return <SignUp  modalMode {...params} />;
-      case 'forgotPassword': return <ForgotPassword modalMode {...params} />;
-      case 'confirmCode'   : return <ConfirmCode    modalMode {...params} />;
-      case 'sessionLoading': return <SessionLoading modalMode onFinish={close} {...params} />;
-      default              : return null;
-    }
-  })();
 
   /* refs that must survive re-renders */
   const translateY   = useRef(new Animated.Value(TARGET_HEIGHT + 40)).current;
@@ -77,6 +65,28 @@ export default function AuthModal() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   }, [shakeAnim]);
+
+  // Handler for SessionLoading to request a smooth close
+  const handleSessionLoadingFinish = useCallback(() => {
+    Animated.timing(translateY, {
+      toValue        : maxHeightRef.current + 40,
+      duration       : SLIDE_DURATION,
+      easing         : Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start(({ finished }) => finished && close());
+  }, [close, translateY]);
+
+  /* which page? */
+  const Content = (() => {
+    switch (screen) {
+      case 'signIn'        : return <SignIn  modalMode {...params} />;
+      case 'signUp'        : return <SignUp  modalMode {...params} />;
+      case 'forgotPassword': return <ForgotPassword modalMode {...params} />;
+      case 'confirmCode'   : return <ConfirmCode    modalMode {...params} />;
+      case 'sessionLoading': return <SessionLoading modalMode onRequestCloseWithAnimation={handleSessionLoadingFinish} {...params} />;
+      default              : return null;
+    }
+  })();
 
   /* keyboard listeners (push content up) ────────────────────── */
   useEffect(() => {

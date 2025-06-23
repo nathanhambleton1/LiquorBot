@@ -142,7 +142,7 @@ async function attachIoTPolicy(): Promise<void> {
 }
 
 /* ───────── component ───────── */
-export default function SessionLoading({ modalMode, onFinish }: { modalMode?: boolean; onFinish?: () => void } = {}) {
+export default function SessionLoading({ modalMode, onFinish, onRequestCloseWithAnimation }: { modalMode?: boolean; onFinish?: () => void; onRequestCloseWithAnimation?: () => void } = {}) {
   const router = useRouter();
   const [pct, setPct]       = useState(0);
   const [status, setStatus] = useState('Starting…');
@@ -312,10 +312,15 @@ export default function SessionLoading({ modalMode, onFinish }: { modalMode?: bo
         setPct(1);
         setStatus('Ready!');
         retryCount.current = 0; // reset retry count on success
-        setTimeout(() => {
-          if (modalMode && onFinish) onFinish();
-          else router.replace('/(tabs)');
-        }, 350);
+        if (typeof onRequestCloseWithAnimation === 'function') {
+          onRequestCloseWithAnimation();
+        } else {
+          setTimeout(() => {
+            if (modalMode && onFinish) onFinish();
+            else router.replace('/(tabs)');
+          }, 350);
+        }
+        return;
       }
     } catch (err: any) {
       /* network lost mid-flight → stay put & wait */
@@ -338,7 +343,16 @@ export default function SessionLoading({ modalMode, onFinish }: { modalMode?: bo
 
   // Render just the content, centered
   return (
-    <View style={[styles.flex, { backgroundColor: '#141414', alignItems: 'center', justifyContent: 'center', paddingTop: 200 }]}> 
+    <RNAnimated.View
+      style={{
+        flex: 1,
+        transform: [{ translateY }],
+        backgroundColor: '#141414',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingTop: 200,
+      }}
+    >
       <Image source={LOGO} style={styles.logo} resizeMode="contain" />
       <Text style={styles.app}>{APP_NAME}</Text>
       <View style={styles.barWrap}>
@@ -362,7 +376,7 @@ export default function SessionLoading({ modalMode, onFinish }: { modalMode?: bo
       <Text style={styles.status}>
         {online ? status : (firstRun ? 'Internet required for first-time setup' : 'Offline mode')}
       </Text>
-    </View>
+    </RNAnimated.View>
   );
 }
 

@@ -320,7 +320,6 @@ export default function ProfileScreen() {
 
   /* ───────────────  GUEST VIEW  ─────────────── */
   if (!signedIn) {
-    const authModal = useContext(AuthModalContext);
     return (
       <View style={[styles.container, styles.centered]}>
         <Ionicons name="person-circle-outline" size={96} color="#CE975E" />
