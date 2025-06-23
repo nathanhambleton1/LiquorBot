@@ -150,17 +150,64 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
   const [status, setStatus] = useState('Starting…');
   const [online, setOnline] = useState<boolean>(true);
   const [firstRun, setFirstRun] = useState<boolean>(false); // true ⇢ no cached JSON yet
+  const [providerReady, setProviderReady] = useState(false);
   const progress = useRef(new RNAnimated.Value(0)).current;
   const cancel   = useRef<boolean>(false);                  // abort flag
   const retryCount = useRef<number>(0);                    // retry counter
   const maxRetries = 5;
 
-  const { liquorbotId, checkHeartbeatOnce, setLiquorbotId, isConnected, forceDisconnect } = useLiquorBot();
+  const liquorBotCtx = useLiquorBot();
+  const { liquorbotId, setLiquorbotId, isConnected, forceDisconnect } = liquorBotCtx;
 
   const bump = (f: number) => setPct(p => Math.min(f, 1));
 
   // PubSub instance for direct MQTT
   const pubsub = React.useMemo(() => new PubSub({ region: REGION, endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt' }), []);
+
+  // One-off heartbeat check for session loading
+  async function checkHeartbeatOnce(liquorbotId: string): Promise<boolean> {
+    try {
+      if (!liquorbotId || liquorbotId === '000') {
+        return false;
+      }
+      const topic = `liquorbot/liquorbot${liquorbotId}/heartbeat`;
+      let responded = false;
+      let sub: { unsubscribe: () => void } | null = null;
+      return new Promise(async (resolve) => {
+        const handler = () => {
+          responded = true;
+          resolve(true);
+          sub && sub.unsubscribe();
+        };
+        const errorHandler = (err: any) => {
+          if (!responded) {
+            resolve(false);
+            sub && sub.unsubscribe();
+          }
+        };
+        sub = pubsub.subscribe({ topics: [topic] }).subscribe({ next: handler, error: errorHandler });
+        // Wait a tick to ensure subscription is active (AWS IoT quirk)
+        setTimeout(async () => {
+          try {
+            const msg = { action: 'HEARTBEAT_CHECK' };
+            await pubsub.publish({ topics: [topic], message: msg });
+          } catch (err) {
+            if (sub) sub.unsubscribe();
+            resolve(false);
+            return;
+          }
+        }, 100); // 100ms delay
+        setTimeout(() => {
+          if (!responded) {
+            resolve(false);
+            if (sub) sub.unsubscribe();
+          }
+        }, 1000);
+      });
+    } catch (err) {
+      return false;
+    }
+  }
 
   /* live connectivity watcher */
   useEffect(() => {
@@ -180,13 +227,41 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
     }).start();
   }, [pct]);
 
-  /* restart bootstrap when connectivity returns or app resumes */
+  // Watch for provider readiness
   useEffect(() => {
+    // console.log('[DEBUG] providerReady effect, isAdmin:', liquorBotCtx.isAdmin, 'liquorbotId:', liquorbotId);
+    if (liquorBotCtx.isAdmin) {
+      if (liquorbotId && liquorbotId !== '000') {
+        // console.log('[DEBUG] providerReady effect: valid admin liquorbotId, resetting pct to 0');
+        setPct(0);
+        setProviderReady(true);
+      } else {
+        setProviderReady(false);
+      }
+    } else {
+      setProviderReady(true);
+    }
+  }, [liquorbotId, liquorBotCtx.isAdmin]);
+
+  // Only run bootstrap when providerReady is true and liquorbotId is valid
+  useEffect(() => {
+    // console.log('[DEBUG] useEffect (bootstrap) fired, providerReady:', providerReady, 'liquorbotId:', liquorbotId, 'online:', online);
+    if (!providerReady) return;
+    // For admins, only run if liquorbotId is not '000'
+    if (liquorBotCtx.isAdmin && (!liquorbotId || liquorbotId === '000')) return;
     let retryTimeout: NodeJS.Timeout | null = null;
     const runBootstrap = () => {
-      if (!online) return;              // hold until internet
-      if (pct > 0 && pct < 0.99) return; // already running
+      // console.log('[DEBUG] runBootstrap called, pct:', pct, 'online:', online);
+      if (!online) {
+        // console.log('[DEBUG] runBootstrap: skipping, offline');
+        return;              // hold until internet
+      }
+      if (pct > 0 && pct < 0.99) {
+        // console.log('[DEBUG] runBootstrap: skipping, pct in progress', pct);
+        return; // already running
+      }
       setPct(0);
+      // console.log('[DEBUG] runBootstrap: calling bootstrap');
       bootstrap().catch(err => {
         console.warn('bootstrap error →', err);
         setStatus('Unexpected error – retrying…');
@@ -207,12 +282,12 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
       unsubApp.remove();
       if (retryTimeout) clearTimeout(retryTimeout);
     };
-  }, [online]);
+  }, [online, providerReady, liquorbotId]);
 
   /* --------------- main bootstrap --------------- */
   async function bootstrap(): Promise<void> {
+    // console.log('[DEBUG] bootstrap called, liquorbotId:', liquorbotId);
     cancel.current = false;
-
     // 0 ▸ check for internet connectivity (block until online)
     setStatus('Checking internet connection…'); bump(0.01);
     const netState = await NetInfo.fetch();
@@ -220,11 +295,12 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
       setStatus('No internet connection. Please connect to the internet to continue.'); bump(0.01);
       return;
     }
-
     // 0.5 ▸ check device heartbeat if paired
     if (liquorbotId && liquorbotId !== '000') {
       setStatus('Communicating with your LiquorBot device…'); bump(0.015);
-      const ok = await checkHeartbeatOnce();
+      // console.log('[DEBUG] About to call checkHeartbeatOnce with', liquorbotId);
+      const ok = await checkHeartbeatOnce(liquorbotId);
+      // console.log('[DEBUG] checkHeartbeatOnce returned', ok);
       if (ok) {
         setStatus('Device is online and ready!'); bump(0.02);
         // --- NEW: Sync device config ---
@@ -253,7 +329,7 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
                 resolve();
               }
             },
-            error: () => {
+            error: (err) => {
               if (!configReceived) {
                 setStatus('Failed to sync device config (will retry in background)…');
                 sub.unsubscribe();
@@ -263,8 +339,9 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
           });
           // Send GET_CONFIG
           try {
-            await pubsub.publish({ topics: [slotTopic], message: { action: 'GET_CONFIG' } });
-          } catch {
+            const msg = { action: 'GET_CONFIG' };
+            await pubsub.publish({ topics: [slotTopic], message: msg });
+          } catch (err) {
             setStatus('Failed to request device config.');
             sub.unsubscribe();
             resolve();

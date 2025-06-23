@@ -40,7 +40,6 @@ interface LiquorBotContextValue {
   hardReset          : () => void;
   updateSlots        : (s: number[]) => void;
   reconnect          : () => void;
-  checkHeartbeatOnce: () => Promise<boolean>;
   /* auth / role */
   groups             : string[];
   isAdmin            : boolean;
@@ -250,42 +249,6 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
       .catch(console.error);
   }, [liquorbotId, isAuthenticated, pubsub]);
 
-  // --- Heartbeat check (one-off, for session loading) ---
-  const checkHeartbeatOnce = useCallback((): Promise<boolean> => {
-    return new Promise(async (resolve) => {
-      if (!isAuthenticated || liquorbotId === '000') return resolve(false);
-      let responded = false;
-      const topic = `liquorbot/liquorbot${liquorbotId}/heartbeat`;
-      const handler = () => {
-        responded = true;
-        resolve(true);
-        sub && sub.unsubscribe();
-      };
-      // Subscribe for heartbeat response
-      const sub = pubsub.subscribe({ topics: [topic] }).subscribe({
-        next: handler,
-        error: () => {
-          if (!responded) resolve(false);
-        },
-      });
-      // Publish heartbeat check message
-      try {
-        await pubsub.publish({ topics: [topic], message: { action: 'HEARTBEAT_CHECK' } });
-      } catch {
-        sub.unsubscribe();
-        resolve(false);
-        return;
-      }
-      // Timeout after 1s
-      setTimeout(() => {
-        if (!responded) {
-          sub.unsubscribe();
-          resolve(false);
-        }
-      }, 1000);
-    });
-  }, [isAuthenticated, liquorbotId, pubsub]);
-
   /* ───────── event-override helpers (unchanged) ───────── */
   const [prevLiquorbotId, setPrevLiquorbotId] = useState<string | null>(null);
   const clearPrevLiquorbotId = useCallback(() => setPrevLiquorbotId(null), []);
@@ -308,14 +271,14 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
     /* state */
     isConnected, slots, liquorbotId,
     /* actions */
-    setLiquorbotId, forceDisconnect, hardReset, updateSlots, reconnect, checkHeartbeatOnce,
+    setLiquorbotId, forceDisconnect, hardReset, updateSlots, reconnect,
     /* auth */
     groups, isAdmin,
     /* overrides */
     temporaryOverrideId, restorePreviousId, isOverridden, clearPrevLiquorbotId,
   }), [
     isConnected, slots, liquorbotId,
-    setLiquorbotId, forceDisconnect, hardReset, updateSlots, reconnect, checkHeartbeatOnce,
+    setLiquorbotId, forceDisconnect, hardReset, updateSlots, reconnect,
     groups, isAdmin, temporaryOverrideId, restorePreviousId, isOverridden, clearPrevLiquorbotId,
   ]);
 
