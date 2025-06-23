@@ -20,10 +20,11 @@ import SignUp         from '../auth/sign-up';
 import ForgotPassword from '../auth/forgot-password';
 import ConfirmCode    from '../auth/confirm-code';
 
-/* ───────────────────────── static & dynamic sizes ───────────────────────── */
+/* ───────────────────────── constants ───────────────────────── */
 const { height: WINDOW_HEIGHT } = Dimensions.get('window');
-const MAX_SHEET_HEIGHT = WINDOW_HEIGHT * 0.80; // 80 % of the screen
-const SLIDE_DURATION   = 280;                  // ms — used for both in/out
+const MAX_SHEET_HEIGHT = WINDOW_HEIGHT * 0.9;   // default height (90 % of screen)
+const MAX_STRETCH      = WINDOW_HEIGHT * 0.97;  // upward stretch limit
+const SLIDE_DURATION   = 280;                   // ms
 
 export default function AuthModal() {
   const insets = useSafeAreaInsets();
@@ -31,19 +32,21 @@ export default function AuthModal() {
   if (!ctx) return null;
   const { visible, screen, close } = ctx;
 
-  /* pick the current page */
+  /* pick which page to show */
   let Content: JSX.Element | null = null;
   if      (screen === 'signIn'        ) Content = <SignIn  modalMode />;
   else if (screen === 'signUp'        ) Content = <SignUp  modalMode />;
   else if (screen === 'forgotPassword') Content = <ForgotPassword modalMode />;
   else if (screen === 'confirmCode'   ) Content = <ConfirmCode    modalMode />;
 
-  /* ───────── drag & animation state ───────── */
-  const translateY    = useRef(new Animated.Value(MAX_SHEET_HEIGHT + 40)).current;
-  const [scrollEnabled, setScrollEnabled] = useState(true);
+  /* animated values – all JS-driven (useNativeDriver: false) */
+  const translateY  = useRef(new Animated.Value(MAX_SHEET_HEIGHT + 40)).current;
+  const sheetHeight = useRef(new Animated.Value(MAX_SHEET_HEIGHT)).current;
 
-  /* ───────── backdrop-clickable gating ───────── */
-  const [canClose, setCanClose] = useState(false);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
+  const [canClose, setCanClose]           = useState(false);
+
+  /* gate backdrop taps for 250 ms after open */
   useEffect(() => {
     if (!visible) return;
     setCanClose(false);
@@ -51,60 +54,73 @@ export default function AuthModal() {
     return () => clearTimeout(t);
   }, [visible]);
 
-  /* ───────── slide IN whenever modal becomes visible ───────── */
+  /* slide IN when visible */
   useEffect(() => {
     if (!visible) return;
-    translateY.setValue(MAX_SHEET_HEIGHT + 40);    // start below the screen
+
+    translateY.setValue(MAX_SHEET_HEIGHT + 40);
+    sheetHeight.setValue(MAX_SHEET_HEIGHT);
+
     Animated.timing(translateY, {
       toValue        : 0,
       duration       : SLIDE_DURATION,
       easing         : Easing.out(Easing.cubic),
-      useNativeDriver: true,
+      useNativeDriver: false,   // JS-driven
     }).start();
-  }, [visible, translateY]);
+  }, [visible, translateY, sheetHeight]);
 
-  /* helper: slide OUT, then unmount */
   const slideOutAndClose = () => {
     Animated.timing(translateY, {
       toValue        : MAX_SHEET_HEIGHT + 40,
       duration       : SLIDE_DURATION,
       easing         : Easing.out(Easing.cubic),
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start(({ finished }) => finished && close());
   };
 
-  /* ───────── pan-handler for drag-to-close ───────── */
+  /* ───────── drag handler (handle-only) ───────── */
   const pan = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder : () => true,
-      onMoveShouldSetPanResponder  : (_, g) => Math.abs(g.dy) > 2,
-      onPanResponderGrant          : () => {
+      /* only start if the user touched the handle area (first 40 px) */
+      onStartShouldSetPanResponder: (evt, _g) => evt.nativeEvent.locationY < 40,
+      onMoveShouldSetPanResponder : (_, g)    => Math.abs(g.dy) > 2,
+      onPanResponderGrant         : () => {
         setScrollEnabled(false);
         translateY.stopAnimation();
         translateY.extractOffset();
+        sheetHeight.stopAnimation();
       },
-      onPanResponderMove           : (_, g) => {
-        /* Clamp upward drags at 0 px so the sheet never reveals content below */
-        const dy = g.dy > 0 ? g.dy : 0;
-        translateY.setValue(dy);
+      onPanResponderMove          : (_, g) => {
+        if (g.dy >= 0) {
+          translateY.setValue(g.dy);
+          sheetHeight.setValue(MAX_SHEET_HEIGHT);
+        } else {
+          translateY.setValue(0);
+          sheetHeight.setValue(Math.min(MAX_SHEET_HEIGHT - g.dy, MAX_STRETCH));
+        }
       },
-      onPanResponderRelease        : (_, g) => {
+      onPanResponderRelease       : (_, g) => {
         translateY.flattenOffset();
         setScrollEnabled(true);
 
         const shouldClose = g.dy > 120 || g.vy > 1.2;
-        if (shouldClose) return slideOutAndClose();
+        if (shouldClose) {
+          slideOutAndClose();
+          return;
+        }
 
-        Animated.spring(translateY, {
-          toValue        : 0,
-          bounciness     : 4,
-          useNativeDriver: true,
-        }).start();
+        Animated.parallel([
+          Animated.spring(translateY,  { toValue: 0, useNativeDriver: false }),
+          Animated.spring(sheetHeight, { toValue: MAX_SHEET_HEIGHT, useNativeDriver: false }),
+        ]).start();
       },
-      onPanResponderTerminate      : () => {
+      onPanResponderTerminate     : () => {
         translateY.flattenOffset();
         setScrollEnabled(true);
-        Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+        Animated.parallel([
+          Animated.spring(translateY,  { toValue: 0, useNativeDriver: false }),
+          Animated.spring(sheetHeight, { toValue: MAX_SHEET_HEIGHT, useNativeDriver: false }),
+        ]).start();
       },
     })
   ).current;
@@ -121,7 +137,7 @@ export default function AuthModal() {
     <Modal
       visible={visible}
       transparent
-      animationType="none"           // disable native laggy slide
+      animationType="none"
       onRequestClose={slideOutAndClose}
     >
       <View style={styles.container} pointerEvents="box-none">
@@ -136,19 +152,17 @@ export default function AuthModal() {
 
         {/* bottom-sheet */}
         <Animated.View
-          {...pan.panHandlers}
-          onStartShouldSetResponderCapture={() => true}
           style={[
             styles.sheet,
             {
-              height       : MAX_SHEET_HEIGHT,
+              height       : sheetHeight,
               paddingBottom: (Platform.OS === 'ios' ? 24 : 16) + insets.bottom,
               transform    : [{ translateY }],
             },
           ]}
         >
-          {/* drag handle */}
-          <View style={styles.handleBox}>
+          {/* drag handle (pan handlers attached here) */}
+          <View style={styles.handleBox} {...pan.panHandlers}>
             <View style={styles.handle} hitSlop={{ top: 8, bottom: 8 }} />
           </View>
 
@@ -176,6 +190,7 @@ const styles = StyleSheet.create({
     backgroundColor     : '#141414',
     borderTopLeftRadius : 24,
     borderTopRightRadius: 24,
+    overflow            : 'hidden',
     shadowColor   : '#000',
     shadowOffset  : { width: 0, height: -4 },
     shadowOpacity : 0.18,
@@ -183,7 +198,7 @@ const styles = StyleSheet.create({
     elevation     : 16,
   },
 
-  handleBox: { alignItems: 'center', height: 40 },
+  handleBox: { alignItems: 'center', height: 48, paddingTop: 12 },
   handle   : {
     width          : 48,
     height         : 6,
