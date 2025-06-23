@@ -24,10 +24,9 @@ const { height: WINDOW_HEIGHT } = Dimensions.get('window');
 const MAX_SHEET_HEIGHT = WINDOW_HEIGHT * 0.80;      // 80 % of screen
 
 export default function AuthModal() {
-  const insets = useSafeAreaInsets();               // safe-area bottom padding
+  const insets = useSafeAreaInsets();
   const ctx    = useContext(AuthModalContext);
   if (!ctx) return null;
-
   const { visible, screen, close } = ctx;
 
   /* pick the current page */
@@ -38,8 +37,17 @@ export default function AuthModal() {
   else if (screen === 'confirmCode'   ) Content = <ConfirmCode modalMode />;
 
   /* ───────── drag state ───────── */
-  const [scrollEnabled, setScrollEnabled] = useState(true);
   const translateY = useRef(new Animated.Value(0)).current;
+  const [scrollEnabled, setScrollEnabled] = useState(true);
+
+  /* ───────── “backdrop clickable?” state ───────── */
+  const [canClose, setCanClose] = useState(false);
+  useEffect(() => {
+    if (!visible) return;
+    setCanClose(false);                         // ① block taps right after opening
+    const t = setTimeout(() => setCanClose(true), 250);
+    return () => clearTimeout(t);
+  }, [visible]);
 
   /* reset position every time the modal opens */
   useEffect(() => { if (visible) translateY.setValue(0); }, [visible]);
@@ -79,18 +87,26 @@ export default function AuthModal() {
   /* ───────────────────────── render ───────────────────────── */
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={close}>
-      {/* backdrop */}
-      <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]} />
-      {/* sheet */}
-      <Pressable style={styles.root} onPress={close}>
+      <View style={styles.container} pointerEvents="box-none">
+        {/* backdrop (only closes when canClose === true) */}
+        <Pressable
+          disabled={!canClose}
+          onPress={close}
+          style={StyleSheet.absoluteFill}
+        >
+          <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]} />
+        </Pressable>
+
+        {/* bottom-sheet */}
         <Animated.View
           {...pan.panHandlers}
+          onStartShouldSetResponderCapture={() => true}   /* ② prevent tap-through */
           style={[
             styles.sheet,
             {
-              height      : MAX_SHEET_HEIGHT,
-              paddingBottom: (Platform.OS === 'ios' ? 24 : 16) + insets.bottom,
-              transform   : [{ translateY }],
+              height        : MAX_SHEET_HEIGHT,
+              paddingBottom : (Platform.OS === 'ios' ? 24 : 16) + insets.bottom,
+              transform     : [{ translateY }],
             },
           ]}
         >
@@ -109,26 +125,18 @@ export default function AuthModal() {
             {Content}
           </ScrollView>
         </Animated.View>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
 
 /* ───────────────────────── styles ───────────────────────── */
 const styles = StyleSheet.create({
-  /* backdrop */
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(20,20,20,0.7)',
-  },
-  /* full-screen pressable so taps outside close the sheet */
-  root: {
-    flex: 1,
-    justifyContent: 'flex-end',             // anchor sheet to bottom
-  },
-  /* bottom sheet */
+  container: { flex: 1, justifyContent: 'flex-end' },
+  overlay  : { flex: 1, backgroundColor: 'rgba(20,20,20,0.7)' },
+
   sheet: {
-    backgroundColor: '#141414',
+    backgroundColor   : '#141414',
     borderTopLeftRadius : 24,
     borderTopRightRadius: 24,
     shadowColor : '#000',
@@ -137,21 +145,9 @@ const styles = StyleSheet.create({
     shadowRadius : 16,
     elevation    : 16,
   },
-  /* handle */
-  handleBox: {
-    alignItems: 'center',
-    height    : 40,
-  },
-  handle: {
-    width: 48,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#444',
-    marginVertical: 8,
-  },
-  /* inner content spacing */
-  content: {
-    paddingHorizontal: 8,
-    paddingBottom   : 24,
-  },
+
+  handleBox: { alignItems: 'center', height: 40 },
+  handle   : { width: 48, height: 6, borderRadius: 3, backgroundColor: '#444', marginVertical: 8 },
+
+  content: { paddingHorizontal: 8, paddingBottom: 24 },
 });

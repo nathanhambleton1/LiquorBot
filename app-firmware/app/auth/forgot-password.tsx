@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   buttonText:            { color: '#DFDCD9', fontSize: 18, fontWeight: 'bold' },
   error:                 { color: 'red', marginBottom: 8 },
   info:                  { color: '#CE975E', marginBottom: 10 },
-  modalContainer:        { backgroundColor: '#181818', borderRadius: 18, padding: 12 },
+  modalContainer:        { backgroundColor: '#141414', borderRadius: 18, padding: 12 },
   navRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 32 },
   navText: { color: '#aaa', fontSize: 16, fontWeight: 'normal' },
   navLink: { color: '#CE975E', fontSize: 16, fontWeight: 'bold', marginLeft: 2 },
