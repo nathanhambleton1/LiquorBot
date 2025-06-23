@@ -5,12 +5,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useUnits } from '../UnitsContext';
 import {
   View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView,
-  Platform, PermissionsAndroid, Alert, Animated,
+  Platform, PermissionsAndroid, Alert, Animated, Vibration,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PushNotificationIOS from '@react-native-community/push-notification-ios';
 import { deleteUser } from '@aws-amplify/auth';
+import * as Haptics from 'expo-haptics';
 
 const KEYS = {
   notifications: 'pref_notifications',
@@ -135,6 +136,12 @@ export default function SettingsPopup({ signOut }: { signOut: () => void }) {
   );
 
   const handleDeleteAccount = async () => {
+    // Strong, long vibration warning before showing the delete confirmation
+    if (Platform.OS === 'android') {
+      Vibration.vibrate(1000); // 1 second continuous vibration
+    } else if (Platform.OS === 'ios') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
     Alert.alert(
       'Delete Account?',
       'This is permanent and will erase all of your data.',

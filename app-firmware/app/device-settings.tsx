@@ -22,6 +22,7 @@ import {
   Alert,
   Animated,
   PanResponder,
+  Vibration,
 } from 'react-native';
 import Ionicons        from '@expo/vector-icons/Ionicons';
 import { useRouter }   from 'expo-router';
@@ -35,6 +36,16 @@ import { listEvents }         from '../src/graphql/queries';
 import { deleteEvent }        from '../src/graphql/mutations';
 import { getCurrentUser } from 'aws-amplify/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
+
+// Helper for strong, long vibration
+function strongVibration() {
+  if (Platform.OS === 'android') {
+    Vibration.vibrate(1000);
+  } else if (Platform.OS === 'ios') {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  }
+}
 
 // -----------------------------------------------------------------------------
 const client = generateClient();
@@ -204,6 +215,7 @@ export default function DeviceSettings() {
   const handleReadySystem = () => publishMaintenance({ action: 'READY_SYSTEM' });
   const handleEmptySystem = () => publishMaintenance({ action: 'EMPTY_SYSTEM' });
   const handleDeepClean = () => {
+    strongVibration(); // Vibrate before showing the deep clean confirmation
     Alert.alert(
       'Deep Clean',
       'All ingredient containers must be empty.\n\n'
@@ -581,7 +593,7 @@ export default function DeviceSettings() {
               <ActionRow
                 label="Load Ingredients"
                 icon="server"
-                onPress={() => bumpIfDisconnected(handleReadySystem)}
+                onPress={() => { strongVibration(); bumpIfDisconnected(handleReadySystem); }}
                 info="Primes every tube so the first pour is instant."
                 onInfoPress={() => {
                   setSelectedInfo({ title: "Load Ingredients", message: "Primes every tube so the first pour is instant." });
@@ -591,7 +603,7 @@ export default function DeviceSettings() {
               <ActionRow
                 label="Empty System"
                 icon="server-outline"
-                onPress={() => bumpIfDisconnected(handleEmptySystem)}
+                onPress={() => { strongVibration(); bumpIfDisconnected(handleEmptySystem); }}
                 info="Pumps liquid back to its bottles for safe storage."
                 onInfoPress={() => {
                   setSelectedInfo({ title: "Empty System", message: "Pumps liquid back to its bottles for safe storage." });
@@ -601,7 +613,7 @@ export default function DeviceSettings() {
               <ActionRow
                 label="Deep Clean"
                 icon="water-outline"
-                onPress={() => bumpIfDisconnected(handleDeepClean)}
+                onPress={() => { strongVibration(); bumpIfDisconnected(handleDeepClean); }}
                 info="Runs warm water through all tubes. Bottles must be empty."
                 onInfoPress={() => {
                   setSelectedInfo({ title: "Deep Clean", message: "Runs warm water through all tubes. Bottles must be empty." });

@@ -905,7 +905,10 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
         {isOwner && isExpanded && !isPast && (
           <TouchableOpacity
             style={[styles.applyBtn, (!isConnected || loadingDeviceId === item.id) && { opacity: 0.5, marginTop: 16 }]}
-            onPress={() => handleLoadToDevice(item)}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+              handleLoadToDevice(item);
+            }}
             disabled={!isConnected || loadingDeviceId === item.id}
             activeOpacity={0.8}
           >

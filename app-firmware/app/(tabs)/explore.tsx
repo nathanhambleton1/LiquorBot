@@ -23,6 +23,7 @@ import config from '../../src/amplifyconfiguration.json';
 import { PubSub } from '@aws-amplify/pubsub';
 import { router } from 'expo-router';
 import * as FileSystem from 'expo-file-system';       // ★ NEW ★
+import * as Haptics from 'expo-haptics';
 
 /* ─────────── Amplify + PubSub bootstrap ─────────── */
 Amplify.configure(config);
@@ -63,7 +64,7 @@ type RecipeBook = {
 /* -------------------------------------------------------------------------- */
 /*                             IMAGE‑CACHE HELPERS                            */
 /* -------------------------------------------------------------------------- */
-/** Use same folder as menu.tsx (drink‑images) for shared cache */
+ /** Use same folder as menu.tsx (drink‑images) for shared cache */
 function getLocalDrinkImagePath(drinkId: number, imageUrl: string) {
   const ext = imageUrl.split('.').pop()?.split('?')[0] || 'jpg';
   return `${FileSystem.cacheDirectory || FileSystem.documentDirectory}drink-images/drink_${drinkId}.${ext}`;
@@ -353,6 +354,8 @@ const BookModal = ({
 
   const handleApply = async () => {
     if (saving) return;
+    // Haptic feedback: small, fat tap
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setSaving(true);
     try {
       await onApply(book);
