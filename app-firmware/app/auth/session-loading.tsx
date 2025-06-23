@@ -332,10 +332,15 @@ export default function SessionLoading(): ReactElement {
         {/* gold fill grows left → right */}
         <RNAnimated.View
           style={{
+            position: 'absolute',          // stick to left edge
+            top: 0,
+            bottom: 0,                    // ⇒ full bar height
+            left: 0,
             width: progress.interpolate({
               inputRange: [0, 1],
               outputRange: ['0%', '100%'],
             }),
+           overflow: 'hidden',           // keep rounded ends clean
           }}
         >
           <LinearGradient
