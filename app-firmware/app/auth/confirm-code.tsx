@@ -11,6 +11,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator 
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { confirmSignUp, signIn, resendSignUpCode } from 'aws-amplify/auth';
 import { Ionicons } from '@expo/vector-icons';
+import { AuthModalContext } from '../components/AuthModalContext';
 
 interface ConfirmCodeProps {
   modalMode?: boolean;
@@ -18,6 +19,7 @@ interface ConfirmCodeProps {
 
 export default function ConfirmCode({ modalMode }: ConfirmCodeProps) {
   const router = useRouter();
+  const authModal = React.useContext(AuthModalContext);
   const { username, password: routePwd, fromSignup } = 
     useLocalSearchParams<{ username?: string; password?: string; fromSignup?: string }>();
 
@@ -112,6 +114,10 @@ export default function ConfirmCode({ modalMode }: ConfirmCodeProps) {
   };
 
   const doSignIn = async () => {
+    if (modalMode && authModal?.open) {
+      authModal.open('signIn');
+      return;
+    }
     if (!pwd) {
       router.replace('/auth/sign-in');     // fall back if password missing
       return;
@@ -188,7 +194,10 @@ export default function ConfirmCode({ modalMode }: ConfirmCodeProps) {
           <View style={styles.signInContainer}>
             <Text style={styles.signInText}>
               Need a different account?{' '}
-              <Text style={styles.signInLink} onPress={() => router.replace('/auth/sign-in')}>
+              <Text style={styles.signInLink} onPress={() => {
+                if (modalMode && authModal?.open) authModal.open('signIn');
+                else router.replace('/auth/sign-in');
+              }}>
                 Sign In
               </Text>
             </Text>
