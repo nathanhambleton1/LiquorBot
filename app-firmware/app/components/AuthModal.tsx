@@ -10,6 +10,7 @@ import {
   Animated,
   Dimensions,
   PanResponder,
+  Easing,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -59,15 +60,32 @@ export default function AuthModal() {
       onMoveShouldSetPanResponder      : (_, g) => Math.abs(g.dy) > 2,
       onPanResponderGrant              : () => { setScrollEnabled(false); translateY.stopAnimation(); translateY.extractOffset(); },
       onPanResponderMove               : (_, g) => translateY.setValue(g.dy > 0 ? g.dy : g.dy / 3),
-      onPanResponderRelease            : (_, g) => {
+      onPanResponderRelease: (_, g) => {
         translateY.flattenOffset();
         setScrollEnabled(true);
-        const offScreen = g.dy > 120 || g.vy > 1.2;
+
+        const shouldClose = g.dy > 120 || g.vy > 1.2;
+
+        if (shouldClose) {
+          /* quick slide just past the bottom edge (180 ms) */
+          Animated.timing(translateY, {
+            toValue        : MAX_SHEET_HEIGHT + 40,
+            duration       : 180,
+            easing         : Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }).start();              // animation runs natively → no JS jank
+
+          /* unmount the Modal right away */
+          close();                 // ✨ instant touch-through
+          return;
+        }
+
+        /* otherwise, bounce back to open */
         Animated.spring(translateY, {
-          toValue       : offScreen ? WINDOW_HEIGHT : 0,
-          bounciness    : offScreen ? 0 : 4,
+          toValue        : 0,
+          bounciness     : 4,
           useNativeDriver: true,
-        }).start(() => offScreen && close());
+        }).start();
       },
       onPanResponderTerminate          : () => {
         translateY.flattenOffset();
