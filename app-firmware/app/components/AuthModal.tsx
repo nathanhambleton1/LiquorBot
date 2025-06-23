@@ -3,65 +3,87 @@ import {
   Modal,
   View,
   StyleSheet,
+  TouchableOpacity,
   Platform,
   Pressable,
   ScrollView,
   Animated,
-  PanResponder,
   Dimensions,
+  PanResponder,
 } from 'react-native';
 
-import { AuthModalContext, AuthScreen } from './AuthModalContext';
-import SignIn           from '../auth/sign-in';
-import SignUp           from '../auth/sign-up';
-import ForgotPassword   from '../auth/forgot-password';
-import ConfirmCode      from '../auth/confirm-code';
+import { AuthModalContext }   from './AuthModalContext';
+import SignIn          from '../auth/sign-in';
+import SignUp          from '../auth/sign-up';
+import ForgotPassword  from '../auth/forgot-password';
+import ConfirmCode     from '../auth/confirm-code';
+
+const SHEET_HEIGHT = Dimensions.get('window').height * 0.65;
+const screenHeight = Dimensions.get('window').height;
 
 export default function AuthModal() {
   const ctx = useContext(AuthModalContext);
   if (!ctx) return null;
   const { visible, screen, close } = ctx;
 
-  // Decide which inner component to render
-  let Content: JSX.Element | null = null;
-  if (screen === 'signIn')          Content = <SignIn  modalMode />;
-  else if (screen === 'signUp')     Content = <SignUp  modalMode />;
+  let Content = null;
+  if (screen === 'signIn') Content = <SignIn modalMode />;
+  else if (screen === 'signUp') Content = <SignUp modalMode />;
   else if (screen === 'forgotPassword') Content = <ForgotPassword modalMode />;
-  else if (screen === 'confirmCode')    Content = <ConfirmCode    modalMode />;
+  else if (screen === 'confirmCode') Content = <ConfirmCode modalMode />;
 
-  // ────────────────────────────────────────
-  // Drag-to-dismiss behaviour
-  // ────────────────────────────────────────
-  const translateY   = useRef(new Animated.Value(0)).current;
-  const screenHeight = Dimensions.get('window').height;
+  // Drag state for disabling ScrollView while dragging
+  const [scrollEnabled, setScrollEnabled] = React.useState(true);
+  const translateY = useRef(new Animated.Value(0)).current;
 
-  const panResponder = useRef(
+  // Reset translateY when modal opens
+  React.useEffect(() => {
+    if (visible) {
+      translateY.setValue(0);
+    }
+  }, [visible]);
+
+  // PanResponder for the whole sheet
+  const handlePan = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponderCapture : (_, g) => Math.abs(g.dy) > 2,
+      onPanResponderGrant: () => {
+        setScrollEnabled(false);
+        translateY.stopAnimation();
+        translateY.extractOffset();
+      },
       onPanResponderMove: (_, g) => {
-        if (g.dy > 0) translateY.setValue(g.dy);      // only allow downward drag
+        translateY.setValue(g.dy > 0 ? g.dy : g.dy / 3);
       },
       onPanResponderRelease: (_, g) => {
+        translateY.flattenOffset();
+        setScrollEnabled(true);
         const shouldClose = g.dy > 120 || g.vy > 1.2;
-        if (shouldClose) {
-          Animated.timing(translateY, {
-            toValue: screenHeight,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(close);                            // close after animation
-        } else {
-          Animated.spring(translateY, {
-            toValue: 0,
-            bounciness: 0,
-            useNativeDriver: true,
-          }).start();
-        }
+        Animated.spring(translateY, {
+          toValue: shouldClose ? screenHeight : 0,
+          bounciness: shouldClose ? 0 : 4,
+          useNativeDriver: true,
+        }).start(() => shouldClose && close());
       },
       onPanResponderTerminate: () => {
-        Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+        translateY.flattenOffset();
+        setScrollEnabled(true);
+        Animated.spring(translateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          bounciness: 0,
+        }).start();
       },
     })
   ).current;
+
+  // Calculate overlay opacity based on translateY
+  const overlayOpacity = translateY.interpolate({
+    inputRange: [0, screenHeight * 0.7],
+    outputRange: [0.7, 0],
+    extrapolate: 'clamp',
+  });
 
   return (
     <Modal
@@ -70,22 +92,24 @@ export default function AuthModal() {
       transparent
       onRequestClose={close}
     >
-      {/* dark overlay – tap outside to dismiss */}
-      <Pressable style={styles.overlay} onPress={close}>
-        {/* small gap so iOS swipe-down bar isn’t covered  */}
+      <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]} pointerEvents="auto">
+        {/* The overlay is now animated for opacity only */}
+      </Animated.View>
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
         <View style={styles.gap} />
-
-        {/* bottom sheet */}
-        <Pressable onPress={e => e.stopPropagation()}>
+        <Pressable onPress={e => e.stopPropagation()} style={{ flex: 1 }}>
           <Animated.View
-            style={[styles.sheet, { transform: [{ translateY }] }]}
-            {...panResponder.panHandlers}
+            {...handlePan.panHandlers}
+            style={[
+              styles.sheet,
+              { minHeight: '55%', maxHeight: '90%', transform: [{ translateY }] },
+            ]}
           >
-            <View style={styles.handleContainer}>
-              <View style={styles.handle} />
+            <View style={styles.handleContainer} pointerEvents="box-none">
+              <View style={styles.handle} hitSlop={{ top: 8, bottom: 8 }} />
             </View>
-
             <ScrollView
+              scrollEnabled={scrollEnabled}
               contentContainerStyle={styles.content}
               keyboardShouldPersistTaps="handled"
             >
@@ -93,7 +117,7 @@ export default function AuthModal() {
             </ScrollView>
           </Animated.View>
         </Pressable>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
@@ -106,6 +130,7 @@ const styles = StyleSheet.create({
   },
   gap: {
     height: Platform.OS === 'ios' ? 32 : 16,
+    backgroundColor: 'transparent',
   },
   sheet: {
     backgroundColor: '#141414',
@@ -123,6 +148,7 @@ const styles = StyleSheet.create({
   handleContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
     height: 40,
   },
   handle: {
@@ -130,6 +156,8 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: '#444',
+    marginTop: 8,
+    marginBottom: 8,
   },
   content: {
     paddingBottom: 24,
