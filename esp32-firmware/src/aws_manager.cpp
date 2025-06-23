@@ -102,9 +102,19 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
     String message  = String((char *)payload).substring(0, length);
     String topicStr = String(topic);
 
-    /* 1 · Heartbeat ping (ignore) */
+    /* 1 · Heartbeat ping or check */
     if (topicStr == HEARTBEAT_TOPIC) {
-        return; // nothing else
+        // If this is a heartbeat check request, respond immediately
+        StaticJsonDocument<64> doc;
+        if (!deserializeJson(doc, message)) {
+            const char *action = doc["action"];
+            if (action && strcmp(action, "HEARTBEAT_CHECK") == 0) {
+                sendHeartbeat();
+                return;
+            }
+        }
+        // Otherwise, ignore
+        return;
     }
 
     /* 2 · Drink command */

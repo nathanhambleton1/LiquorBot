@@ -6,7 +6,7 @@
 // Author: Nathan Hambleton
 // Created:  March 1, 2025
 // -----------------------------------------------------------------------------
-import React from 'react';
+import React, { useContext, useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { Amplify } from 'aws-amplify';
 import config from '../src/amplifyconfiguration.json';
@@ -14,6 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import { UnitsProvider } from './components/UnitsContext';
 import { DeepLinkProvider }   from './components/deep-link-provider';
 import { Authenticator } from '@aws-amplify/ui-react-native';
+import { AuthModalContext } from './components/AuthModalContext';
 
 // PubSub setup
 import { PubSub } from '@aws-amplify/pubsub';
@@ -29,8 +30,19 @@ Amplify.configure(config);
 import { LiquorBotProvider } from './components/liquorbot-provider';
 import { AuthModalProvider } from './components/AuthModalContext';
 import AuthModal from './components/AuthModal';
+import SessionLoadingOnStart from './components/SessionLoadingOnStart';
 
 export default function RootLayout() {
+  // Show session loading on cold start
+  const authModal = useContext(AuthModalContext);
+  useEffect(() => {
+    if (authModal?.open) {
+      authModal.open('sessionLoading', { modalMode: true });
+    }
+    // Only run on cold start (mount)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <Authenticator.Provider>
       <DeepLinkProvider>
@@ -38,6 +50,7 @@ export default function RootLayout() {
           <UnitsProvider>
             <AuthModalProvider>
               <StatusBar style="light" translucent />
+              <SessionLoadingOnStart />
               <AuthModal />
               <Stack
                 screenOptions={{ headerShown: false }}

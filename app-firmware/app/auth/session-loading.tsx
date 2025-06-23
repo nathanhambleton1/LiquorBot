@@ -25,12 +25,14 @@ import NetInfo              from '@react-native-community/netinfo';
 import AsyncStorage         from '@react-native-async-storage/async-storage';
 import * as FileSystem      from 'expo-file-system';
 import { Asset }            from 'expo-asset';
+import { PubSub } from '@aws-amplify/pubsub';
 
 import {
   IoTClient,
   AttachPolicyCommand,
   ListAttachedPoliciesCommand,
 } from '@aws-sdk/client-iot';
+import { useLiquorBot } from '../components/liquorbot-provider';
 
 import config         from '../../src/amplifyconfiguration.json';
 import { listEvents } from '../../src/graphql/queries';
@@ -153,7 +155,12 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
   const retryCount = useRef<number>(0);                    // retry counter
   const maxRetries = 5;
 
+  const { liquorbotId, checkHeartbeatOnce, setLiquorbotId, isConnected, forceDisconnect } = useLiquorBot();
+
   const bump = (f: number) => setPct(p => Math.min(f, 1));
+
+  // PubSub instance for direct MQTT
+  const pubsub = React.useMemo(() => new PubSub({ region: REGION, endpoint: 'wss://a2d1p97nzglf1y-ats.iot.us-east-1.amazonaws.com/mqtt' }), []);
 
   /* live connectivity watcher */
   useEffect(() => {
@@ -206,55 +213,121 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
   async function bootstrap(): Promise<void> {
     cancel.current = false;
 
-    /* only clear if we ever need to invalidate the cache
-       (e.g. bundle update or you bump IMG_CACHE_VER) */
-    const IMG_CACHE_VER = 1;                      // ↑ bump when assets change
+    // 0 ▸ check for internet connectivity (block until online)
+    setStatus('Checking internet connection…'); bump(0.01);
+    const netState = await NetInfo.fetch();
+    if (!netState.isConnected) {
+      setStatus('No internet connection. Please connect to the internet to continue.'); bump(0.01);
+      return;
+    }
+
+    // 0.5 ▸ check device heartbeat if paired
+    if (liquorbotId && liquorbotId !== '000') {
+      setStatus('Communicating with your LiquorBot device…'); bump(0.015);
+      const ok = await checkHeartbeatOnce();
+      if (ok) {
+        setStatus('Device is online and ready!'); bump(0.02);
+        // --- NEW: Sync device config ---
+        setStatus('Syncing device configuration…'); bump(0.025);
+        const slotTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
+        let configReceived = false;
+        await new Promise<void>(async (resolve) => {
+          const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
+            next: async (msg) => {
+              let payload = msg.value ?? msg;
+              if (typeof payload === 'string') {
+                try { payload = JSON.parse(payload); } catch {}
+              }
+              const p = payload as any;
+              if (p && typeof p === 'object' && p.action === 'CURRENT_CONFIG') {
+                await AsyncStorage.setItem(
+                  `allowedDrinks-${liquorbotId}`,
+                  JSON.stringify({
+                    drinkIDs: Array.isArray(p.drinkIDs) ? p.drinkIDs : [],
+                    customRecipeIDs: Array.isArray(p.customRecipeIDs) ? p.customRecipeIDs : [],
+                  })
+                );
+                configReceived = true;
+                setStatus('Device configuration loaded!'); bump(0.03);
+                sub.unsubscribe();
+                resolve();
+              }
+            },
+            error: () => {
+              if (!configReceived) {
+                setStatus('Failed to sync device config (will retry in background)…');
+                sub.unsubscribe();
+                resolve();
+              }
+            },
+          });
+          // Send GET_CONFIG
+          try {
+            await pubsub.publish({ topics: [slotTopic], message: { action: 'GET_CONFIG' } });
+          } catch {
+            setStatus('Failed to request device config.');
+            sub.unsubscribe();
+            resolve();
+          }
+          // Timeout after 1.5s
+          setTimeout(() => {
+            if (!configReceived) {
+              setStatus('Device config not received (will retry in background)…');
+              sub.unsubscribe();
+              resolve();
+            }
+          }, 1500);
+        });
+      } else {
+        setStatus('Device not responding (will retry in background)…'); bump(0.02);
+      }
+    }
+
+    // 1 ▸ clear image cache if needed
+    const IMG_CACHE_VER = 1;
     const ver = await AsyncStorage.getItem('imgCacheVer');
     if (parseInt(ver ?? '0', 10) < IMG_CACHE_VER) {
+      setStatus('Clearing old image cache…'); bump(0.025);
       await clearImageCache();
       await AsyncStorage.setItem('imgCacheVer', String(IMG_CACHE_VER));
     }
 
-    /* 1 ▸ immediate offline gate on *first-ever* launch */
+    // 1.5 ▸ check for first-time launch
     const [haveDrinks, haveIngs] = await AsyncStorage.multiGet(['drinksJson', 'ingredientsJson']);
     const coldStart = !(haveDrinks[1] && haveIngs[1]);
     setFirstRun(coldStart);
-
     if (coldStart && !online) {
-      setStatus('Connect to the internet to finish setup'); bump(0.02);
-      return; // wait for NetInfo to flip online → bootstrap will re-run
+      setStatus('Internet required to complete first-time setup.'); bump(0.03);
+      return;
     }
 
     try {
-      /* 2 ▸ refresh Cognito */
-      setStatus('Refreshing session…');
+      // 2 ▸ refresh Cognito session
+      setStatus('Refreshing secure login…');
       const session = await fetchAuthSession({ forceRefresh: true });
       bump(0.08);
 
-      /* 3 ▸ IoT policy */
-      setStatus('Configuring IoT…');
-      await attachIoTPolicy(); bump(0.04);
+      // 3 ▸ IoT policy
+      setStatus('Configuring secure IoT connection…');
+      await attachIoTPolicy(); bump(0.12);
 
-      /* 4 ▸ logo + BG */
+      // 4 ▸ logo + BG
+      setStatus('Loading app assets…');
       await Asset.loadAsync([LOGO, require('@/assets/images/home-background.jpg')]);
-      bump(0.04);
+      bump(0.16);
 
-      /* 5 ▸ pull JSON (or use cache when offline) */
+      // 5 ▸ pull JSON (or use cache when offline)
       let drinksRaw  = haveDrinks[1] ?? '';
       let ingsRaw    = haveIngs[1]   ?? '';
-
       if (online) {
         setStatus('Checking for menu updates…');
-
         const [dUrl, iUrl] = await Promise.all([
           getUrl({ key: DRINKS_KEY }), getUrl({ key: INGS_KEY }),
         ]);
-
         const [dTxt, iTxt] = await Promise.all([
           fetchJsonOrCache(dUrl.url.toString(), drinksRaw),
           fetchJsonOrCache(iUrl.url.toString(), ingsRaw),
         ]);
-
         if (dTxt !== drinksRaw) {
           drinksRaw = dTxt;
           await AsyncStorage.setItem('drinksJson', drinksRaw);
@@ -265,14 +338,12 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
         }
       } else if (!drinksRaw || !ingsRaw) {
         setStatus('Internet required – retrying…');
-        return; // will auto-retry when online
+        return;
       }
+      bump(0.22);
 
-      bump(0.12);
-
-      /* 6 ▸ cache images (signed-URL fallback) */
-      setStatus('Caching images…');
-
+      // 6 ▸ cache images (signed-URL fallback)
+      setStatus('Caching drink and glass images…');
       const drinks = JSON.parse(drinksRaw) as { id:number; image:string }[];
       const glassKeys = [
         'drinkMenu/drinkPictures/rocks_white.png',
@@ -281,18 +352,16 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
         'drinkMenu/drinkPictures/coupe_white.png',
         'drinkMenu/drinkPictures/margarita_white.png',
       ];
-
       const glassDesc = await Promise.all(
         glassKeys.map(async (k, idx) => {
           const { url } = await getUrl({ key: k });
           return { id: 10_000 + idx, image: url.toString() };
         }),
       );
-
       await cacheImages([...drinks, ...glassDesc], bump, 0.28, 0.70);
 
-      /* 7 ▸ cache upcoming events locally (non-critical) */
-      setStatus('Loading events…');
+      // 7 ▸ cache upcoming events locally (non-critical)
+      setStatus('Loading your upcoming events…');
       try {
         const username = session.tokens?.idToken?.payload['cognito:username'] as string;
         if (username) {
@@ -305,9 +374,9 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
           await AsyncStorage.setItem('cachedEvents', JSON.stringify(data?.listEvents?.items ?? []));
         }
       } catch {/* ignore */ }
-      bump(0.05);
+      bump(0.95);
 
-      /* 8 ▸ done */
+      // 8 ▸ done
       if (!cancel.current) {
         setPct(1);
         setStatus('Ready!');
@@ -323,7 +392,6 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
         return;
       }
     } catch (err: any) {
-      /* network lost mid-flight → stay put & wait */
       if (!online) { setStatus('Connection lost – waiting…'); return; }
       throw err;
     }
