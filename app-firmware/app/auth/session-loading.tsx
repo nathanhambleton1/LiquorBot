@@ -284,7 +284,7 @@ export default function SessionLoading(): ReactElement {
             StyleSheet.absoluteFill,
             {
               backgroundColor: COL_BAR_BG,
-              width: progress.interpolate({ inputRange:[0,1], outputRange:['100%','0%'] }),
+              width: progress.interpolate({ inputRange:[0,1], outputRange:['0%','100%'] }),
             },
           ]}
         />
