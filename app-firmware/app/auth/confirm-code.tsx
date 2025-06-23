@@ -20,6 +20,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Pressable,
+  Keyboard,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
@@ -29,6 +30,7 @@ import {
 } from 'aws-amplify/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthModalContext } from '../components/AuthModalContext';
+
 
 /* ───────────────────────── constants ───────────────────────── */
 const RESEND_DELAY = 30;          // seconds
@@ -69,6 +71,15 @@ export default function ConfirmCode({ modalMode }: { modalMode?: boolean }) {
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to send code. Try again later.');
     }
+  };
+
+  // Ref for the confirmation code input
+  const codeRef = useRef<TextInput>(null);
+
+  /* ───── fix: prevent keyboard dismissal ───── */
+  const handleInputPress = () => {
+    Keyboard.dismiss(); // Dismiss any existing keyboard first
+    setTimeout(() => codeRef.current?.focus(), 50); // Slight delay before refocusing
   };
 
   /* ───────── initial code send ───────── */
@@ -161,16 +172,19 @@ export default function ConfirmCode({ modalMode }: { modalMode?: boolean }) {
       <Text style={styles.explanation}>
         We&apos;ve sent a 6-digit confirmation code. Please check your e-mail and enter it below.
       </Text>
-
-      <Text style={styles.label}>Confirmation Code</Text>
-      <TextInput
-        value={confirmationCode}
-        onChangeText={setConfirmationCode}
-        style={[styles.input, modalMode && { borderColor: '#333', borderWidth: 1 }]}
-        keyboardType="number-pad"
-        placeholder="Enter 6-digit code"
-        placeholderTextColor="#666"
-      />
+      <Pressable onPress={handleInputPress}> {/* Wrap input in Pressable */}
+        <TextInput
+          ref={codeRef}
+          value={confirmationCode}
+          onChangeText={setConfirmationCode}
+          keyboardType="number-pad"
+          maxLength={6}
+          placeholder="123456"
+          placeholderTextColor="#666"
+          style={[styles.input, modalMode && styles.border]}
+          showSoftInputOnFocus={true}
+        />
+      </Pressable>
 
       {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
       {!!infoMessage  && <Text style={styles.info}>{infoMessage}</Text>}
@@ -280,6 +294,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     fontSize: 16,
     color: COLOR_TEXT,
+  },
+  border: {
+    borderWidth: 1,
+    borderColor: '#CE975E',
   },
   button:          {
     backgroundColor: COLOR_PRIMARY,
