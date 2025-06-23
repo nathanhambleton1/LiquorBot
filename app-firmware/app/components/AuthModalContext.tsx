@@ -1,6 +1,6 @@
 import React, { createContext, useState, useCallback, ReactNode } from 'react';
 
-export type AuthScreen = 'signIn' | 'signUp' | 'forgotPassword' | 'confirmCode';
+export type AuthScreen = 'signIn' | 'signUp' | 'forgotPassword' | 'confirmCode' | 'sessionLoading';
 
 interface AuthModalContextType {
   visible: boolean;

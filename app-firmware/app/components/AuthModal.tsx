@@ -21,12 +21,14 @@ import {
   Keyboard,                 // NEW
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 
 import { AuthModalContext } from './AuthModalContext';
 import SignIn         from '../auth/sign-in';
 import SignUp         from '../auth/sign-up';
 import ForgotPassword from '../auth/forgot-password';
 import ConfirmCode    from '../auth/confirm-code';
+import SessionLoading  from '../auth/session-loading';
 
 /* ───────────────────────── constants ───────────────────────── */
 const { height: WINDOW_HEIGHT } = Dimensions.get('window');
@@ -47,6 +49,7 @@ export default function AuthModal() {
       case 'signUp'        : return <SignUp  modalMode {...params} />;
       case 'forgotPassword': return <ForgotPassword modalMode {...params} />;
       case 'confirmCode'   : return <ConfirmCode    modalMode {...params} />;
+      case 'sessionLoading': return <SessionLoading modalMode onFinish={close} {...params} />;
       default              : return null;
     }
   })();
@@ -59,6 +62,21 @@ export default function AuthModal() {
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [canClose,      setCanClose]      = useState(false);
   const [kbdHeight,     setKbdHeight]     = useState(0);   // NEW
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+
+  // Shake animation for handle
+  const triggerShake = useCallback(() => {
+    shakeAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 1, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -1, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0.7, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  }, [shakeAnim]);
 
   /* keyboard listeners (push content up) ────────────────────── */
   useEffect(() => {
@@ -167,6 +185,22 @@ export default function AuthModal() {
     [slideOutAndClose, translateY, sheetHeight]
   );
 
+  // PanResponder for session loading (blocks drag, triggers shake)
+  const fakePan = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: (e) => e.nativeEvent.locationY < 40,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          triggerShake();
+        },
+        onPanResponderMove: () => {},
+        onPanResponderRelease: () => {},
+        onPanResponderTerminate: () => {},
+      }),
+    [triggerShake]
+  );
+
   /* backdrop opacity */
   const overlayOpacity = translateY.interpolate({
     inputRange : [0, WINDOW_HEIGHT * 0.7],
@@ -185,7 +219,7 @@ export default function AuthModal() {
       <View style={styles.container} pointerEvents="box-none">
         {/* backdrop */}
         <Pressable
-          disabled={!canClose}
+          disabled={!canClose || screen === 'sessionLoading'}
           onPress={slideOutAndClose}
           style={StyleSheet.absoluteFill}
         >
@@ -198,15 +232,23 @@ export default function AuthModal() {
             styles.sheet,
             {
               height       : sheetHeight,
-              paddingBottom: (Platform.OS === 'ios' ? 24 : 16) + insets.bottom, // ← no kbdHeight here
+              paddingBottom: (Platform.OS === 'ios' ? 24 : 16) + insets.bottom,
               transform    : [{ translateY }],
             },
           ]}
         >
-          {/* drag handle */}
-          <View style={styles.handleBox} {...pan.panHandlers}>
+          {/* drag handle (always visible, shake on drag if sessionLoading) */}
+          <Animated.View
+            style={[
+              styles.handleBox,
+              { transform: [{ translateX: shakeAnim.interpolate({
+                inputRange: [-1, 0, 1], outputRange: [-8, 0, 8],
+              }) }] },
+            ]}
+            {...(screen === 'sessionLoading' ? fakePan.panHandlers : pan.panHandlers)}
+          >
             <View style={styles.handle} hitSlop={{ top: 8, bottom: 8 }} />
-          </View>
+          </Animated.View>
 
           {/* page body */}
           <ScrollView

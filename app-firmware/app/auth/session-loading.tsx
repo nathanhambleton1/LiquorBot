@@ -7,13 +7,14 @@
 //   • shows animated progress + rotating feature cards
 //   • jumps to /(tabs) only after 100 % OK
 // -----------------------------------------------------------------------------
-import React, { useEffect, useRef, useState, ReactElement } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, Image, Platform,
   Easing as RN_Easing, AppState, AppStateStatus,
   Animated as RNAnimated,
+  Dimensions,
+  Pressable,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter }      from 'expo-router';
 
 import { Amplify }          from 'aws-amplify';
@@ -141,7 +142,7 @@ async function attachIoTPolicy(): Promise<void> {
 }
 
 /* ───────── component ───────── */
-export default function SessionLoading(): ReactElement {
+export default function SessionLoading({ modalMode, onFinish }: { modalMode?: boolean; onFinish?: () => void } = {}) {
   const router = useRouter();
   const [pct, setPct]       = useState(0);
   const [status, setStatus] = useState('Starting…');
@@ -309,9 +310,12 @@ export default function SessionLoading(): ReactElement {
       /* 8 ▸ done */
       if (!cancel.current) {
         setPct(1);
-        setStatus('Ready!');                                         // visual polish
+        setStatus('Ready!');
         retryCount.current = 0; // reset retry count on success
-        setTimeout(() => router.replace('/(tabs)'), 350);
+        setTimeout(() => {
+          if (modalMode && onFinish) onFinish();
+          else router.replace('/(tabs)');
+        }, 350);
       }
     } catch (err: any) {
       /* network lost mid-flight → stay put & wait */
@@ -322,40 +326,43 @@ export default function SessionLoading(): ReactElement {
 
   /* ---------- render ---------- */
   const percent = Math.floor(pct * 100);
+  const screenHeight = Dimensions.get('window').height;
+  const translateY = useRef(new RNAnimated.Value(0)).current;
+
+  // Animate overlay opacity
+  const overlayOpacity = translateY.interpolate({
+    inputRange: [0, screenHeight * 0.7],
+    outputRange: [0.7, 0],
+    extrapolate: 'clamp',
+  });
+
+  // Render just the content, centered
   return (
-    <LinearGradient colors={[COL_BG_TOP, COL_BG_BOT]} style={styles.flex}>
+    <View style={[styles.flex, { backgroundColor: '#141414', alignItems: 'center', justifyContent: 'center', paddingTop: 200 }]}> 
       <Image source={LOGO} style={styles.logo} resizeMode="contain" />
       <Text style={styles.app}>{APP_NAME}</Text>
       <View style={styles.barWrap}>
-        {/* grey background */}
         <View style={StyleSheet.absoluteFill} />
-        {/* gold fill grows left → right */}
         <RNAnimated.View
           style={{
-            position: 'absolute',          // stick to left edge
+            position: 'absolute',
             top: 0,
-            bottom: 0,                    // ⇒ full bar height
+            bottom: 0,
             left: 0,
             width: progress.interpolate({
               inputRange: [0, 1],
               outputRange: ['0%', '100%'],
             }),
-           overflow: 'hidden',           // keep rounded ends clean
+            overflow: 'hidden',
+            backgroundColor: '#CE975E',
           }}
-        >
-          <LinearGradient
-            colors={[COL_BAR, '#e0a56f']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </RNAnimated.View>
+        />
       </View>
       <Text style={styles.percent}>{percent}%</Text>
       <Text style={styles.status}>
         {online ? status : (firstRun ? 'Internet required for first-time setup' : 'Offline mode')}
       </Text>
-    </LinearGradient>
+    </View>
   );
 }
 

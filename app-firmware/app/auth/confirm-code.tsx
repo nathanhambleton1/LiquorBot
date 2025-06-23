@@ -107,7 +107,12 @@ export default function ConfirmCode({ modalMode, username: propUsername, passwor
       if (modalMode && pwd) {
         try {
           await signIn({ username: username!, password: pwd });
-          if (authModal?.close) authModal.close();
+          if (authModal?.open) {
+            authModal.open('sessionLoading', {
+              onFinish: () => authModal.close(),
+              modalMode: true,
+            });
+          }
         } catch (signInErr: any) {
           setErrorMessage(signInErr?.message || 'Account confirmed, but sign-in failed.');
         }

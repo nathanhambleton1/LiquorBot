@@ -45,8 +45,14 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
       const { isSignedIn, nextStep } = await signIn({ username, password });
 
       if (isSignedIn) {
-        if (modalMode && authModal?.close) authModal.close();
-        else router.replace('/auth/session-loading');
+        if (modalMode && authModal?.open) {
+          authModal.open('sessionLoading', {
+            onFinish: () => authModal.close(),
+            modalMode: true,
+          });
+        } else {
+          router.replace('/auth/session-loading');
+        }
         return;
       }
 

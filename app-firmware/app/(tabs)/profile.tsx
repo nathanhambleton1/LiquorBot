@@ -104,6 +104,7 @@ export default function ProfileScreen() {
   const [popup, setPopup] = useState<PopupMeta | null>(null);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
   const router = useRouter();
+  const authModal = useContext(AuthModalContext);
 
   // Reset popup state when navigating to the profile tab
   useFocusEffect(
@@ -124,7 +125,6 @@ export default function ProfileScreen() {
           setRegisteredUsername(p.registeredUsername || '');
           setFirstName(p.firstName);
           setLastName(p.lastName);
-          setBio(p.bio);
           setUser({ username: p.username, email: p.email, profilePicture: p.profilePicture });
           setBirthday(p.birthday);
           setProfileLoaded(true);
@@ -371,6 +371,7 @@ export default function ProfileScreen() {
                 switch (b.title) {
                   case 'Sign Out':
                     signOut();
+                    router.replace('/');
                     break;
                   case 'My Drinks':
                     router.push('../components/profile/DrinkList');
