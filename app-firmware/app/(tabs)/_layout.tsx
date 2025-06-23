@@ -24,17 +24,26 @@ import { StatusBar } from 'react-native';
 import {
   SafeAreaView as SAView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLiquorBot } from '../components/liquorbot-provider';
+import { AuthModalContext } from '../components/AuthModalContext';
 
 export default function TabLayout() {
   const { authStatus } = useAuthenticator((ctx) => [ctx.authStatus]);
   const signedIn       = authStatus === 'authenticated';
   const { isAdmin }    = useLiquorBot();
   const insets         = useSafeAreaInsets();
+  const authModal      = React.useContext(AuthModalContext);
+
+  // Intercept tab press for auth-guarded tabs (fixed signature)
+  const guardedTabPress = (routeName: string) => (event: any) => {
+    if (!signedIn && (routeName === 'menu' || routeName === 'profile')) {
+      event.preventDefault();
+      authModal?.open('signIn');
+    }
+  };
 
   return (
     <SAView edges={['left', 'right']} style={{ flex: 1, backgroundColor: 'transparent' }}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -93,6 +102,7 @@ export default function TabLayout() {
         {/* Drink Menu Tab */}
         <Tabs.Screen
           name="menu"
+          listeners={{ tabPress: guardedTabPress('menu') }}
           options={{
             title: '',
             tabBarIcon: ({ color }) => (
@@ -126,6 +136,7 @@ export default function TabLayout() {
         {/* Profile Tab */}
         <Tabs.Screen
           name="profile"
+          listeners={{ tabPress: guardedTabPress('profile') }}
           options={{
             title: '',
             tabBarIcon: ({ color, focused }) => (

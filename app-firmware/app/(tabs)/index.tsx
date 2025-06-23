@@ -293,6 +293,9 @@ export default function Index() {
     } finally { setLinkLoading(false); }
   };
 
+  // Helper to check if signed in
+  const isSignedIn = !!currentUser;
+
   /* ───────────────────────── UI ───────────────────────── */
   return (
     <ImageBackground
@@ -339,7 +342,13 @@ export default function Index() {
         {/* Main Event Tile */}
         <TouchableOpacity
           style={styles.mainTile}
-          onPress={() => router.push('./events')}
+          onPress={() => {
+            if (!isSignedIn) {
+              authModal?.open('signIn');
+              return;
+            }
+            router.push('./events');
+          }}
         >
           <View style={styles.mainTileContent}>
             <View style={styles.mainIconTextContainer}>
@@ -388,7 +397,13 @@ export default function Index() {
         <View style={styles.rightColumn}>
           <TouchableOpacity
             style={styles.smallTile}
-            onPress={() => router.push('/menu')}
+            onPress={() => {
+              if (!isSignedIn) {
+                authModal?.open('signIn');
+                return;
+              }
+              router.push('/menu');
+            }}
           >
             <View style={styles.iconTextContainer}>
               <View style={styles.iconContainer}>
