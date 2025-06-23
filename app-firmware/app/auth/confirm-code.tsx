@@ -1,68 +1,91 @@
 // -----------------------------------------------------------------------------
-// File: confirm-code.tsx
-// Description: Confirms the account, then shows ✅ & a Sign-In button.
-//              • Accepts username & (optional) password from route params.
-//              • Treats "already confirmed" as success.
-// Author: Nathan Hambleton
-// Updated: Apr 23 2025
+// File: confirm-code.tsx               (fully rewritten – drop-in replacement)
 // -----------------------------------------------------------------------------
-import React, { useState, useEffect, useRef, useContext } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+// Confirms the account, then shows ✅ & a Sign-In button.
+// • Always sends/ resends verification code on entry + on demand
+// • Resend link restarts 30-s timer; larger hit-area via Pressable
+// Author: Nathan Hambleton    Updated: Jun 23 2025
+// -----------------------------------------------------------------------------
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useContext,
+} from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Pressable,
+} from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { confirmSignUp, signIn, resendSignUpCode } from 'aws-amplify/auth';
+import {
+  confirmSignUp,
+  signIn,
+  resendSignUpCode,
+} from 'aws-amplify/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthModalContext } from '../components/AuthModalContext';
 
-const BG_TOP = '#4f4f4f';
-const BG_BTM = '#000';
+/* ───────────────────────── constants ───────────────────────── */
+const RESEND_DELAY = 30;          // seconds
+const COLOR_PRIMARY = '#CE975E';
+const COLOR_TEXT    = '#DFDCD9';
 
+/* ───────────────────────── component ───────────────────────── */
 export default function ConfirmCode({ modalMode }: { modalMode?: boolean }) {
-  const router = useRouter();
-  const { username, password: routePwd, fromSignup } = 
-    useLocalSearchParams<{ username?: string; password?: string; fromSignup?: string }>();
+  const router  = useRouter();
+  const { username, password: routePwd } =
+    useLocalSearchParams<{ username?: string; password?: string }>();
 
-  const [confirmationCode, setConfirmationCode] = useState('');
+  /* ───────── local state ───────── */
+  const [confirmationCode, setConfirmationCode]   = useState('');
   const [confirmationSuccess, setConfirmationSuccess] = useState(false);
+
   const [errorMessage, setErrorMessage] = useState('');
-  const [infoMessage, setInfoMessage] = useState('');
+  const [infoMessage,  setInfoMessage]  = useState('');
+
   const [isLoading, setIsLoading] = useState(false);
-  const [timer, setTimer] = useState(30); // 30 seconds industry standard
+
+  const [timer, setTimer]       = useState(RESEND_DELAY);
   const [canResend, setCanResend] = useState(false);
+  const [resendCount, setResendCount] = useState(0);      // forces timer reset
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const pwd = routePwd ?? '';
+
+  const pwd       = routePwd ?? '';
   const authModal = useContext(AuthModalContext);
 
-  // Resend logic with sign-up context check
-  useEffect(() => {
-    const handleResend = async () => {
-      if (!username || confirmationSuccess) return;
-      
-      try {
-        // Only resend if NOT coming from sign-up flow
-        if (fromSignup !== '1') {
-          await resendSignUpCode({ username });
-          setInfoMessage('A new verification code has been sent to your email.');
-        }
-      } catch (error: any) {
-        if (error.name === 'InvalidParameterException' && 
-            error.message.includes('already confirmed')) {
-          setConfirmationSuccess(true);
-          setInfoMessage('Your account is already confirmed!');
-        } else {
-          setErrorMessage(error.message || 'Failed to send new code. Try again later.');
-        }
-      }
-    };
+  /* ───────── helper to (re)send verification code ───────── */
+  const sendVerificationCode = async () => {
+    if (!username) return;
+    try {
+      await resendSignUpCode({ username });
+      setInfoMessage('A verification code has been sent to your email.');
+      setErrorMessage('');
+      setResendCount((c) => c + 1);          // trigger timer reset
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to send code. Try again later.');
+    }
+  };
 
-    handleResend();
+  /* ───────── initial code send ───────── */
+  useEffect(() => {
+    sendVerificationCode();                  // unconditionally – Cognito throttles if needed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Timer logic
+  /* ───────── 30-s cooldown timer ───────── */
   useEffect(() => {
     if (confirmationSuccess) return;
+
+    // reset & start countdown
     setCanResend(false);
-    setTimer(30);
+    setTimer(RESEND_DELAY);
     if (timerRef.current) clearInterval(timerRef.current);
+
     timerRef.current = setInterval(() => {
       setTimer((prev) => {
         if (prev <= 1) {
@@ -73,26 +96,13 @@ export default function ConfirmCode({ modalMode }: { modalMode?: boolean }) {
         return prev - 1;
       });
     }, 1000);
+
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [infoMessage, confirmationSuccess]);
+  }, [resendCount, confirmationSuccess]);
 
-  const handleResendCode = async () => {
-    if (!username) return;
-    setCanResend(false);
-    setTimer(30);
-    setInfoMessage('');
+  /* ───────── actions ───────── */
+  const handleConfirm = async () => {
     setErrorMessage('');
-    try {
-      await resendSignUpCode({ username });
-      setInfoMessage('A new verification code has been sent to your email.');
-    } catch (error: any) {
-      setErrorMessage(error.message || 'Failed to resend code.');
-    }
-  };
-
-  /* ───────────────────────── handlers ───────────────────────── */
-  const doConfirm = async () => {
-    setErrorMessage(''); 
     setInfoMessage('');
     setIsLoading(true);
     try {
@@ -100,99 +110,125 @@ export default function ConfirmCode({ modalMode }: { modalMode?: boolean }) {
       setConfirmationSuccess(true);
       setInfoMessage('Your account has been confirmed!');
     } catch (e: any) {
-      if ((e?.code === 'NotAuthorizedException' || e?.name === 'NotAuthorizedException') &&
-          /already.*confirmed/i.test(e?.message ?? '')) {
+      if (
+        (e?.code === 'NotAuthorizedException' || e?.name === 'NotAuthorizedException') &&
+        /already.*confirmed/i.test(e?.message ?? '')
+      ) {
         setConfirmationSuccess(true);
         setInfoMessage('Your account is already confirmed!');
-        return;
+      } else {
+        setErrorMessage(e?.message ?? 'Confirmation error');
       }
-      setErrorMessage(e?.message ?? 'Confirmation error');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const doSignIn = async () => {
+  const handleResend = async () => {
+    if (!canResend) return;          // guard against multiple taps
+    await sendVerificationCode();
+  };
+
+  const handleSignIn = async () => {
     if (!pwd) {
-      if (modalMode && authModal?.open) authModal.open('signIn');
-      else router.replace('/auth/sign-in');
+      modalMode && authModal?.open ? authModal.open('signIn') : router.replace('/auth/sign-in');
       return;
     }
     try {
       await signIn({ username: username!, password: pwd });
-      if (modalMode && authModal?.close) authModal.close();
-      else router.replace('/auth/session-loading');
+      modalMode && authModal?.close ? authModal.close() : router.replace('/auth/session-loading');
     } catch {
-      if (modalMode && authModal?.open) authModal.open('signIn');
-      else router.replace('/auth/sign-in');
+      modalMode && authModal?.open ? authModal.open('signIn') : router.replace('/auth/sign-in');
     }
   };
 
-  /* ───────────────────────── UI ───────────────────────── */
+  /* ───────── reusable chunks ───────── */
+  const ResendSection = () =>
+    canResend ? (
+      <Pressable onPress={handleResend}>
+        <Text style={styles.resendText}>
+          Didn&apos;t get a code? <Text style={styles.resendLink}>Tap here to resend.</Text>
+        </Text>
+      </Pressable>
+    ) : (
+      <Text style={styles.timerText}>
+        Request another code in {timer} second{timer !== 1 ? 's' : ''}.
+      </Text>
+    );
+
+  const ConfirmBody = () => (
+    <>
+      <Text style={styles.explanation}>
+        We&apos;ve sent a 6-digit confirmation code. Please check your e-mail and enter it below.
+      </Text>
+
+      <Text style={styles.label}>Confirmation Code</Text>
+      <TextInput
+        value={confirmationCode}
+        onChangeText={setConfirmationCode}
+        style={[styles.input, modalMode && { borderColor: '#333', borderWidth: 1 }]}
+        keyboardType="number-pad"
+        placeholder="Enter 6-digit code"
+        placeholderTextColor="#666"
+      />
+
+      {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+      {!!infoMessage  && <Text style={styles.info}>{infoMessage}</Text>}
+
+      <ResendSection />
+
+      <TouchableOpacity
+        style={styles.button}
+        onPress={handleConfirm}
+        disabled={isLoading}
+      >
+        {isLoading ? (
+          <ActivityIndicator size="small" color={COLOR_TEXT} />
+        ) : (
+          <Text style={styles.buttonText}>Confirm</Text>
+        )}
+      </TouchableOpacity>
+    </>
+  );
+
+  const SuccessBody = () => (
+    <>
+      <Ionicons
+        name="checkmark-circle"
+        size={48}
+        color="#44e627"
+        style={{ alignSelf: 'center', marginVertical: 24 }}
+      />
+      <Text style={[styles.info, styles.confirmationMessage]}>{infoMessage}</Text>
+      <TouchableOpacity style={styles.button} onPress={handleSignIn}>
+        <Text style={styles.buttonText}>Sign In</Text>
+      </TouchableOpacity>
+    </>
+  );
+
+  /* ───────── render ───────── */
+  const Inner = () => (
+    confirmationSuccess ? <SuccessBody /> : <ConfirmBody />
+  );
+
   if (modalMode) {
     return (
       <View style={styles.modalContainer}>
-        <Text style={[styles.title, { color: '#DFDCD9' }]}>Confirm Account</Text>
+        <Text style={[styles.title, { color: COLOR_TEXT }]}>Confirm Account</Text>
+        <Inner />
 
-        {confirmationSuccess ? (
-          <>
-            <Ionicons
-              name="checkmark-circle"
-              size={48}
-              color="#44e627"
-              style={{ alignSelf: 'center', marginVertical: 24 }}
-            />
-            <Text style={[styles.info, styles.confirmationMessage]}>{infoMessage}</Text>
-            <TouchableOpacity style={styles.button} onPress={doSignIn}>
-              <Text style={styles.buttonText}>Sign In</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            {/* Explanatory text for user guidance */}
-            <Text style={styles.explanation}>
-              {`We've sent a 6-digit confirmation code. Please check your email inbox and enter the code below.`}
-            </Text>
-            <Text style={styles.label}>Confirmation Code</Text>
-            <TextInput
-              value={confirmationCode}
-              onChangeText={setConfirmationCode}
-              style={[styles.input, modalMode && { borderColor: '#333', borderWidth: 1 }]}
-              keyboardType="number-pad"
-              placeholder="Enter 6-digit code"
-              placeholderTextColor="#666"
-            />
-
-            {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
-            {!!infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
-
-            {/* Timer and resend code UI */}
-            {!canResend ? (
-              <Text style={styles.timerText}>
-                Request another code in {timer} second{timer !== 1 ? 's' : ''}.
-              </Text>
-            ) : (
-              <Text style={styles.resendText} onPress={handleResendCode}>
-                Didn't get a code? <Text style={styles.resendLink}>Tap here to resend.</Text>
-              </Text>
-            )}
-
-            <TouchableOpacity style={styles.button} onPress={doConfirm} disabled={isLoading}>
-              {isLoading ? (
-                <ActivityIndicator size="small" color="#DFDCD9" />
-              ) : (
-                <Text style={styles.buttonText}>Confirm</Text>
-              )}
-            </TouchableOpacity>
-          </>
-        )}
-
-        {/* Back link */}
         {!confirmationSuccess && (
           <View style={styles.signInContainer}>
             <Text style={styles.signInText}>
               Need a different account?{' '}
-              <Text style={styles.signInLink} onPress={() => modalMode && authModal?.open ? authModal.open('signIn') : router.replace('/auth/sign-in')}>
+              <Text
+                style={styles.signInLink}
+                onPress={() =>
+                  modalMode && authModal?.open
+                    ? authModal.open('signIn')
+                    : router.replace('/auth/sign-in')
+                }
+              >
                 Sign In
               </Text>
             </Text>
@@ -202,70 +238,20 @@ export default function ConfirmCode({ modalMode }: { modalMode?: boolean }) {
     );
   }
 
+  /* ---- full-page version ---- */
   return (
-    <View style={[styles.background, { backgroundColor: '#232323' }]}> 
+    <View style={[styles.background, { backgroundColor: '#232323' }]}>
       <View style={styles.container}>
         <Text style={styles.title}>Confirm Account</Text>
-
-        {confirmationSuccess ? (
-          <>
-            <Ionicons
-              name="checkmark-circle"
-              size={48}
-              color="#44e627"
-              style={{ alignSelf: 'center', marginVertical: 24 }}
-            />
-            <Text style={[styles.info, styles.confirmationMessage]}>{infoMessage}</Text>
-            <TouchableOpacity style={styles.button} onPress={doSignIn}>
-              <Text style={styles.buttonText}>Sign In</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            {/* Explanatory text for user guidance */}
-            <Text style={styles.explanation}>
-              {`We've sent a 6-digit confirmation code to your email. Check your inbox and enter the code below.`}
-            </Text>
-            <Text style={styles.label}>Confirmation Code</Text>
-            <TextInput
-              value={confirmationCode}
-              onChangeText={setConfirmationCode}
-              style={styles.input}
-              keyboardType="number-pad"
-              placeholder="Enter 6-digit code"
-              placeholderTextColor="#666"
-            />
-
-            {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
-            {!!infoMessage && <Text style={styles.info}>{infoMessage}</Text>}
-
-            {/* Timer and resend code UI */}
-            {!canResend ? (
-              <Text style={styles.timerText}>
-                Request another code in {timer} second{timer !== 1 ? 's' : ''}.
-              </Text>
-            ) : (
-              <Text style={styles.resendText} onPress={handleResendCode}>
-                Didn't get a code? <Text style={styles.resendLink}>Tap here to resend.</Text>
-              </Text>
-            )}
-
-            <TouchableOpacity style={styles.button} onPress={doConfirm} disabled={isLoading}>
-              {isLoading ? (
-                <ActivityIndicator size="small" color="#DFDCD9" />
-              ) : (
-                <Text style={styles.buttonText}>Confirm</Text>
-              )}
-            </TouchableOpacity>
-          </>
-        )}
-
-        {/* Back link */}
+        <Inner />
         {!confirmationSuccess && (
           <View style={styles.signInContainer}>
             <Text style={styles.signInText}>
               Need a different account?{' '}
-              <Text style={styles.signInLink} onPress={() => modalMode && authModal?.open ? authModal.open('signIn') : router.replace('/auth/sign-in')}>
+              <Text
+                style={styles.signInLink}
+                onPress={() => router.replace('/auth/sign-in')}
+              >
                 Sign In
               </Text>
             </Text>
@@ -276,23 +262,45 @@ export default function ConfirmCode({ modalMode }: { modalMode?: boolean }) {
   );
 }
 
+/* ───────────────────────── styles ───────────────────────── */
 const styles = StyleSheet.create({
-  background:            { flex: 1, backgroundColor: '#232323' },
-  container:             { flex: 1, justifyContent: 'center', padding: 24 },
-  modalContainer:        { backgroundColor: '#141414', borderRadius: 18, padding: 12 },
-  title:                 { fontSize: 42, color: '#fff', marginBottom: 24, fontWeight: 'bold' },
-  label:                 { fontSize: 16, color: '#fff', marginTop: 10 },
-  input:                 { backgroundColor: 'rgba(20, 20, 20, 0.5)', marginVertical: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, color: '#DFDCD9' },
-  button:                { backgroundColor: '#CE975E', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginTop: 20 },
-  buttonText:            { color: '#DFDCD9', fontSize: 18, fontWeight: 'bold' },
-  error:                 { color: 'red', marginTop: 8 },
-  info:                  { color: '#CE975E', marginTop: 8 },
-  confirmationMessage:   { fontSize: 20, color: '#fff', textAlign: 'center', marginBottom: 16 },
-  signInContainer:       { marginTop: 60, alignItems: 'center' },
-  signInText:            { fontSize: 14, color: '#fff' },
-  signInLink:            { color: '#CE975E', fontWeight: 'bold' },
-  explanation:           { color: '#aaa', fontSize: 14, marginBottom: 10, marginTop: 8, textAlign: 'center' },
-  timerText:             { color: '#aaa', fontSize: 12, marginBottom: 10, textAlign: 'left' },
-  resendText:            { color: '#aaa', fontSize: 12, marginBottom: 10, textAlign: 'left' },
-  resendLink:            { color: '#CE975E', fontWeight: 'bold' },
+  /* layout */
+  background:      { flex: 1, backgroundColor: '#232323' },
+  container:       { flex: 1, justifyContent: 'center', padding: 24 },
+  modalContainer:  { backgroundColor: '#141414', borderRadius: 18, padding: 12 },
+
+  /* text + UI */
+  title:           { fontSize: 42, color: '#fff', marginBottom: 24, fontWeight: 'bold' },
+  label:           { fontSize: 16, color: '#fff', marginTop: 10 },
+  input:           {
+    backgroundColor: 'rgba(20,20,20,0.5)',
+    marginVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    fontSize: 16,
+    color: COLOR_TEXT,
+  },
+  button:          {
+    backgroundColor: COLOR_PRIMARY,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  buttonText:      { color: COLOR_TEXT, fontSize: 18, fontWeight: 'bold' },
+
+  error:           { color: 'red', marginTop: 8 },
+  info:            { color: COLOR_PRIMARY, marginTop: 8 },
+  confirmationMessage: { fontSize: 20, color: '#fff', textAlign: 'center', marginBottom: 16 },
+
+  signInContainer: { marginTop: 60, alignItems: 'center' },
+  signInText:      { fontSize: 14, color: '#fff' },
+  signInLink:      { color: COLOR_PRIMARY, fontWeight: 'bold' },
+
+  explanation:     { color: '#aaa', fontSize: 14, marginBottom: 10, marginTop: 8, textAlign: 'center' },
+
+  timerText:       { color: '#aaa', fontSize: 12, marginBottom: 10, textAlign: 'left' },
+  resendText:      { color: '#aaa', fontSize: 12, marginBottom: 10, textAlign: 'left' },
+  resendLink:      { color: COLOR_PRIMARY, fontWeight: 'bold' },
 });
