@@ -4,17 +4,13 @@
 //              • Accepts username & (optional) password from route params.
 //              • Treats "already confirmed" as success.
 // Author: Nathan Hambleton
-// Updated: Apr 23 2025
+// Updated: Jun 23 2025 (modal-style refactor)
 // -----------------------------------------------------------------------------
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { confirmSignUp, signIn, resendSignUpCode } from 'aws-amplify/auth';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-
-const BG_TOP = '#4f4f4f';
-const BG_BTM = '#000';
 
 export default function ConfirmCode() {
   const router = useRouter();
@@ -126,8 +122,8 @@ export default function ConfirmCode() {
 
   /* ───────────────────────── UI ───────────────────────── */
   return (
-    <LinearGradient colors={[BG_TOP, BG_BTM]} style={styles.background}>
-      <View style={styles.container}>
+    <View style={styles.background}>
+      <View style={styles.modalContainer}>
         <Text style={styles.title}>Confirm Account</Text>
 
         {confirmationSuccess ? (
@@ -195,26 +191,26 @@ export default function ConfirmCode() {
           </View>
         )}
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  background:            { flex: 1 },
-  container:             { flex: 1, justifyContent: 'center', padding: 24 },
-  title:                 { fontSize: 42, color: '#fff', marginBottom: 24, fontWeight: 'bold' },
-  label:                 { fontSize: 16, color: '#fff', marginTop: 10 },
-  input:                 { backgroundColor: 'rgba(20, 20, 20, 0.5)', marginVertical: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, color: '#DFDCD9' },
-  button:                { backgroundColor: '#CE975E', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginTop: 20 },
-  buttonText:            { color: '#DFDCD9', fontSize: 18, fontWeight: 'bold' },
-  error:                 { color: 'red', marginTop: 8 },
-  info:                  { color: '#CE975E', marginTop: 8 },
-  confirmationMessage:   { fontSize: 20, color: '#fff', textAlign: 'center', marginBottom: 16 },
-  signInContainer:       { marginTop: 60, alignItems: 'center' },
-  signInText:            { fontSize: 14, color: '#fff' },
-  signInLink:            { color: '#CE975E', fontWeight: 'bold' },
-  explanation:           { color: '#aaa', fontSize: 14, marginBottom: 10, marginTop: 8, textAlign: 'center' },
-  timerText:             { color: '#aaa', fontSize: 12, marginBottom: 10, textAlign: 'left' },
-  resendText:            { color: '#aaa', fontSize: 12, marginBottom: 10, textAlign: 'left' },
-  resendLink:            { color: '#CE975E', fontWeight: 'bold', textDecorationLine: 'underline' },
+  background:        { flex: 1, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center' },
+  modalContainer:    { backgroundColor: '#141414', borderRadius: 18, padding: 18, width: '92%', maxWidth: 420, alignSelf: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 16 },
+  title:             { fontSize: 38, color: '#DFDCD9', marginBottom: 18, fontWeight: 'bold', textAlign: 'center' },
+  label:             { fontSize: 16, color: '#aaa', marginTop: 10 },
+  input:             { backgroundColor: '#181818', marginVertical: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, color: '#DFDCD9', borderColor: '#333', borderWidth: 1 },
+  button:            { backgroundColor: '#CE975E', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginTop: 20 },
+  buttonText:        { color: '#232323', fontSize: 18, fontWeight: 'bold' },
+  error:             { color: 'red', marginTop: 8 },
+  info:              { color: '#CE975E', marginTop: 8 },
+  confirmationMessage: { fontSize: 20, color: '#fff', textAlign: 'center', marginBottom: 16 },
+  signInContainer:   { marginTop: 60, alignItems: 'center' },
+  signInText:        { fontSize: 14, color: '#aaa' },
+  signInLink:        { color: '#CE975E', fontWeight: 'bold' },
+  explanation:       { color: '#aaa', fontSize: 14, marginBottom: 10, marginTop: 8, textAlign: 'center' },
+  timerText:         { color: '#aaa', fontSize: 12, marginBottom: 10, textAlign: 'left' },
+  resendText:        { color: '#aaa', fontSize: 12, marginBottom: 10, textAlign: 'left' },
+  resendLink:        { color: '#CE975E', fontWeight: 'bold', textDecorationLine: 'underline' },
 });
