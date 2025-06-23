@@ -14,7 +14,6 @@ import {
   Animated as RNAnimated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Ionicons           from '@expo/vector-icons/Ionicons';
 import { useRouter }      from 'expo-router';
 
 import { Amplify }          from 'aws-amplify';
@@ -67,6 +66,19 @@ async function toSigned(remoteOrKey: string): Promise<string> {
     return url.toString();
   } catch {
     return remoteOrKey; // fallback (will 404 if truly invalid)
+  }
+}
+
+async function fetchJsonOrCache(url: string, current: string): Promise<string> {
+  try {
+    const res = await fetch(url, { cache: 'no-cache' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const txt = await res.text();
+    JSON.parse(txt);           // throws if not valid JSON
+    return txt;                // ✓ good payload
+  } catch (err) {
+    console.warn('JSON fetch failed → keeping cache', err);
+    return current;            // keep whatever we already had
   }
 }
 
@@ -140,7 +152,7 @@ export default function SessionLoading(): ReactElement {
   const retryCount = useRef<number>(0);                    // retry counter
   const maxRetries = 5;
 
-  const bump = (f: number) => setPct(p => Math.min(p + f, 1));
+  const bump = (f: number) => setPct(p => Math.min(f, 1));
 
   /* live connectivity watcher */
   useEffect(() => {
@@ -238,8 +250,8 @@ export default function SessionLoading(): ReactElement {
         ]);
 
         const [dTxt, iTxt] = await Promise.all([
-          fetch(dUrl.url, { cache: 'no-cache' }).then(r => r.text()),
-          fetch(iUrl.url,  { cache: 'no-cache' }).then(r => r.text()),
+          fetchJsonOrCache(dUrl.url.toString(), drinksRaw),
+          fetchJsonOrCache(iUrl.url.toString(), ingsRaw),
         ]);
 
         if (dTxt !== drinksRaw) {
@@ -315,13 +327,23 @@ export default function SessionLoading(): ReactElement {
       <Image source={LOGO} style={styles.logo} resizeMode="contain" />
       <Text style={styles.app}>{APP_NAME}</Text>
       <View style={styles.barWrap}>
-        <View style={StyleSheet.absoluteFill}/>  {/* grey background */}
+        {/* grey background */}
+        <View style={StyleSheet.absoluteFill} />
+        {/* gold fill grows left → right */}
         <RNAnimated.View
-          style={{ width: progress.interpolate({ inputRange:[0,1], outputRange:['0%','100%'] }) }}
+          style={{
+            width: progress.interpolate({
+              inputRange: [0, 1],
+              outputRange: ['0%', '100%'],
+            }),
+          }}
         >
-          <LinearGradient /* gold fill */ colors={[COL_BAR, '#e0a56f']}
-                          start={{x:0,y:0}} end={{x:1,y:0}}
-                          style={StyleSheet.absoluteFill}/>
+          <LinearGradient
+            colors={[COL_BAR, '#e0a56f']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFill}
+          />
         </RNAnimated.View>
       </View>
       <Text style={styles.percent}>{percent}%</Text>
