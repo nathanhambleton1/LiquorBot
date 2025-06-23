@@ -157,7 +157,7 @@ export default function ConfirmCode({ modalMode }: { modalMode?: boolean }) {
             <TextInput
               value={confirmationCode}
               onChangeText={setConfirmationCode}
-              style={styles.input}
+              style={[styles.input, modalMode && { borderColor: '#333', borderWidth: 1 }]}
               keyboardType="number-pad"
               placeholder="Enter 6-digit code"
               placeholderTextColor="#666"
@@ -224,7 +224,7 @@ export default function ConfirmCode({ modalMode }: { modalMode?: boolean }) {
           <>
             {/* Explanatory text for user guidance */}
             <Text style={styles.explanation}>
-              {`We've sent a 6-digit confirmation code. Please check your email inbox and enter the code below.`}
+              {`We've sent a 6-digit confirmation code to your email. Check your inbox and enter the code below.`}
             </Text>
             <Text style={styles.label}>Confirmation Code</Text>
             <TextInput
@@ -294,5 +294,5 @@ const styles = StyleSheet.create({
   explanation:           { color: '#aaa', fontSize: 14, marginBottom: 10, marginTop: 8, textAlign: 'center' },
   timerText:             { color: '#aaa', fontSize: 12, marginBottom: 10, textAlign: 'left' },
   resendText:            { color: '#aaa', fontSize: 12, marginBottom: 10, textAlign: 'left' },
-  resendLink:            { color: '#CE975E', fontWeight: 'bold', textDecorationLine: 'underline' },
+  resendLink:            { color: '#CE975E', fontWeight: 'bold' },
 });
