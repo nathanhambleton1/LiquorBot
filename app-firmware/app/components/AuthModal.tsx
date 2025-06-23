@@ -191,13 +191,13 @@ export default function AuthModal() {
           <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]} />
         </Pressable>
 
-        {/* bottom-sheet */}
+        {/* bottom sheet */}
         <Animated.View
           style={[
             styles.sheet,
             {
               height       : sheetHeight,
-              paddingBottom: (Platform.OS === 'ios' ? 24 : 16) + insets.bottom + kbdHeight, // CHANGED
+              paddingBottom: (Platform.OS === 'ios' ? 24 : 16) + insets.bottom, // ← no kbdHeight here
               transform    : [{ translateY }],
             },
           ]}
@@ -213,7 +213,10 @@ export default function AuthModal() {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.content}
+            contentContainerStyle={[
+              styles.content,
+              { paddingBottom: 24 + kbdHeight },         // ← add kbdHeight here
+            ]}
           >
             {Content}
           </ScrollView>
