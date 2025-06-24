@@ -33,6 +33,14 @@ import { joinEvent }      from '../../src/graphql/mutations';
 import { AuthModalContext } from '../components/AuthModalContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// -------------------- types --------------------
+interface AppEvent {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+}
+
 /* ---------- AWS IoT SDK (static import) ---------- */
 import {
   IoTClient,
@@ -58,26 +66,54 @@ export default function Index() {
 
   /* -------------------- state -------------------- */
   const [currentUser,    setCurrentUser]    = useState<string | null>(null);
-  const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
+  const [upcomingEvents, setUpcomingEvents] = useState<AppEvent[]>([]);
   const [eventsLoading,  setEventsLoading]  = useState(true);
 
   /* ---------- deep-link join popup ---------- */
   const { pendingCode } = useContext(DeepLinkContext);
-  const [linkEvent,         setLinkEvent]         = useState<Event|null>(null);
+  const [linkEvent,         setLinkEvent]         = useState<AppEvent|null>(null);
   const [linkModalVisible,  setLinkModalVisible]  = useState(false);
   const [linkLoading,       setLinkLoading]       = useState(false);
   const [linkErr,           setLinkErr]           = useState<string|null>(null);
 
   // Ref to ensure join popup is only shown once per deep link
-  const hasShownJoinModalRef = useRef(false);
+  const hasShownJoinModalRef = useRef<string|null>(null);
 
-  /* -------------------- types -------------------- */
-  interface Event {
-    id: string;
-    name: string;
-    startTime: string;
-    endTime: string;
-  }
+  // Show join popup only after auth modal is closed and user is signed in
+  useEffect(() => {
+    if (
+      pendingCode &&
+      !linkModalVisible &&
+      currentUser &&
+      authModal &&
+      !authModal.visible &&
+      hasShownJoinModalRef.current !== pendingCode
+    ) {
+      (async () => {
+        try {
+          const { data } = await generateClient().graphql({
+            query: eventsByCode,
+            variables: { inviteCode: pendingCode },
+            authMode:  'userPool',
+          }) as { data: { eventsByCode: { items: any[] } } };
+
+          const ev = data.eventsByCode.items?.[0];
+          if (ev) {
+            setLinkEvent({
+              id:   ev.id,
+              name: ev.name,
+              startTime: ev.startTime,
+              endTime:   ev.endTime,
+            });
+            setLinkModalVisible(true);
+            hasShownJoinModalRef.current = pendingCode;
+          }
+        } catch (e) {
+          console.warn('Deep-link lookup failed', e);
+        }
+      })();
+    }
+  }, [pendingCode, currentUser, authModal?.visible, linkModalVisible]);
 
   // ------------------------------------------------------------------
   // 1.  Keep currentUser in sync with auth state, and clear UI on log-out
@@ -132,7 +168,7 @@ export default function Index() {
             endTime:   ev.endTime,
           });
           setLinkModalVisible(true);
-          hasShownJoinModalRef.current = true; // Prevent repeat popups
+          hasShownJoinModalRef.current = pendingCode; // Prevent repeat popups
         }
       } catch (e) {
         console.warn('Deep-link lookup failed', e);
@@ -188,8 +224,8 @@ export default function Index() {
               startTime: item.startTime,
               endTime: item.endTime,
             }))
-            .filter((event: Event) => new Date(event.endTime) > now)
-            .sort((a: Event, b: Event) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+            .filter((event: AppEvent) => new Date(event.endTime) > now)
+            .sort((a: AppEvent, b: AppEvent) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
           setUpcomingEvents(filtered);
           setEventsLoading(false);
         }
@@ -225,8 +261,8 @@ export default function Index() {
           startTime: item.startTime,
           endTime: item.endTime,
         }))
-        .filter((event: Event) => new Date(event.endTime) > now)
-        .sort((a: Event, b: Event) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+        .filter((event: AppEvent) => new Date(event.endTime) > now)
+        .sort((a: AppEvent, b: AppEvent) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
       setUpcomingEvents(filtered);
       await AsyncStorage.setItem('cachedEvents', JSON.stringify(data.listEvents.items));
     } catch (error: any) {
@@ -393,7 +429,7 @@ export default function Index() {
                 contentContainerStyle={styles.eventsContainer}
                 showsVerticalScrollIndicator={false}
               >
-                {upcomingEvents.slice(0, 3).map((event: Event) => (
+                {upcomingEvents.slice(0, 3).map((event: AppEvent) => (
                   <View key={event.id} style={styles.eventItem}>
                     <View style={styles.eventRow}>
                       <Text style={styles.eventDate}>
