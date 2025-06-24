@@ -77,6 +77,7 @@ export default function Index() {
   const [linkLoading,       setLinkLoading]       = useState(false);
   const [linkErr,           setLinkErr]           = useState<string|null>(null);
   const [linkLookupBusy,    setLinkLookupBusy]    = useState(false);
+  const hasAutoOpenedSignIn = useRef<string | null>(null);
   
 
   // Ref to ensure join popup is only shown once per deep link
@@ -128,6 +129,20 @@ export default function Index() {
 
     return () => { cancelled = true };
   }, [pendingCode, currentUser, sessionLoaded, authModal?.visible, linkModalVisible]);
+
+  useEffect(() => {
+    // 1) no deep link ⟹ ignore
+    // 2) user already signed in ⟹ ignore
+    // 3) already opened for this code ⟹ ignore
+    if (!pendingCode || currentUser || hasAutoOpenedSignIn.current === pendingCode)
+      return;
+
+    // open only if the modal isn’t already showing
+    if (!authModal?.visible) {
+      authModal?.open('signIn');
+      hasAutoOpenedSignIn.current = pendingCode;   // remember we’ve done it
+    }
+  }, [pendingCode, currentUser, authModal?.visible]);
 
   // ------------------------------------------------------------------
   // 1.  Keep currentUser in sync with auth state, and clear UI on log-out
