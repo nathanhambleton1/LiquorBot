@@ -47,6 +47,7 @@ import { getUrl }          from 'aws-amplify/storage';
 import { useLiquorBot } from '../components/liquorbot-provider';
 import * as Haptics from 'expo-haptics';
 import { AuthModalContext } from '../components/AuthModalContext';
+import { BlurView } from 'expo-blur';
 
 Amplify.configure(config);
 const client = generateClient();
@@ -81,6 +82,9 @@ const LIST_CUSTOM_RECIPES_WITH_ING = /* GraphQL */ `
     }
   }
 `;
+
+// Set a constant for filter modal blur intensity (match tab bar/buttons for consistency)
+const FILTER_MODAL_BLUR_INTENSITY = 70;
 
 // --------------------------- TYPES ---------------------------
 type Drink = {
@@ -1620,6 +1624,7 @@ export default function MenuScreen() {
       </ScrollView>
 
   {/* ------------ FILTER POPUP ------------ */}
+  {filterModalVisible && (
   <Modal
     visible={filterModalVisible}
     transparent
@@ -1627,7 +1632,10 @@ export default function MenuScreen() {
     onRequestClose={() => setFilterModalVisible(false)}
   >
     <View style={styles.modalOverlay}>
-      <View style={styles.filterModal}>
+      <View style={[styles.filterModal, { overflow: 'hidden', backgroundColor: 'transparent' }]}> 
+        {/* Glassy blur background for filter modal */}
+        <BlurView intensity={FILTER_MODAL_BLUR_INTENSITY} tint="dark" style={[StyleSheet.absoluteFill, { borderRadius: 18, overflow: 'hidden' }]} />
+
         <TouchableOpacity
           style={styles.modalCloseButton}
           onPress={() => setFilterModalVisible(false)}
@@ -1669,6 +1677,7 @@ export default function MenuScreen() {
       </View>
     </View>
   </Modal>
+)}
     </View> 
   ); 
 }     

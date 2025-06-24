@@ -20,11 +20,15 @@ import React from 'react';
 import { Tabs, Redirect } from 'expo-router';
 import { useAuthenticator } from '@aws-amplify/ui-react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { StatusBar } from 'react-native';
+import { StatusBar, Platform } from 'react-native';
 import {
   SafeAreaView as SAView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLiquorBot } from '../components/liquorbot-provider';
 import { AuthModalContext } from '../components/AuthModalContext';
+import BlurTabBarBackground from '../../components/ui/TabBarBackground.ios';
+
+// Allow custom blur intensity for the tab bar
+const TAB_BAR_BLUR_INTENSITY = 50; // Change this value to adjust blur (0-100)
 
 export default function TabLayout() {
   const { authStatus } = useAuthenticator((ctx) => [ctx.authStatus]);
@@ -50,7 +54,7 @@ export default function TabLayout() {
           tabBarActiveTintColor:   '#CE975E',
           tabBarInactiveTintColor: '#4F4F4F',
           tabBarStyle: {
-            backgroundColor:       '#000',
+            backgroundColor:       'rgba(0, 0, 0, 0.8)', // transparent dark for glassy look
             borderTopWidth:        0,
             borderTopLeftRadius:   20,
             borderTopRightRadius:  20,
@@ -64,6 +68,7 @@ export default function TabLayout() {
             height:                60 + insets.bottom,
             paddingBottom:         insets.bottom,
           },
+          tabBarBackground: Platform.OS === 'ios' ? () => <BlurTabBarBackground intensity={TAB_BAR_BLUR_INTENSITY} /> : undefined,
         }}
       >
         {/* Home Tab */}

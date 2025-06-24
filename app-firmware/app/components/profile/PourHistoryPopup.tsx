@@ -18,13 +18,13 @@ import {
   Alert,
   ActivityIndicator,
   TextInput,
-  Modal,
   RefreshControl,
+  KeyboardAvoidingView, // <-- add this
+  Platform,             // <-- add this
 } from 'react-native';
 import { useUnits, ozToMl } from '../UnitsContext';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { Picker } from '@react-native-picker/picker';
 import { BlurView } from 'expo-blur';
 
 import { generateClient } from 'aws-amplify/api';
@@ -51,9 +51,6 @@ export default function PourHistoryPopup({ onClear }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const { units } = useUnits();
-  const [filterModalVisible, setFilterModalVisible] = useState(false);
-  const [sortOption, setSortOption] = useState<'date' | 'alphabetical'>('date');
-  const [dateRange, setDateRange] = useState<'7days' | 'month' | 'year' | 'all'>('7days');
   const [clearing, setClearing] = useState(false); // Add state for clearing spinner
 
   // Fetch pour history (used for mount and refresh)
@@ -135,23 +132,7 @@ export default function PourHistoryPopup({ onClear }: Props) {
         amtStr.includes(q)
       );
     })
-    .filter((ev) => {
-      const now = new Date();
-      const eventDate = new Date(ev.time);
-      if (dateRange === '7days') {
-        return eventDate >= new Date(now.setDate(now.getDate() - 7));
-      } else if (dateRange === 'month') {
-        return eventDate >= new Date(now.setMonth(now.getMonth() - 1));
-      } else if (dateRange === 'year') {
-        return eventDate >= new Date(now.setFullYear(now.getFullYear() - 1));
-      }
-      return true; // 'all' shows all events
-    })
-    .sort((a, b) => {
-      if (sortOption === 'alphabetical')
-        return a.drinkName.localeCompare(b.drinkName);
-      return new Date(b.time).getTime() - new Date(a.time).getTime();
-    });
+    .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
 
   /* ---------------------- group by date ------------------------- */
   const grouped: Record<string, PourEvent[]> = {};
@@ -171,89 +152,85 @@ export default function PourHistoryPopup({ onClear }: Props) {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* only show when there's data */}
-      {events.length > 0 && (
-        <View style={styles.searchBarContainer}>
-          <Ionicons
-            name="search"
-            size={20}
-            color="#4F4F4F"
-            style={styles.searchIcon}
-          />
-          <TextInput
-            style={styles.searchBar}
-            placeholder="Search history"
-            placeholderTextColor="#4F4F4F"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          <TouchableOpacity
-            onPress={() => setFilterModalVisible(true)}
-            style={styles.filterIcon}
-          >
-            <Ionicons
-              name="funnel-outline"
-              size={20}
-              color="#4f4f4f"
-            />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 140 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={["#CE975E"]}
-          />
-        }
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={0}
       >
-        {Object.entries(grouped).map(([date, rows]) => (
-          <View key={date} style={{ marginBottom: 22 }}>
-            <Text style={styles.date}>{date}</Text>
-            {rows.map((ev, i) => (
-              <View key={i} style={styles.row}>
-                <Ionicons
-                  name="wine-outline"
-                  size={20}
-                  color="#CE975E"
-                  style={{ marginRight: 10, marginTop: 10 }}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{ev.drinkName}</Text>
-                  <Text style={styles.sub}>
-                    {new Date(ev.time).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}{' '}
-                    • {units === 'oz'
-                      ? `${ev.volumeOz.toFixed(1)} oz`
-                      : `${ozToMl(ev.volumeOz).toFixed(1)} ml`}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        ))}
-
-        {events.length === 0 && (
-          <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons
-              name="glass-cocktail-off"
-              size={50}
+        {/* only show when there's data */}
+        {events.length > 0 && (
+          <View style={styles.searchBarContainer}>
+            <Ionicons
+              name="search"
+              size={20}
               color="#4F4F4F"
-              style={{ marginBottom: 10 }}
+              style={styles.searchIcon}
             />
-            <Text style={styles.emptyTitle}>No pours yet</Text>
-            <Text style={styles.emptySubtitle}>
-              Once you pour a drink, it will appear here.
-            </Text>
+            <TextInput
+              style={styles.searchBar}
+              placeholder="Search history"
+              placeholderTextColor="#4F4F4F"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
           </View>
         )}
-      </ScrollView>
 
-      {/* Floating clear button */}
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 140 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={["#CE975E"]}
+            />
+          }
+        >
+          {Object.entries(grouped).map(([date, rows]) => (
+            <View key={date} style={{ marginBottom: 22 }}>
+              <Text style={styles.date}>{date}</Text>
+              {rows.map((ev, i) => (
+                <View key={i} style={styles.row}>
+                  <Ionicons
+                    name="wine-outline"
+                    size={20}
+                    color="#CE975E"
+                    style={{ marginRight: 10, marginTop: 10 }}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.name}>{ev.drinkName}</Text>
+                    <Text style={styles.sub}>
+                      {new Date(ev.time).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}{' '}
+                      • {units === 'oz'
+                        ? `${ev.volumeOz.toFixed(1)} oz`
+                        : `${ozToMl(ev.volumeOz).toFixed(1)} ml`}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ))}
+
+          {events.length === 0 && (
+            <View style={styles.emptyContainer}>
+              <MaterialCommunityIcons
+                name="glass-cocktail-off"
+                size={50}
+                color="#4F4F4F"
+                style={{ marginBottom: 10 }}
+              />
+              <Text style={styles.emptyTitle}>No pours yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Once you pour a drink, it will appear here.
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Floating clear button - moved outside KeyboardAvoidingView */}
       {events.length > 0 && (
         <View style={styles.clearButtonWrapper}>
           <TouchableOpacity
@@ -265,8 +242,8 @@ export default function PourHistoryPopup({ onClear }: Props) {
             }
             style={styles.clearButtonContainer}
           >
-            <View style={styles.clearButtonBox}>
-              <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={[styles.clearButtonBox, { marginBottom: 0 }]}> 
+              <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
               <Ionicons
                 name="trash-outline"
                 size={18}
@@ -278,92 +255,6 @@ export default function PourHistoryPopup({ onClear }: Props) {
           </TouchableOpacity>
         </View>
       )}
-
-      {/* filter modal */}
-      <Modal
-        visible={filterModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setFilterModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.filterModal}>
-            <TouchableOpacity
-              style={styles.modalCloseButton}
-              onPress={() => setFilterModalVisible(false)}
-            >
-              <Ionicons name="close" size={24} color="#DFDCD9" />
-            </TouchableOpacity>
-            <Text style={styles.filterModalTitle}>Filter Options</Text>
-
-            <Text style={styles.filterLabel}>Date Range:</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={dateRange}
-                onValueChange={(value) => setDateRange(value)}
-                style={styles.picker}
-                dropdownIconColor="#CE975E"
-              >
-                <Picker.Item label="Past 7 Days" value="7days" />
-                <Picker.Item label="Past Month" value="month" />
-                <Picker.Item label="Past Year" value="year" />
-                <Picker.Item label="All Time" value="all" />
-              </Picker>
-            </View>
-
-            <Text style={styles.filterLabel}>Sort by:</Text>
-            <View style={styles.sortOptionsContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.sortOptionBox,
-                  sortOption === 'date' && styles.selectedSortOptionBox,
-                ]}
-                onPress={() => setSortOption('date')}
-              >
-                <Text
-                  style={[
-                    styles.sortOptionText,
-                    sortOption === 'date' && styles.selectedSortOptionText,
-                  ]}
-                >
-                  Date
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.sortOptionBox,
-                  sortOption === 'alphabetical' && styles.selectedSortOptionBox,
-                ]}
-                onPress={() => setSortOption('alphabetical')}
-              >
-                <Text
-                  style={[
-                    styles.sortOptionText,
-                    sortOption === 'alphabetical' && styles.selectedSortOptionText,
-                  ]}
-                >
-                  Alphabetical
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-              <TouchableOpacity
-                onPress={() => {
-                  setDateRange('7days');
-                  setSortOption('date');
-                }}
-                style={{ marginRight: 20 }}
-              >
-                <Text style={styles.filterLabel}>Reset</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
-                <Text style={{ color: '#CE975E', fontSize: 16 }}>Apply</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -394,7 +285,7 @@ const styles = StyleSheet.create({
   },
   clearButtonWrapper: {
     position: 'absolute',
-    bottom: 60,
+    bottom: 110,
     left: 20,
     right: 20,
     zIndex: 10, // Ensure it floats above other content
@@ -413,7 +304,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 10,
-    marginBottom: 50,
+    marginBottom: 0, // Removed extra marginBottom
     position: 'relative', // Position relative for absolute children
     overflow: 'hidden', // Ensures BlurView is clipped to rounded corners
   },
@@ -443,70 +334,5 @@ const styles = StyleSheet.create({
   },
   searchIcon: {
     marginRight: 10,
-  },
-  filterIcon: {
-    marginLeft: 10,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  filterModal: {
-    backgroundColor: '#1F1F1F',
-    borderRadius: 10,
-    padding: 20,
-    width: '80%',
-  },
-  modalCloseButton: {
-    alignSelf: 'flex-end',
-  },
-  filterModalTitle: {
-    color: '#CE975E',
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  filterLabel: {
-    color: '#DFDCD9',
-    fontSize: 16,
-    marginBottom: 10,
-  },
-  sortOptionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  sortOptionBox: {
-    flex: 1,
-    backgroundColor: '#4F4F4F',
-    paddingVertical: 10,
-    marginHorizontal: 5,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  selectedSortOptionBox: {
-    backgroundColor: '#CE975E',
-  },
-  sortOptionText: {
-    color: '#DFDCD9',
-    fontSize: 16,
-  },
-  selectedSortOptionText: {
-    color: '#1F1F1F',
-    fontWeight: 'bold',
-  },
-  pickerContainer: {
-    backgroundColor: '#1F1F1F',
-    borderRadius: 10,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#4F4F4F',
-  },
-  picker: {
-    color: '#DFDCD9',
-    fontSize: 16,
-    paddingHorizontal: 10,
   },
 });
