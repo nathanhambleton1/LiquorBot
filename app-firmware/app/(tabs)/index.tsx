@@ -75,6 +75,7 @@ export default function Index() {
   const [linkModalVisible,  setLinkModalVisible]  = useState(false);
   const [linkLoading,       setLinkLoading]       = useState(false);
   const [linkErr,           setLinkErr]           = useState<string|null>(null);
+  const [linkLookupBusy,    setLinkLookupBusy]    = useState(false);
 
   // Ref to ensure join popup is only shown once per deep link
   const hasShownJoinModalRef = useRef<string|null>(null);
@@ -82,38 +83,46 @@ export default function Index() {
   // Show join popup only after auth modal is closed and user is signed in
   useEffect(() => {
     if (
-      pendingCode &&
-      !linkModalVisible &&
-      currentUser &&
-      authModal &&
-      !authModal.visible &&
-      hasShownJoinModalRef.current !== pendingCode
-    ) {
-      (async () => {
-        try {
-          const { data } = await generateClient().graphql({
-            query: eventsByCode,
-            variables: { inviteCode: pendingCode },
-            authMode:  'userPool',
-          }) as { data: { eventsByCode: { items: any[] } } };
+      !pendingCode ||                       // nothing to do
+      authModal?.visible ||                 // wait until auth modal closes
+      hasShownJoinModalRef.current === pendingCode
+    ) return;
 
-          const ev = data.eventsByCode.items?.[0];
-          if (ev) {
-            setLinkEvent({
-              id:   ev.id,
-              name: ev.name,
-              startTime: ev.startTime,
-              endTime:   ev.endTime,
-            });
-            setLinkModalVisible(true);
-            hasShownJoinModalRef.current = pendingCode;
-          }
-        } catch (e) {
-          console.warn('Deep-link lookup failed', e);
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setLinkLookupBusy(true);            // ⟵ makes modal appear right away
+        setLinkModalVisible(true);
+
+        const { data } = await generateClient().graphql({
+          query     : eventsByCode,
+          variables : { inviteCode: pendingCode },
+          authMode  : 'userPool',
+        }) as { data:{ eventsByCode:{ items:any[] } } };
+
+        const ev = data.eventsByCode.items?.[0];
+        if (ev && !cancelled) {
+          setLinkEvent({
+            id: ev.id, name: ev.name,
+            startTime: ev.startTime, endTime: ev.endTime,
+          });
+          setLinkErr(null);
+        } else if (!cancelled) {
+          setLinkErr('Invite code not found');
         }
-      })();
-    }
-  }, [pendingCode, currentUser, authModal?.visible, linkModalVisible]);
+      } catch (e) {
+        if (!cancelled) setLinkErr('Unable to fetch event – try again.');
+      } finally {
+        if (!cancelled) {
+          setLinkLookupBusy(false);
+          hasShownJoinModalRef.current = pendingCode;
+        }
+      }
+    })();
+
+    return () => { cancelled = true };
+  }, [pendingCode, authModal?.visible, currentUser]);
 
   // ------------------------------------------------------------------
   // 1.  Keep currentUser in sync with auth state, and clear UI on log-out
@@ -553,7 +562,12 @@ export default function Index() {
             </TouchableOpacity>
 
             {/* event summary */}
-            <Ionicons name="calendar" size={48} color="#CE975E" style={{marginBottom:10}}/>
+            {linkLookupBusy && !linkEvent ? (
+              /* ⏳ spinning while GraphQL downloads */
+              <ActivityIndicator size="large" color="#CE975E" style={{marginVertical:20}}/>
+            ) : (
+              <Ionicons name="calendar" size={48} color="#CE975E" style={{marginBottom:10}}/>
+            )}
             <Text style={[styles.filtTitle,{marginBottom:4}]}>
               {linkEvent?.name ?? 'Event'}
             </Text>
