@@ -251,7 +251,7 @@ export default function AuthModal() {
         >
           {/* glassy blur background */}
           <BlurView
-            intensity={60}
+            intensity={80}
             tint="dark"
             style={styles.blur}
             pointerEvents="none"
@@ -292,7 +292,7 @@ export default function AuthModal() {
 /* ───────────────────────── styles ───────────────────────── */
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'flex-end' },
-  overlay  : { flex: 1, backgroundColor: 'rgba(20,20,20,0.7)' },
+  overlay  : { flex: 1, backgroundColor: 'rgba(20,20,20,0.95)' },
 
   // NOTE: keep bg transparent on iOS so blur shows through;
   //       Android gets a dark tint for consistent appearance.
