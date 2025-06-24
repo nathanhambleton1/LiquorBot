@@ -116,11 +116,28 @@
       <img src="/assets/logo.png" alt="LiquorBot Logo" />
     </div>
     <h1>Opening LiquorBot…</h1>
-    <p>Hang tight! We’re opening the app for you.<br>If nothing happens, you can download the app below.</p>
+    <p>Hang tight! We’re opening the app for you.<br>If nothing happens, you can download the app below or try opening the app directly.</p>
     <a class="lb-btn" href="https://apps.apple.com/app/id6746461095">Download on the App Store</a>
+    <div style="margin-top: 1.2rem;">
+      <button class="lb-btn" id="open-app-btn" style="background:#222;color:#ce975e;border:1.5px solid #ce975e;">Open in LiquorBot App</button>
+    </div>
     <div class="lb-fallback">
       <p>If you already have the app, make sure it’s installed and up to date.</p>
     </div>
   </div>
+  <script>
+    // Add backup button logic for custom scheme
+    document.addEventListener('DOMContentLoaded', function() {
+      const btn = document.getElementById('open-app-btn');
+      if (!btn) return;
+      // Extract code from URL path
+      const parts = location.pathname.split('/');
+      const code = parts[2] || '';
+      btn.addEventListener('click', function() {
+        // Open the app with the code using the custom scheme
+        window.location.href = `liquorbotapp://join/${code}`;
+      });
+    });
+  </script>
 </body>
 </html>
