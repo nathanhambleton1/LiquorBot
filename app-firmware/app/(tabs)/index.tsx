@@ -68,6 +68,9 @@ export default function Index() {
   const [linkLoading,       setLinkLoading]       = useState(false);
   const [linkErr,           setLinkErr]           = useState<string|null>(null);
 
+  // Ref to ensure join popup is only shown once per deep link
+  const hasShownJoinModalRef = useRef(false);
+
   /* -------------------- types -------------------- */
   interface Event {
     id: string;
@@ -110,7 +113,7 @@ export default function Index() {
 
   /* ───────── deep-link: fetch event & open popup ───────── */
   useEffect(() => {
-    if (!pendingCode || !currentUser) return;
+    if (!pendingCode || !currentUser || hasShownJoinModalRef.current) return;
 
     (async () => {
       try {
@@ -129,6 +132,7 @@ export default function Index() {
             endTime:   ev.endTime,
           });
           setLinkModalVisible(true);
+          hasShownJoinModalRef.current = true; // Prevent repeat popups
         }
       } catch (e) {
         console.warn('Deep-link lookup failed', e);
