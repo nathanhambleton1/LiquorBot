@@ -134,7 +134,7 @@ export default function Index() {
 
     // open only if the modal isn’t already showing
     if (!authModal?.visible) {
-      authModal?.open('signIn');
+      authModal?.open('signIn', { modalMode: true });
       hasAutoOpenedSignIn.current = pendingCode;   // remember we’ve done it
     }
   }, [pendingCode, currentUser, authModal?.visible]);
@@ -212,7 +212,7 @@ export default function Index() {
       hasAutoOpenedSignIn.current === pendingCode
     ) return;
 
-    authModal?.open('signIn');
+    authModal?.open('signIn', { modalMode: true });
     hasAutoOpenedSignIn.current = pendingCode;
   }, [pendingCode, authReady, currentUser, authModal?.visible]);
 
@@ -437,7 +437,7 @@ export default function Index() {
           style={styles.mainTile}
           onPress={() => {
             if (!isSignedIn) {
-              authModal?.open('signIn');
+              authModal?.open('signIn', { modalMode: true });
               return;
             }
             router.push('./events');
@@ -492,7 +492,7 @@ export default function Index() {
             style={styles.smallTile}
             onPress={() => {
               if (!isSignedIn) {
-                authModal?.open('signIn');
+                authModal?.open('signIn', { modalMode: true });
                 return;
               }
               router.push('/menu');
