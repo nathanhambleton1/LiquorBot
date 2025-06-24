@@ -99,7 +99,6 @@ export default function Index() {
     (async () => {
       try {
         setLinkLookupBusy(true);            // ⟵ makes modal appear right away
-        setLinkModalVisible(true);
 
         const { data } = await generateClient().graphql({
           query     : eventsByCode,
@@ -114,14 +113,21 @@ export default function Index() {
             startTime: ev.startTime, endTime: ev.endTime,
           });
           setLinkErr(null);
+          setLinkLookupBusy(false); // <-- stop spinner as soon as event is loaded
+          setLinkModalVisible(true); // <-- show modal after loading
         } else if (!cancelled) {
           setLinkErr('Invite code not found');
+          setLinkLookupBusy(false); // <-- stop spinner if not found
+          setLinkModalVisible(true); // <-- show modal for error
         }
       } catch (e) {
-        if (!cancelled) setLinkErr('Unable to fetch event – try again.');
+        if (!cancelled) {
+          setLinkErr('Unable to fetch event – try again.');
+          setLinkLookupBusy(false); // <-- stop spinner on error
+          setLinkModalVisible(true); // <-- show modal for error
+        }
       } finally {
         if (!cancelled) {
-          setLinkLookupBusy(false);
           hasShownJoinModalRef.current = pendingCode;
         }
       }
