@@ -618,7 +618,7 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
     >
       <Image source={LOGO} style={styles.logo} resizeMode="contain" />
       <Text style={styles.app}>{APP_NAME}</Text>
-      <View style={styles.barWrap}>
+      <View style={[styles.barWrap, online ? null : { borderColor: '#D9534F', borderWidth: 2 }]}> {/* Red outline if offline */}
         <View style={StyleSheet.absoluteFill} />
         <RNAnimated.View
           style={{
@@ -631,13 +631,17 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
               outputRange: ['0%', '100%'],
             }),
             overflow: 'hidden',
-            backgroundColor: '#CE975E',
+            backgroundColor: online ? '#CE975E' : '#D9534F', // Red bar if offline
           }}
         />
       </View>
       <Text style={styles.percent}>{percent}%</Text>
       <Text style={styles.status}>
-        {online ? status : (firstRun ? 'Internet required for first-time setup' : 'Offline mode')}
+        {online
+          ? status
+          : (firstRun
+              ? 'Internet required for setup.'
+              : 'Offline mode.\n\nPlease connect to the Internet to use the app.\n\nRetrying connection…')}
       </Text>
     </RNAnimated.View>
   );

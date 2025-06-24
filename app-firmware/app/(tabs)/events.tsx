@@ -1106,29 +1106,35 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
       {/* join modal */}
       <Modal
         visible={joinModalVisible}
-        transparent animationType="fade"
-        onRequestClose={()=>setJoinModalVisible(false)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setJoinModalVisible(false)}
       >
         <View style={styles.overlay}>
-          <View style={styles.joinCard}>
-            <TouchableOpacity style={styles.filtClose} onPress={()=>setJoinModalVisible(false)}>
-              <Ionicons name="close" size={24} color="#DFDCD9"/>
-            </TouchableOpacity>
-            <Text style={styles.filtTitle}>Enter Invite Code</Text>
-            <TextInput
-              style={styles.codeInput}
-              placeholder="ABC123"
-              placeholderTextColor="#4F4F4F"
-              autoCapitalize="characters"
-              value={inviteCodeInput}
-              onChangeText={t=>setInviteCodeInput(t.toUpperCase())}
-            />
-            {joinError && <Text style={styles.err}>{joinError}</Text>}
-            <TouchableOpacity style={styles.joinGo} onPress={handleJoin} disabled={joinLoading}>
-              {joinLoading
-                ? <ActivityIndicator color="#141414"/>
-                : <Text style={styles.joinGoTxt}>Join Event</Text>}
-            </TouchableOpacity>
+          <View style={[styles.joinCard, { overflow: 'hidden', backgroundColor: 'transparent' }]}> 
+            {/* Glassy background */}
+            <BlurView intensity={40} tint="dark" style={[StyleSheet.absoluteFill, { borderRadius: 10 }]} />
+            {/* Centered content */}
+            <View style={{ width: '100%', padding: 24, alignItems: 'center', justifyContent: 'center' }}>
+              <TouchableOpacity style={styles.filtClose} onPress={() => setJoinModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#DFDCD9"/>
+              </TouchableOpacity>
+              <Text style={[styles.filtTitle, { marginTop: -10, marginBottom: 16 }]}>Enter Invite Code</Text>
+              <TextInput
+                style={[styles.codeInput, { marginBottom: 12 }]}
+                placeholder="ABC123"
+                placeholderTextColor="#4F4F4F"
+                autoCapitalize="characters"
+                value={inviteCodeInput}
+                onChangeText={t => setInviteCodeInput(t.toUpperCase())}
+              />
+              {joinError && <Text style={[styles.err, { marginBottom: 12 }]}>{joinError}</Text>}
+              <TouchableOpacity style={[styles.joinGo, { alignSelf: 'stretch' }]} onPress={handleJoin} disabled={joinLoading}>
+                {joinLoading
+                  ? <ActivityIndicator color="#141414"/>
+                  : <Text style={styles.joinGoTxt}>Join Event</Text>}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1226,12 +1232,12 @@ const styles = StyleSheet.create({
 
   overlay:{flex:1,backgroundColor:'rgba(0,0,0,0.25)',justifyContent:'center',alignItems:'center'},
   filtCard:{width:SCREEN_WIDTH*0.8,backgroundColor:'#1F1F1F',borderRadius:10,padding:20},
-  filtClose:{position:'absolute',top:15,right:15,padding:4},
+  filtClose:{position:'absolute',top:-15,right:-15,padding:4},
   filtTitle:{color:'#DFDCD9',fontSize:20,fontWeight:'bold',alignSelf:'center',marginBottom:20},
   switchRow:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},
   switchLbl:{color:'#DFDCD9',fontSize:16},
 
-  joinCard:{width:SCREEN_WIDTH*0.8,backgroundColor:'#1F1F1F',borderRadius:10,padding:20,alignItems:'center'},
+  joinCard:{width:SCREEN_WIDTH*0.8, height: 200, backgroundColor:'#1F1F1F',borderRadius:10,padding:20,alignItems:'center'},
   codeInput:{width:'100%',borderWidth:1,borderColor:'#4F4F4F',borderRadius:8,paddingVertical:10,paddingHorizontal:15,color:'#DFDCD9',fontSize:16,textAlign:'center',marginBottom:10},
   err:{color:'#D9534F',marginBottom:8},
   joinGo:{backgroundColor:'#CE975E',borderRadius:8,paddingVertical:12,paddingHorizontal:30,alignSelf:'stretch',alignItems:'center'},
