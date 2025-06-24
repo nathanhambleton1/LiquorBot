@@ -236,7 +236,7 @@ export default function ConfirmCode({ modalMode, username: propUsername, passwor
 
 const styles = StyleSheet.create({
   background:        { flex: 1, backgroundColor: 'rgba(20,20,20,0)', justifyContent: 'center', alignItems: 'center' },
-  modalContainer:    { backgroundColor: '#141414', borderRadius: 18, padding: 12, alignSelf: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 16 },
+  modalContainer:    { backgroundColor: 'rgba(20,20,20,0)', borderRadius: 18, padding: 12, alignSelf: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 16 },
   title:             { fontSize: 38, color: '#DFDCD9', marginBottom: 18, fontWeight: 'bold', textAlign: 'center' },
   label:             { fontSize: 16, color: '#aaa', marginTop: 10 },
   input:             { backgroundColor: '#181818', marginVertical: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, color: '#DFDCD9', borderColor: '#333', borderWidth: 1 },
