@@ -41,10 +41,15 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
   /* ───────────────────────── sign-in ───────────────────────── */
   const onSignInPress = async () => {
     setError('');
+    setIsLoading(true);
     try {
       const { isSignedIn, nextStep } = await signIn({ username, password });
 
       if (isSignedIn) {
+        // Wait for Cognito session to be available before proceeding
+        try {
+          await getCurrentUser(); // Ensures session is ready
+        } catch {}
         if (modalMode && authModal?.open) {
           authModal.open('sessionLoading', {
             onFinish: () => authModal.close(),
@@ -70,6 +75,8 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
         return;
       }
       setError(e?.message || 'Something went wrong');
+    } finally {
+      setIsLoading(false);
     }
   };
 

@@ -7,10 +7,10 @@ export default function SessionLoadingOnStart() {
   useEffect(() => {
     (async () => {
       try {
-        await getCurrentUser();
+        const user = await getCurrentUser();
         // Only open session loading if user is signed in
         if (authModal?.open) {
-          authModal.open('sessionLoading', { modalMode: true });
+          authModal.open('sessionLoading', { modalMode: true, username: user?.username });
         }
       } catch {
         // No signed-in user: do nothing (or optionally redirect to home/index)

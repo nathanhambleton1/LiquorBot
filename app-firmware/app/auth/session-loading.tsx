@@ -84,30 +84,25 @@ const getLocalPath = (id: number, remote: string) => {
   return `${FileSystem.cacheDirectory}drink-images/drink_${id}.${ext}`;
 };
 
-// Update the getDrinkImageSource function with better error handling
+// Robust image download/caching logic (copied from menu page)
 async function getDrinkImageSource(drink: { id: number; image: string }) {
   if (!drink.image) return { uri: '' };
-  
   try {
     const localUri = getLocalPath(drink.id, drink.image);
     const localInfo = await FileSystem.getInfoAsync(localUri).catch(() => ({ exists: false }));
-    
     if (localInfo.exists) return { uri: localUri };
-    
     // Legacy filename path fallback
     const basename = drink.image.split('/').pop()?.split('?')[0] ?? '';
     const legacyUri = `${FileSystem.cacheDirectory}drink-images/${basename}`;
     const legacyInfo = await FileSystem.getInfoAsync(legacyUri).catch(() => ({ exists: false }));
-    
     if (legacyInfo.exists) return { uri: legacyUri };
-    
     // Download with retry logic
     let retries = 3;
     while (retries > 0) {
       try {
         const signed = await toSigned(drink.image);
         await FileSystem.makeDirectoryAsync(
-          localUri.substring(0, localUri.lastIndexOf('/')), 
+          localUri.substring(0, localUri.lastIndexOf('/')),
           { intermediates: true }
         );
         await FileSystem.downloadAsync(signed, localUri);
@@ -119,7 +114,6 @@ async function getDrinkImageSource(drink: { id: number; image: string }) {
           // Return the remote URL as fallback
           return { uri: await toSigned(drink.image) };
         }
-        // Wait before retrying
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
@@ -129,7 +123,7 @@ async function getDrinkImageSource(drink: { id: number; image: string }) {
   }
 }
 
-// Caches all images with progress callback
+// Caches all images with progress callback (robust, batch, timeout)
 async function cacheAllDrinkImages(
   drinks: { id: number; image: string }[],
   bump: (f: number) => void,
@@ -138,10 +132,31 @@ async function cacheAllDrinkImages(
 ) {
   const total = drinks.length || 1;
   let done = 0;
-  for (const d of drinks) {
-    await getDrinkImageSource(d).catch(() => { /* skip on error */ });
-    done += 1;
-    bump(start + (done / total) * range);
+  // Create a function to handle individual image caching with timeout
+  const cacheImageWithTimeout = async (d: { id: number; image: string }) => {
+    try {
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Image caching timeout')), 10000)
+      );
+      await Promise.race([
+        getDrinkImageSource(d),
+        timeout
+      ]);
+    } catch (error) {
+      console.warn(`Failed to cache image for drink ${d.id}:`, error);
+      // We'll continue even if some images fail
+    }
+  };
+  // Process images in batches to avoid overwhelming the system
+  const batchSize = 5;
+  for (let i = 0; i < drinks.length; i += batchSize) {
+    const batch = drinks.slice(i, i + batchSize);
+    await Promise.allSettled(batch.map(d =>
+      cacheImageWithTimeout(d).then(() => {
+        done += 1;
+        bump(start + (done / total) * range);
+      })
+    ));
   }
 }
 
@@ -182,6 +197,11 @@ async function clearImageCache() {
   } catch (err) {
     console.warn('Failed to clear image cache:', err);
   }
+}
+
+// Helper to get public S3 URL for JSON
+function getPublicS3Url(key: string) {
+  return `https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/${key}`;
 }
 
 /* ───────── component ───────── */
@@ -468,23 +488,26 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
       if (online) {
         setStatus('Checking for menu updates…');
         try {
-          const [dUrl, iUrl] = await Promise.all([
-            getUrl({ key: DRINKS_KEY }),
-            getUrl({ key: INGS_KEY }),
+          // Always fetch from public S3 URL
+          const dUrl = getPublicS3Url('drinkMenu/drinks.json');
+          const iUrl = getPublicS3Url('drinkMenu/ingredients.json');
+          const [dRes, iRes] = await Promise.all([
+            fetch(dUrl),
+            fetch(iUrl),
           ]);
           const [dTxt, iTxt] = await Promise.all([
-            fetchJsonOrCache(dUrl.url.toString(), drinksRaw),
-            fetchJsonOrCache(iUrl.url.toString(), ingsRaw),
+            dRes.ok ? dRes.text() : drinksRaw,
+            iRes.ok ? iRes.text() : ingsRaw,
           ]);
-          if (dTxt !== drinksRaw) {
+          if (dTxt && dTxt !== drinksRaw) {
             drinksRaw = dTxt;
             await AsyncStorage.setItem('drinksJson', drinksRaw);
           }
-          if (iTxt !== ingsRaw) {
+          if (iTxt && iTxt !== ingsRaw) {
             ingsRaw = iTxt;
             await AsyncStorage.setItem('ingredientsJson', ingsRaw);
           }
-        } catch (err: any) {
+        } catch (err) {
           console.warn('Menu JSON fetch error →', err);
           if (!drinksRaw || !ingsRaw) {
             setStatus('Failed to load menu JSON. Check your internet connection.');
@@ -498,12 +521,13 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
         return;
       }
       bump(0.22);
+      // Defensive: never parse empty JSON
+      if (!drinksRaw) throw new Error('No drinks JSON available');
+      if (!ingsRaw) throw new Error('No ingredients JSON available');
 
       // 6 ▸ cache images (signed-URL fallback) - FIXED SECTION
       setStatus('Caching drink and glass images…');
       const drinks = JSON.parse(drinksRaw) as { id:number; image:string }[];
-      
-      // FIX: Process glass images directly without Promise.all
       const glassKeys = [
         'drinkMenu/drinkPictures/rocks_white.png',
         'drinkMenu/drinkPictures/highball_white.png',
@@ -511,53 +535,12 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
         'drinkMenu/drinkPictures/coupe_white.png',
         'drinkMenu/drinkPictures/margarita_white.png',
       ];
-      
-      // Create glass objects directly instead of fetching URLs upfront
       const glassDesc = glassKeys.map((k, idx) => ({
         id: 10_000 + idx,
-        image: k  // Just use the key directly
+        image: k
       }));
-
-      // Cache both drinks and glass images together
-      async function cacheAllDrinkImages(
-        drinks: { id: number; image: string }[],
-        bump: (f: number) => void,
-        start = 0,
-        range = 1,
-      ) {
-        const total = drinks.length || 1;
-        let done = 0;
-        
-        // Create a function to handle individual image caching with timeout
-        const cacheImageWithTimeout = async (d: { id: number; image: string }) => {
-          try {
-            const timeout = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Image caching timeout')), 10000)
-            );
-            
-            await Promise.race([
-              getDrinkImageSource(d),
-              timeout
-            ]);
-          } catch (error) {
-            console.warn(`Failed to cache image for drink ${d.id}:`, error);
-            // We'll continue even if some images fail
-          }
-        };
-
-        // Process images in batches to avoid overwhelming the system
-        const batchSize = 5;
-        for (let i = 0; i < drinks.length; i += batchSize) {
-          const batch = drinks.slice(i, i + batchSize);
-          
-          await Promise.allSettled(batch.map(d => 
-            cacheImageWithTimeout(d).then(() => {
-              done += 1;
-              bump(start + (done / total) * range);
-            })
-          ));
-        }
-      }
+      // Use robust cacheAllDrinkImages for both drinks and glasses
+      await cacheAllDrinkImages([...drinks, ...glassDesc], bump, 0.22, 0.68);
 
       // 7 ▸ cache upcoming events locally (non-critical)
       setStatus('Loading your upcoming events…');

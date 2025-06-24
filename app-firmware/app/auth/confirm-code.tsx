@@ -12,6 +12,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { confirmSignUp, signIn, resendSignUpCode } from 'aws-amplify/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthModalContext } from '../components/AuthModalContext';
+import { getCurrentUser } from 'aws-amplify/auth'; // Import getCurrentUser
 
 export interface ConfirmCodeProps {
   modalMode?: boolean;
@@ -107,6 +108,8 @@ export default function ConfirmCode({ modalMode, username: propUsername, passwor
       if (modalMode && pwd) {
         try {
           await signIn({ username: username!, password: pwd });
+          // Wait for Cognito session to be available before proceeding
+          try { await getCurrentUser(); } catch {}
           if (authModal?.open) {
             authModal.open('sessionLoading', {
               onFinish: () => authModal.close(),
@@ -130,6 +133,7 @@ export default function ConfirmCode({ modalMode, username: propUsername, passwor
         if (modalMode && pwd) {
           try {
             await signIn({ username: username!, password: pwd });
+            try { await getCurrentUser(); } catch {}
             if (authModal?.close) authModal.close();
           } catch (signInErr: any) {
             setErrorMessage(signInErr?.message || 'Account already confirmed, but sign-in failed.');
