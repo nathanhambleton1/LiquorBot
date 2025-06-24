@@ -70,22 +70,27 @@ export default function Index() {
   const [eventsLoading,  setEventsLoading]  = useState(true);
 
   /* ---------- deep-link join popup ---------- */
+  const [sessionLoaded, setSessionLoaded] = useState(false);
   const { pendingCode } = useContext(DeepLinkContext);
   const [linkEvent,         setLinkEvent]         = useState<AppEvent|null>(null);
   const [linkModalVisible,  setLinkModalVisible]  = useState(false);
   const [linkLoading,       setLinkLoading]       = useState(false);
   const [linkErr,           setLinkErr]           = useState<string|null>(null);
   const [linkLookupBusy,    setLinkLookupBusy]    = useState(false);
+  
 
   // Ref to ensure join popup is only shown once per deep link
   const hasShownJoinModalRef = useRef<string|null>(null);
 
   // Show join popup only after auth modal is closed and user is signed in
   useEffect(() => {
-    if (
-      !pendingCode ||                       // nothing to do
-      authModal?.visible ||                 // wait until auth modal closes
-      hasShownJoinModalRef.current === pendingCode
+    if (                                   // any block → bail out
+      !pendingCode               ||        // no deep link
+      !currentUser               ||        // user not signed-in yet
+      !sessionLoaded             ||        // session-loading still up
+      authModal?.visible         ||        // auth modal still showing
+      linkModalVisible           ||        // we already opened it
+      hasShownJoinModalRef.current === pendingCode // done once per code
     ) return;
 
     let cancelled = false;
@@ -122,7 +127,7 @@ export default function Index() {
     })();
 
     return () => { cancelled = true };
-  }, [pendingCode, authModal?.visible, currentUser]);
+  }, [pendingCode, currentUser, sessionLoaded, authModal?.visible, linkModalVisible]);
 
   // ------------------------------------------------------------------
   // 1.  Keep currentUser in sync with auth state, and clear UI on log-out
@@ -196,7 +201,6 @@ export default function Index() {
   const isSignedIn = !!currentUser;
 
   // --- Wait for sessionLoaded flag before loading events ---
-  const [sessionLoaded, setSessionLoaded] = useState(false);
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -562,7 +566,7 @@ export default function Index() {
             </TouchableOpacity>
 
             {/* event summary */}
-            {linkLookupBusy && !linkEvent ? (
+            {linkLookupBusy ? (
               /* ⏳ spinning while GraphQL downloads */
               <ActivityIndicator size="large" color="#CE975E" style={{marginVertical:20}}/>
             ) : (
@@ -597,7 +601,11 @@ export default function Index() {
                 }
               ]}
               onPress={confirmDeepLinkJoin}
-              disabled={!!linkLoading || !!(linkEvent && upcomingEvents.some(e => e.id === linkEvent.id))}
+              disabled={
+                linkLookupBusy ||
+                linkLoading   ||
+                (!!linkEvent && upcomingEvents.some(e => e.id === linkEvent.id))
+              }
             >
               {linkLoading
                 ? <ActivityIndicator color="#141414"/>
