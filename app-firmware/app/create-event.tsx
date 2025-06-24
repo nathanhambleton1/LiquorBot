@@ -32,6 +32,7 @@ import { on } from '../src/event-bus';
 import { useFocusEffect } from 'expo-router';
 import { listEvents } from '../src/graphql/queries';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { BlurView } from 'expo-blur';
 
 Amplify.configure(config);
 const client = generateClient();
@@ -1046,6 +1047,13 @@ const TimeBox=forwardRef(({label,onPress,tag}:{label:string;onPress:()=>void;tag
 
   return (
     <View style={styles.modal}>
+      {/* one-time glass pane under everything */}
+      <BlurView
+        style={styles.blur}
+        intensity={80}     // match auth modal
+        tint="dark"
+        pointerEvents="none"
+      />
       <View style={styles.modalHeader}>
         {/* Header row with all controls */}
         <View style={styles.headerRow}>
@@ -1135,7 +1143,7 @@ function fmt(d:Date){return`${String(d.getMonth()+1).padStart(2,'0')}/${
 const{width:W}=Dimensions.get('window');
 const styles = StyleSheet.create({
   customTag: { marginLeft: 6, color: '#888', fontSize: 12 },
-  modalHeader:      { paddingTop: 20, paddingHorizontal: 20, backgroundColor: '#141414', zIndex: 1 },
+  modalHeader: { paddingTop: 20, paddingHorizontal: 20, backgroundColor: 'transparent', zIndex: 1 },
   headerRow:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 30 },
   chevronButton:    { /* Keeps the chevron on the left */ },
   modalHeaderText:  { color: '#DFDCD9', fontSize: 20, fontWeight: 'bold', textAlign: 'center', flex: 1 },
@@ -1144,7 +1152,7 @@ const styles = StyleSheet.create({
   listContent:      { paddingHorizontal: 20, paddingBottom: 40, paddingTop: 0 },
   itemSeparator:    { height: 1, backgroundColor: '#333', marginHorizontal: 16 },
   drinkItem:        { paddingVertical: 12 },
-  modal:            { flex: 1, backgroundColor: '#141414' },
+  modal:            { flex: 1, backgroundColor: Platform.OS === 'android'? 'rgba(20,20,20,0.85)' : 'transparent',},
   searchRow:        { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, paddingHorizontal: 15, marginBottom: 5 },
   drinkItemText:    { color: '#DFDCD9', fontSize: 16 },
   container:        { flex: 1, backgroundColor: '#141414' },
@@ -1193,4 +1201,9 @@ const styles = StyleSheet.create({
   backdrop:         { ...StyleSheet.absoluteFillObject, backgroundColor: '#0009' },
   card:             { position: 'absolute', backgroundColor: '#1F1F1F', borderRadius: 16, overflow: 'hidden', justifyContent: 'center' },
   closeIcon:        { position: 'absolute', top: 6, right: 6, padding: 6, zIndex: 10, elevation: 10 },
+  blur: {
+    ...StyleSheet.absoluteFillObject,
+    borderTopLeftRadius : 20,
+    borderTopRightRadius: 20,
+  },
 });
