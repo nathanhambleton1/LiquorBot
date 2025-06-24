@@ -11,7 +11,7 @@ import {
   View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView,
   Modal, FlatList, Platform, ActivityIndicator, Dimensions, Alert,
   LayoutAnimation, UIManager,
-  KeyboardAvoidingView, Animated, Easing
+  KeyboardAvoidingView, // <-- add this import
 } from 'react-native';
 import Ionicons           from '@expo/vector-icons/Ionicons';
 import * as Clipboard      from 'expo-clipboard';
@@ -49,9 +49,6 @@ const parseIng = (d: Drink): number[] => {
     ? d.ingredients.split(',').map(c => +c.split(':')[0])
     : [];
 };
-
-const { height: WINDOW_H } = Dimensions.get('window');
-const SHEET_H = WINDOW_H * 0.9; // 90% of screen height
 
 const eventFilter = (user: string, liquorbotId: number) => ({
   and: [
@@ -1052,112 +1049,96 @@ const TimeBox=forwardRef(({label,onPress,tag}:{label:string;onPress:()=>void;tag
     router.push(`/create-drink?from=drink-list`);
   }
 
-  /* ───────── bottom-sheet animation ───────── */
-  const slideY = useRef(new Animated.Value(WINDOW_H)).current;
-  useEffect(() => {
-    Animated.timing(slideY, {
-      toValue: WINDOW_H - SHEET_H,          // stop 10 % short of the top
-      duration: 450,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [slideY]);
-
   return (
-    <View style={styles.container}        /* full-screen, handles backdrop */
-          pointerEvents="box-none">
-
-      {/* dim the page behind */}
-      <View style={styles.backdrop} pointerEvents="none" />
-
-      {/* animated sheet */}
-      <Animated.View
-        style={[styles.sheet, { transform: [{ translateY: slideY }] }]}
-      >
-        {/* glass */}
-        <BlurView style={styles.blur} intensity={80} tint="dark"
-                  pointerEvents="none" />
-
-        {/* -------------- existing content -------------- */}
-        <View style={styles.modalHeader}>
-        {/* Header row with all controls */}
-        <View style={styles.headerRow}>
-          {/* Close chevron (left-aligned) */}
-          <TouchableOpacity onPress={close} style={styles.chevronButton}>
-            <Ionicons name="chevron-down" size={30} color="#DFDCD9" />
-          </TouchableOpacity>
-
-          {/* Centered title */}
-          <Text style={styles.modalHeaderText}>Select a Drink</Text>
-
-          {/* Edit button (right-aligned) */}
-          <TouchableOpacity 
-            onPress={openCustomDrink}
-            style={styles.editButton}
-          >
-            <Ionicons name="create-outline" size={24} color="#CE975E" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Rest of the header content */}
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.catRow}
-        >
-          {categories.map(c => (
-            <TouchableOpacity key={c} onPress={() => setCat(c)} style={styles.catBtn}>
-              <Text style={[styles.catTxt, cat === c && styles.catSel]}>{c}</Text>
-              {cat === c && <View style={styles.under} />}
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        <View style={styles.searchRow}>
-          <Ionicons name="search" size={20} color="#4F4F4F" style={{ marginRight: 8 }} />
-          <TextInput 
-            style={styles.searchInput} 
-            placeholder="Search drinks"
-            placeholderTextColor="#4F4F4F" 
-            value={q} 
-            onChangeText={setQ} 
-          />
-        </View>
-      </View>
-
-    {/* Drink list with tighter spacing */}
-    {loading ? (
-      <ActivityIndicator size="large" color="#CE975E" style={{ marginTop: 20 }} />
-    ) : (
-      <FlatList
-        data={combined}
-        keyExtractor={i => String(i.id)}
-        renderItem={({ item }) => {
-          const disabled = !canAddDrink(item);
-          return (
-            <TouchableOpacity
-              style={[styles.drinkItem, disabled && { opacity: 0.5 }]} 
-              onPress={() => { if (!disabled) addDrink(item); }}
-              disabled={disabled}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={[styles.drinkItemText, disabled && { color: '#777' }]}>{item.name}</Text>
-                {item.isCustom && <Text style={styles.customTag}> (custom)</Text>}
-              </View>
-            </TouchableOpacity>
-          );
-// customTag style is defined below in the StyleSheet
-        }}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
-        ListFooterComponent={() => (
-          <Text style={{ color: '#4F4F4F', fontSize: 10, textAlign: 'center', marginTop: 24, marginBottom: 8, paddingHorizontal: 16 }}>
-            Drinks here are filtered based on the unique ingredients your LiquorBot can hold. Drinks you cannot make are shown below and disabled.
-          </Text>
-        )}
+    <View style={styles.modal}>
+      {/* one-time glass pane under everything */}
+      <BlurView
+        style={styles.blur}
+        intensity={80}     // match auth modal
+        tint="dark"
+        pointerEvents="none"
       />
-    )}
-  </View>
+      <View style={styles.modalContent}>{/* added wrapper for modal content */}
+        <View style={styles.modalHeader}>
+          {/* Header row with all controls */}
+          <View style={styles.headerRow}>
+            {/* Close chevron (left-aligned) */}
+            <TouchableOpacity onPress={close} style={styles.chevronButton}>
+              <Ionicons name="chevron-down" size={30} color="#DFDCD9" />
+            </TouchableOpacity>
+
+            {/* Centered title */}
+            <Text style={styles.modalHeaderText}>Select a Drink</Text>
+
+            {/* Edit button (right-aligned) */}
+            <TouchableOpacity 
+              onPress={openCustomDrink}
+              style={styles.editButton}
+            >
+              <Ionicons name="create-outline" size={24} color="#CE975E" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Rest of the header content */}
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.catRow}
+          >
+            {categories.map(c => (
+              <TouchableOpacity key={c} onPress={() => setCat(c)} style={styles.catBtn}>
+                <Text style={[styles.catTxt, cat === c && styles.catSel]}>{c}</Text>
+                {cat === c && <View style={styles.under} />}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <View style={styles.searchRow}>
+            <Ionicons name="search" size={20} color="#4F4F4F" style={{ marginRight: 8 }} />
+            <TextInput 
+              style={styles.searchInput} 
+              placeholder="Search drinks"
+              placeholderTextColor="#4F4F4F" 
+              value={q} 
+              onChangeText={setQ} 
+            />
+          </View>
+        </View>
+
+      {/* Drink list with tighter spacing */}
+      {loading ? (
+        <ActivityIndicator size="large" color="#CE975E" style={{ marginTop: 20 }} />
+      ) : (
+        <FlatList
+          data={combined}
+          keyExtractor={i => String(i.id)}
+          renderItem={({ item }) => {
+            const disabled = !canAddDrink(item);
+            return (
+              <TouchableOpacity
+                style={[styles.drinkItem, disabled && { opacity: 0.5 }]} 
+                onPress={() => { if (!disabled) addDrink(item); }}
+                disabled={disabled}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={[styles.drinkItemText, disabled && { color: '#777' }]}>{item.name}</Text>
+                  {item.isCustom && <Text style={styles.customTag}> (custom)</Text>}
+                </View>
+              </TouchableOpacity>
+            );
+// customTag style is defined below in the StyleSheet
+          }}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+          ListFooterComponent={() => (
+            <Text style={{ color: '#4F4F4F', fontSize: 10, textAlign: 'center', marginTop: 24, marginBottom: 8, paddingHorizontal: 16 }}>
+              Drinks here are filtered based on the unique ingredients your LiquorBot can hold. Drinks you cannot make are shown below and disabled.
+            </Text>
+          )}
+        />
+      )}
+    </View>{/* end modalContent wrapper */}
+    </View>
   );
 };
 
@@ -1166,7 +1147,6 @@ function fmt(d:Date){return`${String(d.getMonth()+1).padStart(2,'0')}/${
   String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`;}
 
 const{width:W}=Dimensions.get('window');
-
 const styles = StyleSheet.create({
   customTag: { marginLeft: 6, color: '#888', fontSize: 12 },
   modalHeader: { paddingTop: 20, paddingHorizontal: 20, backgroundColor: 'transparent', zIndex: 1 },
@@ -1178,8 +1158,11 @@ const styles = StyleSheet.create({
   listContent:      { paddingHorizontal: 20, paddingBottom: 40, paddingTop: 0 },
   itemSeparator:    { height: 1, backgroundColor: '#333', marginHorizontal: 16 },
   drinkItem:        { paddingVertical: 12 },
+  modal:            { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' }, // changed
+  modalContent:     { maxHeight: '90%', backgroundColor: '#1F1F1F', borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' }, // added
   searchRow:        { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, paddingHorizontal: 15, marginBottom: 5 },
   drinkItemText:    { color: '#DFDCD9', fontSize: 16 },
+  container:        { flex: 1, backgroundColor: '#141414' },
   closeBtn:         { position: 'absolute', top: 62, left: 20, zIndex: 10, padding: 10 },
   scroll:           { paddingTop: 70, paddingHorizontal: 20, paddingBottom: 40 },
   header:           { fontSize: 24, color: '#DFDCD9', fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
@@ -1222,29 +1205,12 @@ const styles = StyleSheet.create({
   infoClose:        { position: 'absolute', top: 12, right: 12, padding: 4 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#141414' },
   deviceIdText:     { color: '#4F4F4F', fontSize: 12, textAlign: 'center', marginTop: 16 },
+  backdrop:         { ...StyleSheet.absoluteFillObject, backgroundColor: '#0009' },
   card:             { position: 'absolute', backgroundColor: '#1F1F1F', borderRadius: 16, overflow: 'hidden', justifyContent: 'center' },
   closeIcon:        { position: 'absolute', top: 6, right: 6, padding: 6, zIndex: 10, elevation: 10 },
   blur: {
     ...StyleSheet.absoluteFillObject,
     borderTopLeftRadius : 20,
     borderTopRightRadius: 20,
-  },
-  container: { flex: 1, justifyContent: 'flex-end' },
-
-  /* backdrop tint */
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor:
-      Platform.OS === 'android'
-        ? 'rgba(20,20,20,0.65)'
-        : 'rgba(20,20,20,0.45)',
-  },
-
-  /* the moving sheet */
-  sheet: {
-    height: SHEET_H,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    overflow: 'hidden',
   },
 });
