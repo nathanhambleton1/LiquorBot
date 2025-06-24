@@ -17,13 +17,8 @@ export default function JoinCatch() {
       if (typeof code === 'string' && code.length) {
         await AsyncStorage.setItem('pendingEventCode', code);
       }
-      // Decide where to send the user next
-      try {
-        await fetchAuthSession();          // signed-in
-        router.replace('/(tabs)');         // home tab group
-      } catch {
-        router.replace('/auth/sign-in');   // not signed-in
-      }
+      // Always route to home page; let home page handle auth modal
+      router.replace('/(tabs)');
     };
     run();
   }, [code]);
