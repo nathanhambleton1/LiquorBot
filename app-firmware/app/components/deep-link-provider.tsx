@@ -36,8 +36,9 @@ export function DeepLinkProvider({ children }: PropsWithChildren<object>) {
   /* ───── 1. Capture any /join/<code> URL ───── */
   useEffect(() => {
     const handle = ({ url }: { url: string }) => {
-      const { path } = Linking.parse(url);
-      if (path?.startsWith('join/')) {
+      const { scheme, path } = Linking.parse(url);
+      // Accept both Universal Links and the new unique custom scheme
+      if ((scheme === 'liquorbotapp' && path?.startsWith('join/')) || (scheme === undefined && path?.startsWith('join/'))) {
         const code = path.split('/')[1];
         if (code) {
           setPendingCode(code);

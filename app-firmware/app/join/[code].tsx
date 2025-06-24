@@ -1,6 +1,6 @@
 // -----------------------------------------------------------------------------
 // File: app/join/[code].tsx
-// Catch deep links like myapp://join/ABC123
+// Catch deep links like liquorbotapp://join/ABC123
 // Saves the code, then forwards user to the normal app flow.
 // -----------------------------------------------------------------------------
 import { useEffect } from 'react';

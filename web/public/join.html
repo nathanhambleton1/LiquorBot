@@ -108,7 +108,8 @@
   (function () {
     const parts         = location.pathname.split('/');
     const code          = parts[2] || '';
-    const SCHEME_URL    = `myapp://join/${code}`;
+    // Use a unique custom URL scheme to avoid collisions with other apps
+    const SCHEME_URL    = `liquorbotapp://join/${code}`;
     const APPSTORE_URL  = 'https://apps.apple.com/app/id6746461095';
 
     /* Kick the native app */
