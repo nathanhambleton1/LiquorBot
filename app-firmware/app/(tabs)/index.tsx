@@ -240,29 +240,34 @@ export default function Index() {
 
   // --- Listen for auth events to clear or reload events/cache ---
   useEffect(() => {
-    const unsubscribe = Hub.listen('auth', async ({ payload }) => {
+    const handleAuthEvent = ({ payload }: any) => {
       if (payload.event === 'signedOut') {
-        await AsyncStorage.multiRemove(['sessionLoaded', 'cachedEvents']);
-        setSessionLoaded(false);
-        setUpcomingEvents([]);
-        setEventsLoading(false);
+        (async () => {
+          await AsyncStorage.multiRemove(['sessionLoaded', 'cachedEvents']);
+          setSessionLoaded(false);
+          setUpcomingEvents([]);
+          setEventsLoading(false);
+        })();
       } else if (['signedIn', 'tokenRefresh'].includes(payload.event)) {
-        setSessionLoaded(false); // force re-check
-        setUpcomingEvents([]);
-        setEventsLoading(true);
-        // Wait for sessionLoaded to be set again
-        let tries = 0;
-        while (tries < 100) { // up to 5s
-          const flag = await AsyncStorage.getItem('sessionLoaded');
-          if (flag === 'true') {
-            setSessionLoaded(true);
-            break;
+        (async () => {
+          setSessionLoaded(false); // force re-check
+          setUpcomingEvents([]);
+          setEventsLoading(true);
+          // Wait for sessionLoaded to be set again
+          let tries = 0;
+          while (tries < 100) { // up to 5s
+            const flag = await AsyncStorage.getItem('sessionLoaded');
+            if (flag === 'true') {
+              setSessionLoaded(true);
+              break;
+            }
+            await new Promise(res => setTimeout(res, 50));
+            tries++;
           }
-          await new Promise(res => setTimeout(res, 50));
-          tries++;
-        }
+        })();
       }
-    });
+    };
+    const unsubscribe = Hub.listen('auth', handleAuthEvent);
     return () => unsubscribe();
   }, []);
 
