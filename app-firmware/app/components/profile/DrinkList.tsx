@@ -20,6 +20,7 @@ import {
   Animated,
   Platform,
   UIManager,
+  RefreshControl,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useIsFocused } from '@react-navigation/native';
@@ -75,14 +76,15 @@ export default function CustomDrinkListScreen() {
   const scrollRef           = useRef<ScrollView>(null);
   const [drinks, setDrinks] = useState<CustomDrink[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const placeholderURL =
     'https://d3jj0su0y4d6lr.cloudfront.net/placeholder_drink.png';
 
   /* ------------ fetch on mount & refocus ------------ */
-  async function fetchCustomDrinks() {
-    setLoading(true);
+  async function fetchCustomDrinks(isRefresh = false) {
+    if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const res: any = await client.graphql({
         query: LIST_CUSTOM_RECIPES,
@@ -128,12 +130,17 @@ export default function CustomDrinkListScreen() {
     } catch (e) {
       console.error('Custom drink load error', e);
     } finally {
-      setLoading(false);
+      if (isRefresh) setRefreshing(false); else setLoading(false);
     }
   }
 
   useEffect(() => { fetchCustomDrinks(); }, []);
   useEffect(() => { isFocused && fetchCustomDrinks(); }, [isFocused]);
+
+  // Pull-to-refresh handler
+  const handleRefresh = async () => {
+    await fetchCustomDrinks(true);
+  };
 
   /** Build the local cache path for drink_<id>.<ext> */
   function getLocalDrinkImagePath(id: string, imageUrl: string): string {
@@ -314,7 +321,7 @@ export default function CustomDrinkListScreen() {
   }
 
   /* ────────────────────────────── UI ──────────────────────────── */
-  if (loading) {
+  if (loading && !refreshing) {
     return (
       <View style={styles.loadingScreen}>
         <ActivityIndicator size="large" color="#CE975E" />
@@ -346,15 +353,31 @@ export default function CustomDrinkListScreen() {
 
       {/* GRID */}
       {drinks.length === 0 ? (
-        <View style={styles.emptyState}>
+        <ScrollView
+          contentContainerStyle={styles.emptyState}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={["#CE975E"]}
+            />
+          }
+        >
           <Text style={styles.emptyText}>
-            You haven’t created any drinks yet.{'\n'}Tap the “+” to make one!
+            You haven’t created any drinks yet.{"\n"}Tap the “+” to make one!
           </Text>
-        </View>
+        </ScrollView>
       ) : (
         <ScrollView
           ref={scrollRef}
           contentContainerStyle={styles.scrollContainer}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={["#CE975E"]}
+            />
+          }
         >
           <View style={styles.grid}>
             {drinks.map((d) => (

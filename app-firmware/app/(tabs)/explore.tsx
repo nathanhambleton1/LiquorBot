@@ -24,6 +24,7 @@ import { PubSub } from '@aws-amplify/pubsub';
 import { router } from 'expo-router';
 import * as FileSystem from 'expo-file-system';       // ★ NEW ★
 import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
 
 /* ─────────── Amplify + PubSub bootstrap ─────────── */
 Amplify.configure(config);
@@ -370,6 +371,11 @@ const BookModal = ({
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
+          {/* Glassy blur background for the modal card itself */}
+          <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+          {/* Brighten the blur with a semi-transparent white overlay */}
+          <View style={styles.modalBrighten} pointerEvents="none" />
+          {/* Modal content above the blur/brighten layers */}
           <TouchableOpacity style={styles.modalClose} onPress={onClose}>
             <Ionicons name="close" size={26} color="#DFDCD9" />
           </TouchableOpacity>
@@ -776,8 +782,13 @@ const styles = StyleSheet.create({
 
   modalOverlay:{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
                  justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent:{ width: '100%', backgroundColor: '#1F1F1F',
-                 borderRadius: 12, padding: 20 },
+  modalContent:{
+    width: '100%',
+    borderRadius: 12,
+    padding: 20,
+    overflow: 'hidden', // Ensures BlurView is clipped
+    backgroundColor: 'transparent', // Remove solid background for glassy look
+  },
   modalClose:  { position: 'absolute', top: 15, right: 15, zIndex: 2 },
   modalTitle:  { color: '#DFDCD9', fontSize: 24, fontWeight: '600',
                  marginBottom: 4 },
@@ -804,6 +815,11 @@ const styles = StyleSheet.create({
     height: 400,
     resizeMode: 'cover',
     marginBottom: 10,
+  },
+
+  modalBrighten: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.05)', // Adjust alpha for desired brightness
   },
 });
 

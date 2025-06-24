@@ -28,6 +28,7 @@ import { PubSub } from '@aws-amplify/pubsub';
 import { ActionSheetIOS } from 'react-native';
 import * as Linking from 'expo-linking';
 import { AuthModalContext } from '../components/AuthModalContext';
+import { BlurView } from 'expo-blur';
 
 const client = generateClient();
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -1060,13 +1061,19 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
 
       {/* bottom buttons */}
       <View style={styles.bottom}>
-        <TouchableOpacity style={styles.joinBtn} onPress={()=>setJoinModalVisible(true)}>
-          <Ionicons name="log-in-outline" size={24} color="#141414"/>
-          <Text style={styles.joinTxt}>Join Event</Text>
+        <TouchableOpacity style={{marginRight: 12}} onPress={()=>setJoinModalVisible(true)} activeOpacity={0.85}>
+          <View style={styles.glassyBtn}>
+            <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+            <Ionicons name="log-in-outline" size={24} color="#DFDCD9"/>
+            <Text style={styles.glassyBtnText}>Join Event</Text>
+          </View>
         </TouchableOpacity>
         {isAdmin && (
-          <TouchableOpacity style={styles.newBtn} onPress={()=>router.push('/create-event')}>
-            <Ionicons name="add" size={28} color="#141414"/>
+          <TouchableOpacity onPress={()=>router.push('/create-event')} activeOpacity={0.85}>
+            <View style={styles.glassyBtn}>
+              <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+              <Ionicons name="add" size={28} color="#DFDCD9"/>
+            </View>
           </TouchableOpacity>
         )}
       </View>
@@ -1137,14 +1144,16 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
         }}
       >
         <View style={styles.overlay}>
-          <View style={[styles.filtCard, { alignItems: 'center' }]}> 
+          <View style={[styles.filtCard, { alignItems: 'center', padding: 0, overflow: 'hidden', backgroundColor: 'transparent' }]}> 
+            {/* Glassy background */}
+            <BlurView intensity={40} tint="dark" style={[StyleSheet.absoluteFill, { borderRadius: 10 }]} />
             <TouchableOpacity style={styles.filtClose} onPress={() => {
               setQrModalVisible(false);
               setQrLoading(false);
             }}>
               <Ionicons name="close" size={24} color="#DFDCD9"/>
             </TouchableOpacity>
-            <Text style={styles.filtTitle}>Scan to Join Event</Text>
+            <Text style={[styles.filtTitle, { marginTop: 20 }]}>Scan to Join Event</Text>
             {qrLink && (
               <View style={{ width:200, height:200, justifyContent:'center', alignItems:'center' }}>
                 <Image
@@ -1153,8 +1162,6 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
                   }}
                   style={{ width:200, height:200, position: 'absolute' }}
                   onLoadStart={() => {
-                    // Only set loading if the link is new
-                    // (prevents spinner if image is cached and instantly available)
                     if (qrLoading) setQrLoading(true);
                   }}
                   onLoadEnd={()   => setQrLoading(false)}
@@ -1172,7 +1179,7 @@ const [ingredients, setIngredients] = useState<Array<{ id: number; name: string;
                 )}
               </View>
             )}
-            <Text style={{color:'#8F8F8F',fontSize:12,marginTop:16,textAlign:'center'}}>
+            <Text style={{color:'#8F8F8F',fontSize:12,marginTop:16,marginBottom:12,textAlign:'center'}}>
               Link copied to clipboard
             </Text>
           </View>
@@ -1217,7 +1224,7 @@ const styles = StyleSheet.create({
   joinTxt:{color:'#141414',fontSize:16,fontWeight:'600',marginLeft:8},
   newBtn:{flexDirection:'row',alignItems:'center',backgroundColor:'#CE975E',borderRadius:25,paddingVertical:12,paddingHorizontal:12,...Platform.select({ios:{shadowColor:'#000',shadowOffset:{width:0,height:2},shadowOpacity:0.2,shadowRadius:4},android:{elevation:4}})},
 
-  overlay:{flex:1,backgroundColor:'rgba(0,0,0,0.6)',justifyContent:'center',alignItems:'center'},
+  overlay:{flex:1,backgroundColor:'rgba(0,0,0,0.25)',justifyContent:'center',alignItems:'center'},
   filtCard:{width:SCREEN_WIDTH*0.8,backgroundColor:'#1F1F1F',borderRadius:10,padding:20},
   filtClose:{position:'absolute',top:15,right:15,padding:4},
   filtTitle:{color:'#DFDCD9',fontSize:20,fontWeight:'bold',alignSelf:'center',marginBottom:20},
@@ -1245,6 +1252,27 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   applyBtnText: { color: '#141414', fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
+
+  /* glassy button styles */
+  glassyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)', // goldish tint, semi-transparent
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 24, // more rounded for pill shape
+    overflow: 'hidden', // Ensures BlurView is clipped to rounded corners
+    position: 'relative',
+  },
+  glassyBtnText: {
+    color: '#DFDCD9',
+    fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginLeft: 10,
+    letterSpacing: 0.5,
+  },
 
   /* guest view */
   centered:{justifyContent:'center',alignItems:'center'},

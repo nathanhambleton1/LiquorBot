@@ -533,11 +533,11 @@ function DrinkItem({
     );
   }
 
-  // ADD NEW useEffect FOR RESPONSE HANDLING:
+  // ADD NEW useEffect FOR ETA-BASED LOGGING (log pour on ETA, not just on success)
   useEffect(() => {
-    if (!logging) return;                       // only listen while waiting
+    if (!logging) return;
     let isMounted = true;
-    const timeoutId = setTimeout(() => {        // 30 s watchdog
+    const timeoutId = setTimeout(() => {
       if (isMounted) {
         triggerStatus('error', 'No response from device');
         setLogging(false);
@@ -549,24 +549,23 @@ function DrinkItem({
       .subscribe({
         next: async (evt: any) => {
           if (!isMounted) return;
-
-          // Amplify wraps the raw payload in evt.value
-          const raw      = evt?.value ?? evt;
+          const raw = evt?.value ?? evt;
           const payload: any =
-              typeof raw === 'string'
-                ? (() => { try { return JSON.parse(raw) } catch { return { message: raw } } })()
-                : raw;
-          console.log('[LiquorBot] device reply →', payload);
-
-          const status = (payload.status ??
-            payload.result ??
-            payload.message ??
-            (typeof payload === 'string' ? payload : '')
-          ).toString().toLowerCase().trim();
+            typeof raw === 'string'
+              ? (() => { try { return JSON.parse(raw) } catch { return { message: raw } } })()
+              : raw;
+          const status = (payload.status ?? payload.result ?? payload.message ?? (typeof payload === 'string' ? payload : '')).toString().toLowerCase().trim();
 
           // --- NEW: handle ETA ---
           if (status === 'eta' && typeof payload.eta === 'number') {
             startCountdown(payload.eta);
+            // Log pour IMMEDIATELY on ETA, not just on success
+            try {
+              const user = await getCurrentUser();
+              await logPouredDrink(user?.username ?? null);
+            } catch (e) {
+              console.warn('✓ pour logged locally – failed to store in DB', e);
+            }
             return; // wait for success/fail next
           }
           // -----------------------

@@ -8,7 +8,7 @@
 // -----------------------------------------------------------------------------
 
 import React, { useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator, RefreshControl } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Amplify } from 'aws-amplify';
@@ -104,6 +104,7 @@ export default function LikedDrinksPopup({ drinks: external = [] }: Props) {
   const [loading, setLoading] = useState(external.length === 0);
   const [error, setError] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   /** increments every time we fire a fetch; lets us ignore stale responses */
   const reqSeq = useRef(0);
@@ -227,8 +228,14 @@ export default function LikedDrinksPopup({ drinks: external = [] }: Props) {
     }
   }
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchLikedDrinks();
+    setRefreshing(false);
+  }, [fetchLikedDrinks]);
+
   /* ─────────────────────────── RENDER ─────────────────────────── */
-  if (loading) {
+  if (loading && !refreshing) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="small" color="#CE975E" />
@@ -240,7 +247,17 @@ export default function LikedDrinksPopup({ drinks: external = [] }: Props) {
 
   if (drinks.length === 0)
     return (
-      <View style={styles.center}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ flex: 1, alignItems: 'center', padding: 20,marginTop: 80 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={["#CE975E"]}
+          />
+        }
+      >
         <Ionicons
           name="heart-outline"
           size={48}
@@ -252,13 +269,20 @@ export default function LikedDrinksPopup({ drinks: external = [] }: Props) {
           Explore the menu and tap the heart icon on your favorite drinks. They’ll
           show up here!
         </Text>
-      </View>
+      </ScrollView>
     );
 
   return (
     <ScrollView
       style={{ flex: 1 }}
       contentContainerStyle={{ padding: 20, paddingBottom: 70 }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          colors={["#CE975E"]}
+        />
+      }
     >
       {drinks.map((d) => (
         <View key={d.id} style={styles.item}>

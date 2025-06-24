@@ -19,11 +19,13 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
+  RefreshControl,
 } from 'react-native';
 import { useUnits, ozToMl } from '../UnitsContext';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Picker } from '@react-native-picker/picker';
+import { BlurView } from 'expo-blur';
 
 import { generateClient } from 'aws-amplify/api';
 import { listPouredDrinks } from '../../../src/graphql/queries';
@@ -46,6 +48,7 @@ interface Props {
 export default function PourHistoryPopup({ onClear }: Props) {
   const [events, setEvents]   = useState<PourEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const { units } = useUnits();
   const [filterModalVisible, setFilterModalVisible] = useState(false);
@@ -53,37 +56,48 @@ export default function PourHistoryPopup({ onClear }: Props) {
   const [dateRange, setDateRange] = useState<'7days' | 'month' | 'year' | 'all'>('7days');
   const [clearing, setClearing] = useState(false); // Add state for clearing spinner
 
+  // Fetch pour history (used for mount and refresh)
+  const fetchPourHistory = async () => {
+    try {
+      const user = await getCurrentUser();
+      if (!user?.username) return;
+
+      const res: any = await client.graphql({
+        query: listPouredDrinks,
+        variables: {
+          filter: { userID: { eq: user.username } },
+        },
+        authMode: 'userPool',
+      });
+
+      const items = res.data?.listPouredDrinks?.items ?? [];
+      const sortedItems = items.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      const mapped: PourEvent[] = sortedItems.map((it: any) => ({
+        time: it.timestamp,
+        drinkName: it.drinkName ?? `Drink #${it.drinkID}`,
+        volumeOz: Number(it.volume ?? 0),
+        id: it.id,                     // keep for deletion
+      }));
+      setEvents(mapped);
+    } catch (e) {
+      console.error('fetch history failed', e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
   /* -------------------- load history on mount -------------------- */
   useEffect(() => {
-    (async () => {
-      try {
-        const user = await getCurrentUser();
-        if (!user?.username) return;
-
-        const res: any = await client.graphql({
-          query: listPouredDrinks,
-          variables: {
-            filter: { userID: { eq: user.username } },
-          },
-          authMode: 'userPool',
-        });
-
-        const items = res.data?.listPouredDrinks?.items ?? [];
-        const sortedItems = items.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        const mapped: PourEvent[] = sortedItems.map((it: any) => ({
-          time: it.timestamp,
-          drinkName: it.drinkName ?? `Drink #${it.drinkID}`,
-          volumeOz: Number(it.volume ?? 0),
-          id: it.id,                     // keep for deletion
-        }));
-        setEvents(mapped);
-      } catch (e) {
-        console.error('fetch history failed', e);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    setLoading(true);
+    fetchPourHistory();
   }, []);
+
+  /* -------------------- pull-to-refresh handler ------------------- */
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchPourHistory();
+  };
 
   /* ----------------------- clear history ------------------------ */
   async function clearHistory() {
@@ -147,9 +161,9 @@ export default function PourHistoryPopup({ onClear }: Props) {
   });
 
   /* ----------------------------- UI ----------------------------- */
-  if (loading || clearing) { // Show spinner during loading or clearing
+  if ((loading && !refreshing) || clearing) { // Show spinner during initial loading or clearing
     return (
-      <View style={[styles.center, { padding: 40 }]}>
+      <View style={[styles.center, { padding: 40 }]}> 
         <ActivityIndicator size="large" color="#CE975E" />
       </View>
     );
@@ -186,7 +200,15 @@ export default function PourHistoryPopup({ onClear }: Props) {
         </View>
       )}
 
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 90 }}>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 140 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={["#CE975E"]}
+          />
+        }
+      >
         {Object.entries(grouped).map(([date, rows]) => (
           <View key={date} style={{ marginBottom: 22 }}>
             <Text style={styles.date}>{date}</Text>
@@ -244,6 +266,7 @@ export default function PourHistoryPopup({ onClear }: Props) {
             style={styles.clearButtonContainer}
           >
             <View style={styles.clearButtonBox}>
+              <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
               <Ionicons
                 name="trash-outline"
                 size={18}
@@ -386,11 +409,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#4f4f4f', // Gray box background
+    backgroundColor: 'rgba(79,79,79,0.35)', // semi-transparent for glassy look
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 10,
     marginBottom: 50,
+    position: 'relative', // Position relative for absolute children
+    overflow: 'hidden', // Ensures BlurView is clipped to rounded corners
   },
   clearTxt: {
     color: '#DFDCD9',
