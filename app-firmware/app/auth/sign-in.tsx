@@ -50,16 +50,22 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
         try {
           await getCurrentUser(); // Ensures session is ready
         } catch {}
-        if (modalMode && authModal?.open) {
-          authModal.open('sessionLoading', {
-            onFinish: () => authModal.close(),
-            modalMode: true,
-          });
-        } else {
-          router.replace('/auth/session-loading');
-        }
-        return;
+        if (authModal?.close) await new Promise(res => {
+          authModal.close();                  // 1. slide sheet out
+          /* wait for the slide-out animation to complete (500 ms in AuthModal) */
+          setTimeout(res, 520);
+      });
+      /* 2. now bring up the loading sheet (or page) cleanly               */
+      if (modalMode && authModal?.open) {
+        authModal.open('sessionLoading', {
+          onFinish: () => authModal.close(),
+          modalMode: true,
+        });
+      } else {
+        router.replace('/auth/session-loading');
       }
+      return;
+    }
 
       if (nextStep?.signInStep === 'CONFIRM_SIGN_UP') {
         if (modalMode && authModal?.open) authModal.open('confirmCode', { username, password });
