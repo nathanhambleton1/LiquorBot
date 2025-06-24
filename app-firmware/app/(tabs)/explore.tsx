@@ -380,10 +380,10 @@ const BookModal = ({
             <Ionicons name="close" size={26} color="#DFDCD9" />
           </TouchableOpacity>
 
-          <Text style={styles.modalTitle}>{book.name}</Text>
+          <Text style={[styles.modalTitle, { fontWeight: 'bold' }]}>{book.name}</Text>
           <Text style={styles.modalSubtitle}>{book.description}</Text>
 
-          <Text style={styles.sectionHeader}>Included Drinks</Text>
+          <Text style={[styles.sectionHeader, { fontWeight: 'bold' }]}>Included Drinks</Text>
           {book.drinks.length <= 3 ? (
             <View style={{ flexDirection: 'row' }}>
               {book.drinks.map((d) => (
@@ -394,7 +394,7 @@ const BookModal = ({
             <InfiniteDrinkCarousel drinks={book.drinks} />
           )}
 
-          <Text style={[styles.sectionHeader, { marginTop: 20 }]}> 
+          <Text style={[styles.sectionHeader, { marginTop: 20, fontWeight: 'bold' }]}> 
             Ingredients to Load
           </Text>
           {sortIngredientsByType(book.ingredientIds, ingredientMap).map((id) => (
@@ -790,10 +790,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent', // Remove solid background for glassy look
   },
   modalClose:  { position: 'absolute', top: 15, right: 15, zIndex: 2 },
-  modalTitle:  { color: '#DFDCD9', fontSize: 24, fontWeight: '600',
+  modalTitle:  { color: '#DFDCD9', fontSize: 24, fontWeight: 'bold',
                  marginBottom: 4 },
-  modalSubtitle:{ color: '#4F4F4F', marginBottom: 16 },
-  sectionHeader:{ color: '#CE975E', fontSize: 18, marginBottom: 8 },
+  modalSubtitle:{ color: '#DFDCD9', marginBottom: 16 },
+  sectionHeader:{ color: '#CE975E', fontSize: 18, marginBottom: 8, fontWeight: 'bold' },
 
   modalDrink:     { marginRight: 12, width: 100 },
   modalDrinkImg:  { width: 100, height: 100, borderRadius: 8, marginBottom: 4,

@@ -31,7 +31,7 @@ import { DeepLinkContext } from '../components/deep-link-provider';
 import { eventsByCode }   from '../../src/graphql/queries';
 import { joinEvent }      from '../../src/graphql/mutations';
 import { AuthModalContext } from '../components/AuthModalContext';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';import { BlurView } from 'expo-blur';
 
 // -------------------- types --------------------
 interface AppEvent {
@@ -575,7 +575,11 @@ export default function Index() {
         onRequestClose={() => setLinkModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.joinCard}>
+          <View style={[styles.joinCard, { overflow: 'hidden', backgroundColor: 'transparent' }]}> 
+            {/* Glassy blur background, clipped to rounded corners */}
+            <BlurView intensity={40} tint="dark" style={[StyleSheet.absoluteFill, { borderRadius: 10, overflow: 'hidden' }]} />
+            {/* Lighten the background behind the popup for extra contrast */}
+            <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.05)' }]} />
             {/* close button */}
             <TouchableOpacity
               style={styles.filtClose}
@@ -586,17 +590,15 @@ export default function Index() {
 
             {/* event summary */}
             {linkLookupBusy && !linkEvent ? (
-              /* ⏳ spinning while GraphQL downloads */
               <ActivityIndicator size="large" color="#CE975E" style={{marginVertical:20}}/>
             ) : (
-              /* show calendar icon once event details are available or not loading */
               <Ionicons name="calendar" size={48} color="#CE975E" style={{marginBottom:10}}/>
             )}
-            <Text style={[styles.filtTitle,{marginBottom:4}]}>
+            <Text style={[styles.filtTitle,{marginBottom:4}]}> 
               {linkEvent?.name ?? 'Event'}
             </Text>
             {linkEvent && (
-              <Text style={[styles.detail,{marginBottom:16}]}>
+              <Text style={[styles.detail,{marginBottom:16}]}> 
                 {new Date(linkEvent.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 {"  "}
                 {new Date(linkEvent.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – {new Date(linkEvent.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
