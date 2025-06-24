@@ -21,7 +21,7 @@ const KEYS = {
 
 export default function SettingsPopup({ signOut }: { signOut: () => void }) {
   // ────────────── Version (from app.json) ──────────────
-  const APP_VERSION = '1.0.1';
+  const APP_VERSION = '1.0.4';
 
   // ───────────────────────────── state ─────────────────────────────
   const [notifications, setNotifications] = useState(false);
