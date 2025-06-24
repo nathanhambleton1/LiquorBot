@@ -1,4 +1,13 @@
 // ────────────────────────────────── AuthModal.tsx ──────────────────────────────────
+// Purpose : Bottom-sheet auth modal with true frosted-glass background.
+// Notes   : • Uses expo-blur’s <BlurView> for the glass effect.
+//           • Keeps existing drag, keyboard-aware, and session-loading logic.
+//           • iOS → native blur   |   Android → tinted fallback + blur where supported.
+//
+// Replace your existing file entirely.
+//
+// Nathan Hambleton – Jun 23 2025
+// ───────────────────────────────────────────────────────────────────────────────────
 import React, {
   useContext,
   useRef,
@@ -18,23 +27,24 @@ import {
   Dimensions,
   PanResponder,
   Easing,
-  Keyboard,                 // NEW
+  Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
 
 import { AuthModalContext } from './AuthModalContext';
 import SignIn         from '../auth/sign-in';
 import SignUp         from '../auth/sign-up';
 import ForgotPassword from '../auth/forgot-password';
 import ConfirmCode    from '../auth/confirm-code';
-import SessionLoading  from '../auth/session-loading';
+import SessionLoading from '../auth/session-loading';
 
 /* ───────────────────────── constants ───────────────────────── */
 const { height: WINDOW_HEIGHT } = Dimensions.get('window');
 const TARGET_HEIGHT  = WINDOW_HEIGHT * 0.9;   // 90 % of the screen
 const MAX_STRETCH    = WINDOW_HEIGHT * 0.97;  // upward stretch limit
-const SLIDE_DURATION = 500;                   // ms (was 280)
+const SLIDE_DURATION = 500;                   // ms
 
 export default function AuthModal() {
   const insets = useSafeAreaInsets();
@@ -49,24 +59,22 @@ export default function AuthModal() {
 
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [canClose,      setCanClose]      = useState(false);
-  const [kbdHeight,     setKbdHeight]     = useState(0);   // NEW
+  const [kbdHeight,     setKbdHeight]     = useState(0);
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
-  // Shake animation for handle
+  /* tiny “shake” haptic on invalid drag while SessionLoading is active */
   const triggerShake = useCallback(() => {
     shakeAnim.setValue(0);
     Animated.sequence([
-      Animated.timing(shakeAnim, { toValue: 1, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 1,  duration: 60, useNativeDriver: true }),
       Animated.timing(shakeAnim, { toValue: -1, duration: 60, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 0.7, duration: 50, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0.7,duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0,  duration: 50, useNativeDriver: true }),
     ]).start();
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [shakeAnim]);
 
-  // Handler for SessionLoading to request a smooth close
+  /* helper so SessionLoading can auto-close smoothly */
   const handleSessionLoadingFinish = useCallback(() => {
     Animated.timing(translateY, {
       toValue        : maxHeightRef.current + 40,
@@ -76,19 +84,25 @@ export default function AuthModal() {
     }).start(({ finished }) => finished && close());
   }, [close, translateY]);
 
-  /* which page? */
+  /* which page are we rendering? */
   const Content = (() => {
     switch (screen) {
-      case 'signIn'        : return <SignIn  modalMode {...params} />;
-      case 'signUp'        : return <SignUp  modalMode {...params} />;
+      case 'signIn'        : return <SignIn         modalMode {...params} />;
+      case 'signUp'        : return <SignUp         modalMode {...params} />;
       case 'forgotPassword': return <ForgotPassword modalMode {...params} />;
       case 'confirmCode'   : return <ConfirmCode    modalMode {...params} />;
-      case 'sessionLoading': return <SessionLoading modalMode onRequestCloseWithAnimation={handleSessionLoadingFinish} {...params} />;
+      case 'sessionLoading': return (
+        <SessionLoading
+          modalMode
+          onRequestCloseWithAnimation={handleSessionLoadingFinish}
+          {...params}
+        />
+      );
       default              : return null;
     }
   })();
 
-  /* keyboard listeners (push content up) ────────────────────── */
+  /* keyboard listeners (push content up) */
   useEffect(() => {
     const show = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
@@ -99,18 +113,16 @@ export default function AuthModal() {
       () => setKbdHeight(0)
     );
     return () => {
-      show.remove();
-      hide.remove();
+      show.remove(); hide.remove();
     };
   }, []);
 
-  /* update the live height every time the modal is about to show */
+  /* reset position each time the modal is shown */
   useEffect(() => {
     if (!visible) return;
-
     maxHeightRef.current = TARGET_HEIGHT;
     translateY.setValue(TARGET_HEIGHT + 40);
-    sheetHeight.setValue(TARGET_HEIGHT);
+    sheetHeight .setValue(TARGET_HEIGHT);
 
     Animated.timing(translateY, {
       toValue        : 0,
@@ -138,44 +150,36 @@ export default function AuthModal() {
     }).start(({ finished }) => finished && close());
   }, [close, translateY]);
 
-  /* fresh PanResponder that always reads maxHeightRef.current */
+  /* pan for normal screens */
   const pan = useMemo(
     () =>
       PanResponder.create({
-        // start only on the top-handle (first 40 px)
         onStartShouldSetPanResponder: (e) => e.nativeEvent.locationY < 40,
         onMoveShouldSetPanResponder : (_, g) => Math.abs(g.dy) > 2,
 
-        onPanResponderGrant: () => {
-          Keyboard.dismiss(); // Instantly close the keyboard when dragging starts
+        onPanResponderGrant() {
+          Keyboard.dismiss();
           setScrollEnabled(false);
-          translateY.stopAnimation();
-          translateY.extractOffset();
+          translateY.stopAnimation(); translateY.extractOffset();
           sheetHeight.stopAnimation();
         },
 
-        onPanResponderMove: (_, g) => {
+        onPanResponderMove(_, g) {
           const base = maxHeightRef.current;
-          if (g.dy >= 0) {
-            // dragging down
+          if (g.dy >= 0) {                // drag down
             translateY.setValue(g.dy);
             sheetHeight.setValue(base);
-          } else {
-            // dragging up
+          } else {                        // drag up
             translateY.setValue(0);
             sheetHeight.setValue(Math.min(base - g.dy, MAX_STRETCH));
           }
         },
 
-        onPanResponderRelease: (_, g) => {
+        onPanResponderRelease(_, g) {
           translateY.flattenOffset();
           setScrollEnabled(true);
 
-          const shouldClose = g.dy > 120 || g.vy > 1.2;
-          if (shouldClose) {
-            slideOutAndClose();
-            return;
-          }
+          if (g.dy > 120 || g.vy > 1.2) return slideOutAndClose();
 
           Animated.parallel([
             Animated.spring(translateY,  { toValue: 0, useNativeDriver: false }),
@@ -183,7 +187,7 @@ export default function AuthModal() {
           ]).start();
         },
 
-        onPanResponderTerminate: () => {
+        onPanResponderTerminate() {
           translateY.flattenOffset();
           setScrollEnabled(true);
           Animated.parallel([
@@ -195,16 +199,14 @@ export default function AuthModal() {
     [slideOutAndClose, translateY, sheetHeight]
   );
 
-  // PanResponder for session loading (blocks drag, triggers shake)
+  /* pan that just “shakes” (sessionLoading blocks drag) */
   const fakePan = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: (e) => e.nativeEvent.locationY < 40,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => {
-          triggerShake();
-        },
-        onPanResponderMove: () => {},
+        onMoveShouldSetPanResponder : () => true,
+        onPanResponderGrant : triggerShake,
+        onPanResponderMove  : () => {},
         onPanResponderRelease: () => {},
         onPanResponderTerminate: () => {},
       }),
@@ -221,10 +223,10 @@ export default function AuthModal() {
   /* ───────────────────────── render ───────────────────────── */
   return (
     <Modal
-      visible={visible}
+      visible         = {visible}
       transparent
-      animationType="none"
-      onRequestClose={slideOutAndClose}
+      animationType   = "none"
+      onRequestClose  = {slideOutAndClose}
     >
       <View style={styles.container} pointerEvents="box-none">
         {/* backdrop */}
@@ -247,13 +249,21 @@ export default function AuthModal() {
             },
           ]}
         >
-          {/* drag handle (always visible, shake on drag if sessionLoading) */}
+          {/* glassy blur background */}
+          <BlurView
+            intensity={60}
+            tint="dark"
+            style={styles.blur}
+            pointerEvents="none"
+          />
+
+          {/* drag handle */}
           <Animated.View
             style={[
               styles.handleBox,
               { transform: [{ translateX: shakeAnim.interpolate({
-                inputRange: [-1, 0, 1], outputRange: [-8, 0, 8],
-              }) }] },
+                  inputRange: [-1, 0, 1], outputRange: [-8, 0, 8],
+                }) }] },
             ]}
             {...(screen === 'sessionLoading' ? fakePan.panHandlers : pan.panHandlers)}
           >
@@ -262,13 +272,13 @@ export default function AuthModal() {
 
           {/* page body */}
           <ScrollView
-            scrollEnabled={scrollEnabled}
+            scrollEnabled            = {scrollEnabled}
             keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
+            keyboardDismissMode      ="interactive"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={[
               styles.content,
-              { paddingBottom: 24 + kbdHeight },         // ← add kbdHeight here
+              { paddingBottom: 24 + kbdHeight },
             ]}
           >
             {Content}
@@ -284,20 +294,30 @@ const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'flex-end' },
   overlay  : { flex: 1, backgroundColor: 'rgba(20,20,20,0.7)' },
 
+  // NOTE: keep bg transparent on iOS so blur shows through;
+  //       Android gets a dark tint for consistent appearance.
   sheet: {
-    backgroundColor     : '#141414',
+    backgroundColor     : Platform.OS === 'android'
+                          ? 'rgba(20,20,20,0.85)'
+                          : 'transparent',
     borderTopLeftRadius : 24,
     borderTopRightRadius: 24,
     overflow            : 'hidden',
-    shadowColor   : '#000',
-    shadowOffset  : { width: 0, height: -4 },
-    shadowOpacity : 0.18,
-    shadowRadius  : 16,
-    elevation     : 16,
+    shadowColor         : '#000',
+    shadowOffset        : { width: 0, height: -4 },
+    shadowOpacity       : 0.18,
+    shadowRadius        : 16,
+    elevation           : 16,
   },
 
-  handleBox: { alignItems: 'center', height: 48, paddingTop: 12 },
-  handle   : {
+  blur      : {
+    ...StyleSheet.absoluteFillObject,
+    borderTopLeftRadius : 24,
+    borderTopRightRadius: 24,
+  },
+
+  handleBox : { alignItems: 'center', height: 48, paddingTop: 12 },
+  handle    : {
     width          : 48,
     height         : 6,
     borderRadius   : 3,
@@ -305,5 +325,5 @@ const styles = StyleSheet.create({
     marginVertical : 8,
   },
 
-  content: { paddingHorizontal: 8, paddingBottom: 24 },
+  content   : { paddingHorizontal: 8, paddingBottom: 24 },
 });
