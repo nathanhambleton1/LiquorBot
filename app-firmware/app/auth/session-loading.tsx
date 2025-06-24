@@ -18,7 +18,7 @@ import {
 import { useRouter }      from 'expo-router';
 
 import { Amplify }          from 'aws-amplify';
-import { fetchAuthSession } from '@aws-amplify/auth';
+import { fetchAuthSession, getCurrentUser } from '@aws-amplify/auth';
 import { getUrl }           from '@aws-amplify/storage';
 import { generateClient }   from 'aws-amplify/api';
 import NetInfo              from '@react-native-community/netinfo';
@@ -54,24 +54,83 @@ const COL_BAR_BG  = '#2B2B2B';
 Amplify.configure(config);
 
 /* ---------- helpers ---------- */
+
+// Add stripS3Key helper and update toSigned to use it
+function stripS3Key(uriOrKey: string) {
+  if (!uriOrKey.startsWith('s3://')) return uriOrKey;
+  // s3://bucket-name[/public]/<key>  →  <key>
+  return uriOrKey.replace(/^s3:\/\/[^/]+\/(public\/)?/, '');
+}
+
+async function toSigned(remoteOrKey: string): Promise<string> {
+  if (/^https?:\/\//i.test(remoteOrKey)) return remoteOrKey;
+  // Handle raw S3 keys or "s3://…" URIs
+  const key = stripS3Key(remoteOrKey);
+  try {
+    const { url } = await getUrl({
+      key,
+      options: { accessLevel: 'guest', expiresIn: 60 * 60 * 24 },
+    });
+    return url.toString();
+  } catch {
+    // Fall back to unsigned public path
+    return `https://${config.aws_user_files_s3_bucket}.s3.${config.aws_user_files_s3_bucket_region}.amazonaws.com/public/${key}`;
+  }
+}
+
+// local path helper (move here for use in getDrinkImageSource)
 const getLocalPath = (id: number, remote: string) => {
   const ext = remote.split('.').pop()?.split('?')[0] || 'jpg';
   return `${FileSystem.cacheDirectory}drink-images/drink_${id}.${ext}`;
 };
 
-async function toSigned(remoteOrKey: string): Promise<string> {
-  if (/^https?:/i.test(remoteOrKey)) return remoteOrKey;
-  try {
-    const { url } = await getUrl({
-      key: remoteOrKey,
-      options: { accessLevel: 'guest', expiresIn: 60 * 60 * 24 }, // 24 h
-    });
-    return url.toString();
-  } catch {
-    return remoteOrKey; // fallback (will 404 if truly invalid)
+// Menu-page-style image source resolver
+async function getDrinkImageSource(drink: { id: number; image: string }) {
+  if (!drink.image) return { uri: '' };
+  const localUri = getLocalPath(drink.id, drink.image);
+  const localInfo = await FileSystem.getInfoAsync(localUri).catch(() => ({ exists: false }));
+  if (localInfo.exists) return { uri: localUri };
+  // Legacy filename path fallback
+  const basename = drink.image.split('/').pop()?.split('?')[0] ?? '';
+  const legacyUri = `${FileSystem.cacheDirectory}drink-images/${basename}`;
+  const legacyInfo = await FileSystem.getInfoAsync(legacyUri).catch(() => ({ exists: false }));
+  if (legacyInfo.exists) return { uri: legacyUri };
+  // Download
+  const signed = await toSigned(drink.image);
+  await FileSystem.makeDirectoryAsync(localUri.substring(0, localUri.lastIndexOf('/')), { intermediates: true });
+  await FileSystem.downloadAsync(signed, localUri).catch(() => { /* ignore – will fallback */ });
+  return { uri: localUri };
+}
+
+// Caches all images with progress callback
+async function cacheAllDrinkImages(
+  drinks: { id: number; image: string }[],
+  bump: (f: number) => void,
+  start = 0,
+  range = 1,
+) {
+  const total = drinks.length || 1;
+  let done = 0;
+  for (const d of drinks) {
+    await getDrinkImageSource(d).catch(() => { /* skip on error */ });
+    done += 1;
+    bump(start + (done / total) * range);
   }
 }
 
+// IoT policy helper (ensure present)
+async function attachIoTPolicy() {
+  const { identityId, credentials } = await fetchAuthSession();
+  if (!identityId) return;
+  const iot = new IoTClient({ region: REGION, credentials });
+  const { policies = [] } = await iot.send(
+    new ListAttachedPoliciesCommand({ target: identityId }),
+  );
+  if (policies.some((p) => p.policyName === IOT_POLICY)) return;
+  await iot.send(new AttachPolicyCommand({ policyName: IOT_POLICY, target: identityId }));
+}
+
+// fetchJsonOrCache helper (ensure present)
 async function fetchJsonOrCache(url: string, current: string): Promise<string> {
   try {
     const res = await fetch(url, { cache: 'no-cache' });
@@ -85,6 +144,7 @@ async function fetchJsonOrCache(url: string, current: string): Promise<string> {
   }
 }
 
+// Helper to clear the image cache directory
 async function clearImageCache() {
   try {
     const dir = `${FileSystem.cacheDirectory}drink-images`;
@@ -97,52 +157,6 @@ async function clearImageCache() {
   }
 }
 
-async function cacheImages(
-  list: { id: number; image: string }[],
-  bump: (frac: number) => void,
-  start = 0,
-  range = 1,
-): Promise<void> {
-  const total = list.length || 1;
-  let done = 0;
-
-  for (const d of list) {
-    if (!d.image) { done++; bump(start + (done / total) * range); continue; }
-
-    try {
-      const local = getLocalPath(d.id, d.image);
-      const info  = await FileSystem.getInfoAsync(local);
-
-      if (!info.exists || info.size === 0) {
-        const signed = await toSigned(d.image);
-        await FileSystem.makeDirectoryAsync(
-          local.substring(0, local.lastIndexOf('/')),
-          { intermediates: true },
-        );
-        await FileSystem.downloadAsync(signed, local);
-      }
-    } catch (err) {
-      // Log error for debugging, but continue
-      console.warn(`Failed to cache image for id ${d.id}:`, err);
-    }
-
-    done++; bump(start + (done / total) * range);
-  }
-}
-
-async function attachIoTPolicy(): Promise<void> {
-  const { identityId, credentials } = await fetchAuthSession();
-  if (!identityId) return;
-
-  const iot = new IoTClient({ region: REGION, credentials });
-  const { policies = [] } = await iot.send(
-    new ListAttachedPoliciesCommand({ target: identityId }),
-  );
-  if (policies.some(p => p.policyName === IOT_POLICY)) return;
-
-  await iot.send(new AttachPolicyCommand({ policyName: IOT_POLICY, target: identityId }));
-}
-
 /* ───────── component ───────── */
 export default function SessionLoading({ modalMode, onFinish, onRequestCloseWithAnimation }: { modalMode?: boolean; onFinish?: () => void; onRequestCloseWithAnimation?: () => void } = {}) {
   const router = useRouter();
@@ -151,6 +165,7 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
   const [online, setOnline] = useState<boolean>(true);
   const [firstRun, setFirstRun] = useState<boolean>(false); // true ⇢ no cached JSON yet
   const [providerReady, setProviderReady] = useState(false);
+  const [checkingUser, setCheckingUser] = useState(true); // NEW: track user check
   const progress = useRef(new RNAnimated.Value(0)).current;
   const cancel   = useRef<boolean>(false);                  // abort flag
   const retryCount = useRef<number>(0);                    // retry counter
@@ -243,9 +258,27 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
     }
   }, [liquorbotId, liquorBotCtx.isAdmin]);
 
+  // Check for signed-in user on mount
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        await getCurrentUser();
+        if (isMounted) setCheckingUser(false);
+      } catch {
+        // No user signed in, hide session loading and go to home/index page
+        if (isMounted) {
+          setCheckingUser(false);
+          router.replace('/'); // Go to home/index page
+        }
+      }
+    })();
+    return () => { isMounted = false; };
+  }, []);
+
   // Only run bootstrap when providerReady is true and liquorbotId is valid
   useEffect(() => {
-    // console.log('[DEBUG] useEffect (bootstrap) fired, providerReady:', providerReady, 'liquorbotId:', liquorbotId, 'online:', online);
+    if (checkingUser) return; // Wait for user check
     if (!providerReady) return;
     // For admins, only run if liquorbotId is not '000'
     if (liquorBotCtx.isAdmin && (!liquorbotId || liquorbotId === '000')) return;
@@ -271,6 +304,15 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
           retryTimeout = setTimeout(runBootstrap, delay);
         } else {
           setStatus('Failed to load after several attempts. Please restart the app.');
+          // Automatically close the session loading popup/modal if possible
+          if (typeof onRequestCloseWithAnimation === 'function') {
+            onRequestCloseWithAnimation();
+          } else if (modalMode && typeof onFinish === 'function') {
+            onFinish();
+          } else {
+            // fallback: navigate to home/index
+            router.replace('/');
+          }
         }
       });
     };
@@ -282,7 +324,7 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
       unsubApp.remove();
       if (retryTimeout) clearTimeout(retryTimeout);
     };
-  }, [online, providerReady, liquorbotId]);
+  }, [online, providerReady, liquorbotId, checkingUser]);
 
   /* --------------- main bootstrap --------------- */
   async function bootstrap(): Promise<void> {
@@ -394,24 +436,35 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
       bump(0.16);
 
       // 5 ▸ pull JSON (or use cache when offline)
-      let drinksRaw  = haveDrinks[1] ?? '';
-      let ingsRaw    = haveIngs[1]   ?? '';
+      let drinksRaw = haveDrinks[1] ?? '';
+      let ingsRaw   = haveIngs[1]   ?? '';
       if (online) {
         setStatus('Checking for menu updates…');
-        const [dUrl, iUrl] = await Promise.all([
-          getUrl({ key: DRINKS_KEY }), getUrl({ key: INGS_KEY }),
-        ]);
-        const [dTxt, iTxt] = await Promise.all([
-          fetchJsonOrCache(dUrl.url.toString(), drinksRaw),
-          fetchJsonOrCache(iUrl.url.toString(), ingsRaw),
-        ]);
-        if (dTxt !== drinksRaw) {
-          drinksRaw = dTxt;
-          await AsyncStorage.setItem('drinksJson', drinksRaw);
-        }
-        if (iTxt !== ingsRaw) {
-          ingsRaw = iTxt;
-          await AsyncStorage.setItem('ingredientsJson', ingsRaw);
+        try {
+          const [dUrl, iUrl] = await Promise.all([
+            getUrl({ key: DRINKS_KEY }),
+            getUrl({ key: INGS_KEY }),
+          ]);
+          const [dTxt, iTxt] = await Promise.all([
+            fetchJsonOrCache(dUrl.url.toString(), drinksRaw),
+            fetchJsonOrCache(iUrl.url.toString(), ingsRaw),
+          ]);
+          if (dTxt !== drinksRaw) {
+            drinksRaw = dTxt;
+            await AsyncStorage.setItem('drinksJson', drinksRaw);
+          }
+          if (iTxt !== ingsRaw) {
+            ingsRaw = iTxt;
+            await AsyncStorage.setItem('ingredientsJson', ingsRaw);
+          }
+        } catch (err: any) {
+          console.warn('Menu JSON fetch error →', err);
+          if (!drinksRaw || !ingsRaw) {
+            setStatus('Failed to load menu JSON. Check your internet connection.');
+            throw err;  // abort bootstrap to trigger retry logic
+          } else {
+            setStatus('Using cached menu…');
+          }
         }
       } else if (!drinksRaw || !ingsRaw) {
         setStatus('Internet required – retrying…');
@@ -435,7 +488,7 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
           return { id: 10_000 + idx, image: url.toString() };
         }),
       );
-      await cacheImages([...drinks, ...glassDesc], bump, 0.28, 0.70);
+      await cacheAllDrinkImages([...drinks, ...glassDesc], bump, 0.28, 0.70);
 
       // 7 ▸ cache upcoming events locally (non-critical)
       setStatus('Loading your upcoming events…');
@@ -499,6 +552,10 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
   });
 
   // Render just the content, centered
+  if (checkingUser) {
+    // Optionally show a blank screen or spinner while checking user
+    return null;
+  }
   return (
     <RNAnimated.View
       style={{
