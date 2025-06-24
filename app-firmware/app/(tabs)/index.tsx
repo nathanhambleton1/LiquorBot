@@ -83,58 +83,47 @@ export default function Index() {
   // Ref to ensure join popup is only shown once per deep link
   const hasShownJoinModalRef = useRef<string|null>(null);
 
-  // Show join popup only after auth modal is closed and user is signed in
+  // Track previous AuthModal visibility to trigger join modal after sign-in
+  const prevAuthModalVisible = useRef<boolean>(authModal?.visible ?? false);
+
+  // Deep-link: fetch event & open join modal immediately after user is signed-in
   useEffect(() => {
-    if (                                   // any block → bail out
-      !pendingCode               ||        // no deep link
-      !currentUser               ||        // user not signed-in yet
-      !sessionLoaded             ||        // session-loading still up
-      authModal?.visible         ||        // auth modal still showing
-      linkModalVisible           ||        // we already opened it
-      hasShownJoinModalRef.current === pendingCode // done once per code
-    ) return;
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        setLinkLookupBusy(true);            // ⟵ makes modal appear right away
-
-        const { data } = await generateClient().graphql({
-          query     : eventsByCode,
-          variables : { inviteCode: pendingCode },
-          authMode  : 'userPool',
-        }) as { data:{ eventsByCode:{ items:any[] } } };
-
-        const ev = data.eventsByCode.items?.[0];
-        if (ev && !cancelled) {
-          setLinkEvent({
-            id: ev.id, name: ev.name,
-            startTime: ev.startTime, endTime: ev.endTime,
-          });
-          setLinkErr(null);
-          setLinkLookupBusy(false); // <-- stop spinner as soon as event is loaded
-          setLinkModalVisible(true); // <-- show modal after loading
-        } else if (!cancelled) {
-          setLinkErr('Invite code not found');
-          setLinkLookupBusy(false); // <-- stop spinner if not found
-          setLinkModalVisible(true); // <-- show modal for error
+    // on transition from visible -> hidden
+    if (
+      prevAuthModalVisible.current && !authModal?.visible &&
+      pendingCode && currentUser &&
+      hasShownJoinModalRef.current !== pendingCode
+    ) {
+      let cancelled = false;
+      const fetchAndShow = async () => {
+        setLinkLookupBusy(true);
+        try {
+          const { data } = await generateClient().graphql({
+            query: eventsByCode,
+            variables: { inviteCode: pendingCode },
+            authMode: 'userPool',
+          }) as { data: { eventsByCode: { items: any[] } } };
+          const ev = data.eventsByCode.items?.[0];
+          if (ev && !cancelled) {
+            setLinkEvent({ id: ev.id, name: ev.name, startTime: ev.startTime, endTime: ev.endTime });
+            setLinkErr(null);
+          } else if (!cancelled) {
+            setLinkErr('Invite code not found');
+          }
+        } catch {
+          if (!cancelled) setLinkErr('Unable to fetch event – try again.');
+        } finally {
+          if (!cancelled) {
+            setLinkLookupBusy(false);
+            setLinkModalVisible(true);
+            hasShownJoinModalRef.current = pendingCode;
+          }
         }
-      } catch (e) {
-        if (!cancelled) {
-          setLinkErr('Unable to fetch event – try again.');
-          setLinkLookupBusy(false); // <-- stop spinner on error
-          setLinkModalVisible(true); // <-- show modal for error
-        }
-      } finally {
-        if (!cancelled) {
-          hasShownJoinModalRef.current = pendingCode;
-        }
-      }
-    })();
-
-    return () => { cancelled = true };
-  }, [pendingCode, currentUser, sessionLoaded, authModal?.visible, linkModalVisible]);
+      };
+      fetchAndShow();
+    }
+    prevAuthModalVisible.current = authModal?.visible ?? false;
+  }, [authModal?.visible, pendingCode, currentUser]);
 
   useEffect(() => {
     // 1) no deep link ⟹ ignore
