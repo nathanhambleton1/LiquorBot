@@ -343,9 +343,17 @@ const BookModal = ({
 }: BookModalProps) => {
   const [saving,  setSaving]  = useState(false);
   const [applied, setApplied] = useState(false);
+  const [ingsExpanded, setIngsExpanded] = useState(false);
   const scale = useRef(new Animated.Value(1)).current;
 
   if (!book) return null;
+
+  const sortedIngs = sortIngredientsByType(book.ingredientIds, ingredientMap);
+  const colCount = 2;
+  const perCol = Math.ceil(sortedIngs.length / colCount);
+  const columns = Array.from({ length: colCount }, (_, i) =>
+    sortedIngs.slice(i * perCol, (i + 1) * perCol)
+  );
 
   const animateSuccess = () =>
     Animated.sequence([
@@ -385,23 +393,51 @@ const BookModal = ({
 
           <Text style={[styles.sectionHeader, { fontWeight: 'bold' }]}>Included Drinks</Text>
           {book.drinks.length <= 3 ? (
-            <View style={{ flexDirection: 'row' }}>
+            <View style={{ flexDirection: 'row', paddingTop: 10 }}>
               {book.drinks.map((d) => (
                 <DrinkThumb key={d.id} drink={d} />
               ))}
             </View>
           ) : (
-            <InfiniteDrinkCarousel drinks={book.drinks} />
+            <View style={{ paddingTop: 10 }}>
+              <InfiniteDrinkCarousel drinks={book.drinks} />
+            </View>
           )}
 
-          <Text style={[styles.sectionHeader, { marginTop: 20, fontWeight: 'bold' }]}> 
-            Ingredients to Load
-          </Text>
-          {sortIngredientsByType(book.ingredientIds, ingredientMap).map((id) => (
-            <Text key={id} style={styles.ingItem}>
-              • {ingredientMap.get(id)?.name ?? `#${id}`}
-            </Text>
-          ))}
+          {/* Ingredients to Load header with chevron right-aligned */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 20 }}>
+            <TouchableOpacity
+              onPress={() => setIngsExpanded((v) => !v)}
+              style={{ flexDirection: 'row', alignItems: 'center' }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.sectionHeader, { fontWeight: 'bold' }]}>
+                Ingredients to Load
+              </Text>
+              <Ionicons
+                name={ingsExpanded ? 'chevron-up' : 'chevron-down'}
+                size={20}
+                color="#CE975E"
+                style={{ marginLeft: 10, marginBottom: 6 }}
+              />
+            </TouchableOpacity>
+          </View>
+          {ingsExpanded && (
+            <View style={[styles.ingredientColumns, { paddingTop: 8 }]}> 
+              {columns.map((col, colIdx) => (
+                <View key={colIdx} style={styles.ingredientCol}>
+                  {col.map((id) => {
+                    const name = ingredientMap.get(id)?.name;
+                    return (
+                      <Text key={id} style={styles.ingItem}>
+                        {name ? `• ${name}` : `• #${id}`}
+                      </Text>
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+          )}
 
           {/* Apply button */}
           <TouchableOpacity
@@ -421,6 +457,10 @@ const BookModal = ({
               {applied ? 'Loaded!' : saving ? 'Sending…' : 'Load to Connected Device'}
             </Text>
           </TouchableOpacity>
+
+          <Text style={{ color: '#888', fontSize: 11, textAlign: 'center', marginTop: 14 }}>
+            This will send these ingredients to your device’s slot config.
+          </Text>
         </View>
       </View>
     </Modal>
@@ -543,6 +583,8 @@ export default function ExploreScreen() {
 
   /* ––––– REFRESH HANDLER ––––– */
   const handleRefresh = useCallback(async () => {
+    // Haptic feedback on reload
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
     setBooks([]);
     try { await AsyncStorage.removeItem(`exploreBooks_${userId}`); } catch {}
@@ -610,9 +652,43 @@ export default function ExploreScreen() {
           style={styles.exploreImage}
           resizeMode="cover"
         >
+          {/* Glassy info box overlayed on the image */}
+          <View style={styles.infoBoxContainer} pointerEvents="box-none">
+            <BlurView intensity={40} tint="dark" style={styles.infoBoxBlur} />
+            <View style={styles.infoBoxBrighten} pointerEvents="none" />
+            <View style={{ paddingHorizontal: 18, paddingVertical: 18 }}>
+              <View style={{ height: 8 }} />
+              <View style={styles.infoBoxBulletRow}>
+                <Ionicons name="rocket-outline" size={22} color="#CE975E" style={{ marginRight: 8 }} />
+                <Text style={styles.infoBoxBulletText}>Quickly load themed drink packs to your device</Text>
+              </View>
+              <View style={styles.infoBoxBulletRow}>
+                <Ionicons name="flask-outline" size={22} color="#CE975E" style={{ marginRight: 8 }} />
+                <Text style={styles.infoBoxBulletText}>Preview all included drinks, ingredients, and Images</Text>
+              </View>
+              <View style={styles.infoBoxBulletRow}>
+                <Ionicons name="settings-outline" size={22} color="#CE975E" style={{ marginRight: 8 }} />
+                <Text style={styles.infoBoxBulletText}>Send a full slot config to your connected LiquorBot</Text>
+              </View>
+              <View style={styles.infoBoxBulletRow}>
+                <Ionicons name="refresh" size={22} color="#CE975E" style={{ marginRight: 8 }} />
+                <Text style={styles.infoBoxBulletText}>
+                  Tap reload to generate new packs and ingredients make specifically for you!
+                </Text>
+              </View>
+            </View>
+          </View>
           <View style={styles.headerRow}>
             <Text style={styles.header}>Explore</Text>
-            <TouchableOpacity onPress={handleRefresh} style={styles.refreshButton}>
+            <TouchableOpacity
+              onPress={async () => {
+                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                handleRefresh();
+              }}
+              style={styles.refreshButton}
+              disabled={loading}
+              activeOpacity={loading ? 1 : 0.7}
+            >
               <Ionicons name="refresh" size={26} color="#CE975E" />
             </TouchableOpacity>
           </View>
@@ -820,6 +896,64 @@ const styles = StyleSheet.create({
   modalBrighten: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255,255,255,0.05)', // Adjust alpha for desired brightness
+  },
+
+  ingredientColumns: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  ingredientCol: {
+    flex: 1,
+    marginRight: 8,
+  },
+
+  infoBoxContainer: {
+    position: 'absolute',
+    top: 170,
+    left: 24,
+    right: 24,
+    borderRadius: 16,
+    overflow: 'hidden',
+    zIndex: 10,
+  },
+  infoBoxBlur: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 16,
+  },
+  infoBoxBrighten: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(20,20,20,0.7)', // darker overlay for more contrast
+    borderRadius: 16,
+  },
+  infoBoxText: {
+    color: '#F3F3F3',
+    fontSize: 15,
+    textAlign: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    fontWeight: '500',
+    letterSpacing: 0.1,
+  },
+  infoBoxTitle: {
+    color: '#F3F3F3',
+    fontSize: 17,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 2,
+    letterSpacing: 0.2,
+  },
+  infoBoxBulletRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  infoBoxBulletText: {
+    color: '#F3F3F3',
+    fontSize: 15,
+    flex: 1,
+    fontWeight: '500',
+    letterSpacing: 0.1,
   },
 });
 
