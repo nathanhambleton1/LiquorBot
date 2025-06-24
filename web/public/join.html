@@ -105,33 +105,9 @@
     }
   </style>
   <script>
-  (function () {
-    const parts         = location.pathname.split('/');
-    const code          = parts[2] || '';
-    // Use a unique custom URL scheme to avoid collisions with other apps
-    const SCHEME_URL    = `liquorbotapp://join/${code}`;
-    const APPSTORE_URL  = 'https://apps.apple.com/app/id6746461095';
-
-    /* Kick the native app */
-    location.href = SCHEME_URL;
-
-    /* Fallback after 2500 ms **only if the page is still visible** */
-    const fallbackTimer = setTimeout(() => {
-      if (document.visibilityState === 'visible') {
-        location.replace(APPSTORE_URL);
-      }
-    }, 2500);
-
-    /* Cancel fallback as soon as Safari loses focus */
-    const cancel = () => clearTimeout(fallbackTimer);
-
-    /* iOS 15+ fires pagehide; older versions at least fire blur */
-    window.addEventListener('pagehide', cancel, { once: true });
-    window.addEventListener('blur',     cancel, { once: true });
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) cancel();
-    }, { once: true });
-  })();
+  // Universal Links: No need to force a redirect with JS.
+  // If the app is installed and Associated Domains are set up, iOS will open the app automatically.
+  // If not, this page will show as a fallback.
   </script>
 </head>
 <body>
