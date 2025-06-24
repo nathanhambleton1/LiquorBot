@@ -275,7 +275,7 @@ export default function ForgotPassword({ modalMode }: { modalMode?: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  background:            { flex: 1, backgroundColor: '#141414' },
+  background:            { flex: 1, backgroundColor: 'rgba(20,20,20,0)' },
   container:             { flex: 1, padding: 24, justifyContent: 'center' },
   backArrow:             { position: 'absolute', top: 60, left: 20, zIndex: 10 },
   title:                 { fontSize: 36, color: '#fff', marginBottom: 24, fontWeight: 'bold', textAlign: 'center' },
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   buttonText:            { color: '#DFDCD9', fontSize: 18, fontWeight: 'bold' },
   error:                 { color: 'red', marginBottom: 8 },
   info:                  { color: '#CE975E', marginBottom: 10 },
-  modalContainer:        { backgroundColor: '#141414', borderRadius: 18, padding: 12 },
+  modalContainer:        { backgroundColor: 'rgba(20,20,20,0)', borderRadius: 18, padding: 12 },
   navRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 32 },
   navText: { color: '#aaa', fontSize: 16, fontWeight: 'normal' },
   navLink: { color: '#CE975E', fontSize: 16, fontWeight: 'bold', marginLeft: 2 },

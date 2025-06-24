@@ -613,7 +613,7 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
       style={{
         flex: 1,
         transform: [{ translateY }],
-        backgroundColor: '#141414',
+        backgroundColor: 'rgba(20,20,20,0)',
         alignItems: 'center',
         justifyContent: 'center',
         paddingTop: 200,
