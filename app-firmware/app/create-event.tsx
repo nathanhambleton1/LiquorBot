@@ -853,9 +853,13 @@ export default function EventsScreen(){
         )}
 
         {/* drink‑picker modal */}
-        <Modal visible={pickerVis} animationType="slide"
-          onRequestClose={()=>setPV(false)}
-          presentationStyle={Platform.OS==='ios'?'pageSheet':'fullScreen'}>
+        <Modal
+          visible={pickerVis}
+          transparent               // <-- key
+          statusBarTranslucent      // keeps the blur under the notch on Android
+          animationType="fade"
+          presentationStyle="overFullScreen"
+          onRequestClose={()=>setPV(false)} >
           <PickerModal
             cat={cat}
             setCat={setCat}
@@ -1152,7 +1156,7 @@ const styles = StyleSheet.create({
   listContent:      { paddingHorizontal: 20, paddingBottom: 40, paddingTop: 0 },
   itemSeparator:    { height: 1, backgroundColor: '#333', marginHorizontal: 16 },
   drinkItem:        { paddingVertical: 12 },
-  modal:            { flex: 1, backgroundColor: Platform.OS === 'android'? 'rgba(20,20,20,0.85)' : 'transparent',},
+  modal:            { flex: 1, backgroundColor: 'transparent',},
   searchRow:        { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, paddingHorizontal: 15, marginBottom: 5 },
   drinkItemText:    { color: '#DFDCD9', fontSize: 16 },
   container:        { flex: 1, backgroundColor: '#141414' },
