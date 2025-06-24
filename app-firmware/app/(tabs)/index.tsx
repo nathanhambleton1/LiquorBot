@@ -71,6 +71,7 @@ export default function Index() {
 
   /* ---------- deep-link join popup ---------- */
   const [sessionLoaded, setSessionLoaded] = useState(false);
+  const { pendingCode } = useContext(DeepLinkContext);
   const [linkEvent,         setLinkEvent]         = useState<AppEvent|null>(null);
   const [linkModalVisible,  setLinkModalVisible]  = useState(false);
   const [linkLoading,       setLinkLoading]       = useState(false);
@@ -78,7 +79,6 @@ export default function Index() {
   const [linkLookupBusy,    setLinkLookupBusy]    = useState(false);
   const hasAutoOpenedSignIn = useRef<string | null>(null);
   const [authReady,   setAuthReady]   = useState(false);
-  const { pendingCode, clearPendingCode } = useContext(DeepLinkContext);
   
   // Ref to ensure join popup is only shown once per deep link
   const hasShownJoinModalRef = useRef<string|null>(null);
@@ -154,83 +154,30 @@ export default function Index() {
   // 1.  Keep currentUser in sync with auth state, and clear UI on log-out
   // ------------------------------------------------------------------
   useEffect(() => {
-    const checkUser = async () => {
+    const readUser = async () => {
       try {
         const ses = await fetchAuthSession();
-        const user = ses.tokens?.idToken?.payload['cognito:username'];
-        setCurrentUser(typeof user === 'string' ? user : null);
-        setAuthReady(true);
+        const u   = ses.tokens?.idToken?.payload['cognito:username'];
+        setCurrentUser(typeof u === 'string' ? u : null);
       } catch {
         setCurrentUser(null);
-        setAuthReady(true);
+      } finally {
+        setAuthReady(true);           // <-- we now KNOW whether a user exists
       }
     };
 
-    checkUser();
-    
+    // initial read
+    readUser();
+
+    // react to auth hub events
     const unsubscribe = Hub.listen('auth', ({ payload }) => {
       if (['signedIn', 'signedOut', 'tokenRefresh'].includes(payload.event)) {
-        checkUser();
+        readUser();
+        setUpcomingEvents([]);   // wipe old user’s events instantly
       }
     });
-    
     return () => unsubscribe();
   }, []);
-
-  useEffect(() => {
-    if (!pendingCode || !authReady) return;
-    
-    // User not signed in - open sign-in
-    if (!currentUser) {
-      if (!authModal?.visible && hasAutoOpenedSignIn.current !== pendingCode) {
-        authModal?.open('signIn');
-        hasAutoOpenedSignIn.current = pendingCode;
-      }
-      return;
-    }
-    
-    // User signed in - fetch event
-    const fetchEvent = async () => {
-      if (hasShownJoinModalRef.current === pendingCode) return;
-      
-      try {
-        setLinkLookupBusy(true);
-        const { data } = await generateClient().graphql({
-          query: eventsByCode,
-          variables: { inviteCode: pendingCode },
-          authMode: 'userPool',
-        });
-        
-        const ev = data?.eventsByCode?.items?.[0];
-        if (ev) {
-          setLinkEvent({
-            id: ev.id,
-            name: ev.name,
-            startTime: ev.startTime,
-            endTime: ev.endTime,
-          });
-        } else {
-          setLinkErr('Event not found');
-        }
-      } catch (e) {
-        setLinkErr('Failed to load event');
-      } finally {
-        setLinkLookupBusy(false);
-        setLinkModalVisible(true);
-        hasShownJoinModalRef.current = pendingCode;
-      }
-    };
-
-    // Wait 300ms to ensure home screen is ready
-    const timer = setTimeout(fetchEvent, 300);
-    return () => clearTimeout(timer);
-  }, [pendingCode, currentUser, authReady]);
-
-  useEffect(() => {
-    if (!linkModalVisible && pendingCode) {
-      clearPendingCode();
-    }
-  }, [linkModalVisible]);
 
   // If currentUser becomes null for any reason, be sure list is empty
   useEffect(() => {

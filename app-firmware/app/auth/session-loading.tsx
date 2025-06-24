@@ -289,22 +289,6 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
     }).start();
   }, [pct]);
 
-  useEffect(() => {
-    if (pct >= 1) {
-      // Clear any pending deep links
-      AsyncStorage.removeItem('pendingEventCode');
-      
-      // Close modal if in modal mode
-      if (typeof onRequestCloseWithAnimation === 'function') {
-        onRequestCloseWithAnimation();
-      } 
-      // Navigate otherwise
-      else if (!modalMode) {
-        router.replace('/(tabs)');
-      }
-    }
-  }, [pct]);
-
   // Watch for provider readiness
   useEffect(() => {
     // console.log('[DEBUG] providerReady effect, isAdmin:', liquorBotCtx.isAdmin, 'liquorbotId:', liquorbotId);
