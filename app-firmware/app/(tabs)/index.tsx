@@ -633,7 +633,6 @@ export default function Index() {
               ]}
               onPress={confirmDeepLinkJoin}
               disabled={
-                linkLookupBusy ||
                 linkLoading   ||
                 (!!linkEvent && upcomingEvents.some(e => e.id === linkEvent.id))
               }
