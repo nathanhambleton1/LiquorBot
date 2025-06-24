@@ -106,22 +106,30 @@
   </style>
   <script>
   (function () {
-    var parts = window.location.pathname.split('/');
-    var code  = parts[2] || '';
+    const parts         = location.pathname.split('/');
+    const code          = parts[2] || '';
+    const SCHEME_URL    = `myapp://join/${code}`;
+    const APPSTORE_URL  = 'https://apps.apple.com/app/id6746461095';
 
-    // Attempt to open the app
-    window.location = 'myapp://join/' + code;
+    /* Kick the native app */
+    location.href = SCHEME_URL;
 
-    // Fallback to App Store after 1200 ms, only if still visible
-    var t = setTimeout(function () {
+    /* Fallback after 2500 ms **only if the page is still visible** */
+    const fallbackTimer = setTimeout(() => {
       if (document.visibilityState === 'visible') {
-        window.location = 'https://apps.apple.com/app/id6746461095';
+        location.replace(APPSTORE_URL);
       }
-    }, 1200);
+    }, 2500);
 
-    document.addEventListener('visibilitychange', function () {
-      if (document.hidden) clearTimeout(t);   // app opened → cancel fallback
-    });
+    /* Cancel fallback as soon as Safari loses focus */
+    const cancel = () => clearTimeout(fallbackTimer);
+
+    /* iOS 15+ fires pagehide; older versions at least fire blur */
+    window.addEventListener('pagehide', cancel, { once: true });
+    window.addEventListener('blur',     cancel, { once: true });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) cancel();
+    }, { once: true });
   })();
   </script>
 </head>
