@@ -84,22 +84,49 @@ const getLocalPath = (id: number, remote: string) => {
   return `${FileSystem.cacheDirectory}drink-images/drink_${id}.${ext}`;
 };
 
-// Menu-page-style image source resolver
+// Update the getDrinkImageSource function with better error handling
 async function getDrinkImageSource(drink: { id: number; image: string }) {
   if (!drink.image) return { uri: '' };
-  const localUri = getLocalPath(drink.id, drink.image);
-  const localInfo = await FileSystem.getInfoAsync(localUri).catch(() => ({ exists: false }));
-  if (localInfo.exists) return { uri: localUri };
-  // Legacy filename path fallback
-  const basename = drink.image.split('/').pop()?.split('?')[0] ?? '';
-  const legacyUri = `${FileSystem.cacheDirectory}drink-images/${basename}`;
-  const legacyInfo = await FileSystem.getInfoAsync(legacyUri).catch(() => ({ exists: false }));
-  if (legacyInfo.exists) return { uri: legacyUri };
-  // Download
-  const signed = await toSigned(drink.image);
-  await FileSystem.makeDirectoryAsync(localUri.substring(0, localUri.lastIndexOf('/')), { intermediates: true });
-  await FileSystem.downloadAsync(signed, localUri).catch(() => { /* ignore – will fallback */ });
-  return { uri: localUri };
+  
+  try {
+    const localUri = getLocalPath(drink.id, drink.image);
+    const localInfo = await FileSystem.getInfoAsync(localUri).catch(() => ({ exists: false }));
+    
+    if (localInfo.exists) return { uri: localUri };
+    
+    // Legacy filename path fallback
+    const basename = drink.image.split('/').pop()?.split('?')[0] ?? '';
+    const legacyUri = `${FileSystem.cacheDirectory}drink-images/${basename}`;
+    const legacyInfo = await FileSystem.getInfoAsync(legacyUri).catch(() => ({ exists: false }));
+    
+    if (legacyInfo.exists) return { uri: legacyUri };
+    
+    // Download with retry logic
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        const signed = await toSigned(drink.image);
+        await FileSystem.makeDirectoryAsync(
+          localUri.substring(0, localUri.lastIndexOf('/')), 
+          { intermediates: true }
+        );
+        await FileSystem.downloadAsync(signed, localUri);
+        return { uri: localUri };
+      } catch (error) {
+        retries--;
+        if (retries === 0) {
+          console.warn(`Failed to download image for drink ${drink.id} after 3 attempts`);
+          // Return the remote URL as fallback
+          return { uri: await toSigned(drink.image) };
+        }
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+  } catch (error) {
+    console.error(`Error processing image for drink ${drink.id}:`, error);
+    return { uri: '' };
+  }
 }
 
 // Caches all images with progress callback
@@ -472,9 +499,11 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
       }
       bump(0.22);
 
-      // 6 ▸ cache images (signed-URL fallback)
+      // 6 ▸ cache images (signed-URL fallback) - FIXED SECTION
       setStatus('Caching drink and glass images…');
       const drinks = JSON.parse(drinksRaw) as { id:number; image:string }[];
+      
+      // FIX: Process glass images directly without Promise.all
       const glassKeys = [
         'drinkMenu/drinkPictures/rocks_white.png',
         'drinkMenu/drinkPictures/highball_white.png',
@@ -482,13 +511,53 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
         'drinkMenu/drinkPictures/coupe_white.png',
         'drinkMenu/drinkPictures/margarita_white.png',
       ];
-      const glassDesc = await Promise.all(
-        glassKeys.map(async (k, idx) => {
-          const { url } = await getUrl({ key: k });
-          return { id: 10_000 + idx, image: url.toString() };
-        }),
-      );
-      await cacheAllDrinkImages([...drinks, ...glassDesc], bump, 0.28, 0.70);
+      
+      // Create glass objects directly instead of fetching URLs upfront
+      const glassDesc = glassKeys.map((k, idx) => ({
+        id: 10_000 + idx,
+        image: k  // Just use the key directly
+      }));
+
+      // Cache both drinks and glass images together
+      async function cacheAllDrinkImages(
+        drinks: { id: number; image: string }[],
+        bump: (f: number) => void,
+        start = 0,
+        range = 1,
+      ) {
+        const total = drinks.length || 1;
+        let done = 0;
+        
+        // Create a function to handle individual image caching with timeout
+        const cacheImageWithTimeout = async (d: { id: number; image: string }) => {
+          try {
+            const timeout = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Image caching timeout')), 10000)
+            );
+            
+            await Promise.race([
+              getDrinkImageSource(d),
+              timeout
+            ]);
+          } catch (error) {
+            console.warn(`Failed to cache image for drink ${d.id}:`, error);
+            // We'll continue even if some images fail
+          }
+        };
+
+        // Process images in batches to avoid overwhelming the system
+        const batchSize = 5;
+        for (let i = 0; i < drinks.length; i += batchSize) {
+          const batch = drinks.slice(i, i + batchSize);
+          
+          await Promise.allSettled(batch.map(d => 
+            cacheImageWithTimeout(d).then(() => {
+              done += 1;
+              bump(start + (done / total) * range);
+            })
+          ));
+        }
+      }
 
       // 7 ▸ cache upcoming events locally (non-critical)
       setStatus('Loading your upcoming events…');
