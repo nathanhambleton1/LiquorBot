@@ -136,6 +136,13 @@ export default function Index() {
     })();
   }, [pendingCode, currentUser]);
 
+  // Open auth modal if deep link is pending and user is not signed in
+  useEffect(() => {
+    if (pendingCode && !currentUser && authModal?.open) {
+      authModal.open('signIn');
+    }
+  }, [pendingCode, currentUser, authModal]);
+
   // Helper to check if signed in
   const isSignedIn = !!currentUser;
 

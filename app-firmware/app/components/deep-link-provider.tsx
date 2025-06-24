@@ -42,9 +42,8 @@ export function DeepLinkProvider({ children }: PropsWithChildren<object>) {
         if (code) {
           setPendingCode(code);
           AsyncStorage.setItem('pendingEventCode', code);
-          // If not signed in yet, push to sign-in screen
-          fetchAuthSession()
-            .catch(() => router.push('/auth/sign-in'));
+          // Always route to home page; let home page handle auth modal
+          router.replace('/(tabs)');
         }
       }
     };
