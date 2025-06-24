@@ -604,10 +604,7 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
   });
 
   // Render just the content, centered
-  if (checkingUser) {
-    // Optionally show a blank screen or spinner while checking user
-    return null;
-  }
+  // Always show the loading UI, even while checkingUser
   return (
     <RNAnimated.View
       style={{
