@@ -596,10 +596,11 @@ export default function Index() {
             </TouchableOpacity>
 
             {/* event summary */}
-            {linkLookupBusy ? (
+            {linkLookupBusy && !linkEvent ? (
               /* ⏳ spinning while GraphQL downloads */
               <ActivityIndicator size="large" color="#CE975E" style={{marginVertical:20}}/>
             ) : (
+              /* show calendar icon once event details are available or not loading */
               <Ionicons name="calendar" size={48} color="#CE975E" style={{marginBottom:10}}/>
             )}
             <Text style={[styles.filtTitle,{marginBottom:4}]}>
