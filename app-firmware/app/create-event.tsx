@@ -1051,93 +1051,94 @@ const TimeBox=forwardRef(({label,onPress,tag}:{label:string;onPress:()=>void;tag
 
   return (
     <View style={styles.modal}>
-      {/* one-time glass pane under everything */}
-      <BlurView
-        style={styles.blur}
-        intensity={80}     // match auth modal
-        tint="dark"
-        pointerEvents="none"
-      />
-      <View style={styles.modalContent}>{/* added wrapper for modal content */}
-        <View style={styles.modalHeader}>
-          {/* Header row with all controls */}
-          <View style={styles.headerRow}>
-            {/* Close chevron (left-aligned) */}
-            <TouchableOpacity onPress={close} style={styles.chevronButton}>
-              <Ionicons name="chevron-down" size={30} color="#DFDCD9" />
-            </TouchableOpacity>
-
-            {/* Centered title */}
-            <Text style={styles.modalHeaderText}>Select a Drink</Text>
-
-            {/* Edit button (right-aligned) */}
-            <TouchableOpacity 
-              onPress={openCustomDrink}
-              style={styles.editButton}
-            >
-              <Ionicons name="create-outline" size={24} color="#CE975E" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Rest of the header content */}
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.catRow}
-          >
-            {categories.map(c => (
-              <TouchableOpacity key={c} onPress={() => setCat(c)} style={styles.catBtn}>
-                <Text style={[styles.catTxt, cat === c && styles.catSel]}>{c}</Text>
-                {cat === c && <View style={styles.under} />}
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <View style={styles.searchRow}>
-            <Ionicons name="search" size={20} color="#4F4F4F" style={{ marginRight: 8 }} />
-            <TextInput 
-              style={styles.searchInput} 
-              placeholder="Search drinks"
-              placeholderTextColor="#4F4F4F" 
-              value={q} 
-              onChangeText={setQ} 
-            />
-          </View>
-        </View>
-
-      {/* Drink list with tighter spacing */}
-      {loading ? (
-        <ActivityIndicator size="large" color="#CE975E" style={{ marginTop: 20 }} />
-      ) : (
-        <FlatList
-          data={combined}
-          keyExtractor={i => String(i.id)}
-          renderItem={({ item }) => {
-            const disabled = !canAddDrink(item);
-            return (
-              <TouchableOpacity
-                style={[styles.drinkItem, disabled && { opacity: 0.5 }]} 
-                onPress={() => { if (!disabled) addDrink(item); }}
-                disabled={disabled}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={[styles.drinkItemText, disabled && { color: '#777' }]}>{item.name}</Text>
-                  {item.isCustom && <Text style={styles.customTag}> (custom)</Text>}
-                </View>
-              </TouchableOpacity>
-            );
-// customTag style is defined below in the StyleSheet
-          }}
-          contentContainerStyle={styles.listContent}
-          ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
-          ListFooterComponent={() => (
-            <Text style={{ color: '#4F4F4F', fontSize: 10, textAlign: 'center', marginTop: 24, marginBottom: 8, paddingHorizontal: 16 }}>
-              Drinks here are filtered based on the unique ingredients your LiquorBot can hold. Drinks you cannot make are shown below and disabled.
-            </Text>
-          )}
+      {/* glass pane removed from outside, now inside modalContent */}
+      <View style={styles.modalContent}>
+        <BlurView
+          style={StyleSheet.absoluteFill}
+          intensity={80}     // match auth modal
+          tint="dark"
         />
-      )}
-    </View>{/* end modalContent wrapper */}
+        <View style={{ flex: 1 }}>
+          <View style={styles.modalHeader}>
+            {/* Header row with all controls */}
+            <View style={styles.headerRow}>
+              {/* Close chevron (left-aligned) */}
+              <TouchableOpacity onPress={close} style={styles.chevronButton}>
+                <Ionicons name="chevron-down" size={30} color="#DFDCD9" />
+              </TouchableOpacity>
+
+              {/* Centered title */}
+              <Text style={styles.modalHeaderText}>Select a Drink</Text>
+
+              {/* Edit button (right-aligned) */}
+              <TouchableOpacity 
+                onPress={openCustomDrink}
+                style={styles.editButton}
+              >
+                <Ionicons name="create-outline" size={24} color="#CE975E" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Rest of the header content */}
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.catRow}
+            >
+              {categories.map(c => (
+                <TouchableOpacity key={c} onPress={() => setCat(c)} style={styles.catBtn}>
+                  <Text style={[styles.catTxt, cat === c && styles.catSel]}>{c}</Text>
+                  {cat === c && <View style={styles.under} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <View style={styles.searchRow}>
+              <Ionicons name="search" size={20} color="#4F4F4F" style={{ marginRight: 8 }} />
+              <TextInput 
+                style={styles.searchInput} 
+                placeholder="Search drinks"
+                placeholderTextColor="#4F4F4F" 
+                value={q} 
+                onChangeText={setQ} 
+              />
+            </View>
+          </View>
+
+        {/* Drink list with tighter spacing */}
+        {loading ? (
+          <ActivityIndicator size="large" color="#CE975E" style={{ marginTop: 20 }} />
+        ) : (
+          <FlatList
+            data={combined}
+            keyExtractor={i => String(i.id)}
+            renderItem={({ item }) => {
+              const disabled = !canAddDrink(item);
+              return (
+                <TouchableOpacity
+                  style={[styles.drinkItem, disabled && { opacity: 0.5 }]} 
+                  onPress={() => { if (!disabled) addDrink(item); }}
+                  disabled={disabled}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={[styles.drinkItemText, disabled && { color: '#777' }]}>{item.name}</Text>
+                    {item.isCustom && <Text style={styles.customTag}> (custom)</Text>}
+                  </View>
+                </TouchableOpacity>
+              );
+// customTag style is defined below in the StyleSheet
+            }}
+            contentContainerStyle={styles.listContent}
+            ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+            ListFooterComponent={() => (
+              <Text style={{ color: '#4F4F4F', fontSize: 10, textAlign: 'center', marginTop: 24, marginBottom: 8, paddingHorizontal: 16 }}>
+                Drinks here are filtered based on the unique ingredients your LiquorBot can hold. Drinks you cannot make are shown below and disabled.
+              </Text>
+            )}
+          />
+        )}
+      </View>
+      </View>
     </View>
   );
 };
@@ -1158,8 +1159,8 @@ const styles = StyleSheet.create({
   listContent:      { paddingHorizontal: 20, paddingBottom: 40, paddingTop: 0 },
   itemSeparator:    { height: 1, backgroundColor: '#333', marginHorizontal: 16 },
   drinkItem:        { paddingVertical: 12 },
-  modal:            { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' }, // changed
-  modalContent:     { maxHeight: '90%', backgroundColor: '#1F1F1F', borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' }, // added
+  modal:            { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' },
+  modalContent:     { maxHeight: '90%', backgroundColor: 'transparent', borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' }, // changed to transparent
   searchRow:        { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 10, paddingHorizontal: 15, marginBottom: 5 },
   drinkItemText:    { color: '#DFDCD9', fontSize: 16 },
   container:        { flex: 1, backgroundColor: '#141414' },
