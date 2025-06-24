@@ -9,6 +9,7 @@
 import React, {
   createContext,
   PropsWithChildren,
+  useCallback,
   useEffect,
   useState,
 } from 'react';
@@ -26,47 +27,62 @@ async function joinEventByCode(eventCode: string) {
   console.log('🔗 Deep-link auto-joining event', eventCode);
 }
 
-type Ctx = { pendingCode: string | null };
-export const DeepLinkContext = createContext<Ctx>({ pendingCode: null });
+type Ctx = { 
+  pendingCode: string | null;
+  clearPendingCode: () => void;
+};
+export const DeepLinkContext = createContext<Ctx>({
+  pendingCode: null,
+  clearPendingCode: () => {},
+});
 
 export function DeepLinkProvider({ children }: PropsWithChildren<object>) {
-  const router            = useRouter();
+  const router = useRouter();
   const [pendingCode, setPendingCode] = useState<string | null>(null);
 
-  /* ───── 1. Capture any /join/<code> URL ───── */
   useEffect(() => {
-    const handle = ({ url }: { url: string }) => {
+    const handleUrl = async (url: string | null) => {
+      if (!url) return;
+      
       const { path } = Linking.parse(url);
       if (path?.startsWith('join/')) {
         const code = path.split('/')[1];
         if (code) {
+          // Clear any previous pending code
+          await AsyncStorage.removeItem('pendingEventCode');
+          
+          // Store and set new code
+          await AsyncStorage.setItem('pendingEventCode', code);
           setPendingCode(code);
-          AsyncStorage.setItem('pendingEventCode', code);
-          // Always route to home page; let home page handle auth modal
+          
+          // Always route to home
           router.replace('/(tabs)');
         }
       }
     };
 
-    // a) cold-start link
-    Linking.getInitialURL().then(u => u && handle({ url: u }));
-    // b) warm-app link
-    const sub = Linking.addEventListener('url', handle);
+    // Handle cold/warm starts
+    const processInitialUrl = async () => {
+      const url = await Linking.getInitialURL();
+      await handleUrl(url);
+    };
+
+    processInitialUrl();
+    
+    // Listen for URL events
+    const sub = Linking.addEventListener('url', ({ url }) => handleUrl(url));
+    
     return () => sub.remove();
   }, []);
 
-  useEffect(() => {
-    // ← NEW: bootstrap from storage after cold-start redirect
-    AsyncStorage.getItem('pendingEventCode').then(saved => {
-      if (saved) {
-        setPendingCode(saved);
-        AsyncStorage.removeItem('pendingEventCode');
-      }
-    });
+  // Clear code after processing
+  const clearPendingCode = useCallback(() => {
+    setPendingCode(null);
+    AsyncStorage.removeItem('pendingEventCode');
   }, []);
 
   return (
-    <DeepLinkContext.Provider value={{ pendingCode }}>
+    <DeepLinkContext.Provider value={{ pendingCode, clearPendingCode }}>
       {children}
     </DeepLinkContext.Provider>
   );
