@@ -78,8 +78,8 @@ export default function Index() {
   const [linkErr,           setLinkErr]           = useState<string|null>(null);
   const [linkLookupBusy,    setLinkLookupBusy]    = useState(false);
   const hasAutoOpenedSignIn = useRef<string | null>(null);
+  const [authReady,   setAuthReady]   = useState(false);
   
-
   // Ref to ensure join popup is only shown once per deep link
   const hasShownJoinModalRef = useRef<string|null>(null);
 
@@ -155,6 +155,8 @@ export default function Index() {
         setCurrentUser(typeof u === 'string' ? u : null);
       } catch {
         setCurrentUser(null);
+      } finally {
+        setAuthReady(true);           // <-- we now KNOW whether a user exists
       }
     };
 
@@ -207,10 +209,17 @@ export default function Index() {
 
   // Open auth modal if deep link is pending and user is not signed in and modal is not already open
   useEffect(() => {
-    if (pendingCode && !currentUser && authModal && !authModal.visible) {
-      authModal.open('signIn');
-    }
-  }, [pendingCode, currentUser, authModal]);
+    if (
+      !pendingCode ||
+      !authReady ||             // ✅ NEW: wait for first auth check
+      currentUser ||            // ✅ NEW: skip if already signed in
+      authModal?.visible ||
+      hasAutoOpenedSignIn.current === pendingCode
+    ) return;
+
+    authModal?.open('signIn');
+    hasAutoOpenedSignIn.current = pendingCode;
+  }, [pendingCode, authReady, currentUser, authModal?.visible]);
 
   // Helper to check if signed in
   const isSignedIn = !!currentUser;
