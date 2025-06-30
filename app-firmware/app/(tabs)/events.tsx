@@ -1232,7 +1232,7 @@ const styles = StyleSheet.create({
 
   overlay:{flex:1,backgroundColor:'rgba(0,0,0,0.25)',justifyContent:'center',alignItems:'center'},
   filtCard:{width:SCREEN_WIDTH*0.8,backgroundColor:'#1F1F1F',borderRadius:10,padding:20},
-  filtClose:{position:'absolute',top:-15,right:-15,padding:4},
+  filtClose:{position:'absolute',top:10,right:10,padding:4},
   filtTitle:{color:'#DFDCD9',fontSize:20,fontWeight:'bold',alignSelf:'center',marginBottom:20},
   switchRow:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},
   switchLbl:{color:'#DFDCD9',fontSize:16},
