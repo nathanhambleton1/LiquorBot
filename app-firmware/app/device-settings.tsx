@@ -674,6 +674,13 @@ export default function DeviceSettings() {
             </View>
           </View>
 
+          {/* Slot config loading overlay (local to slots box) */}
+          {configLoading && (
+            <View style={styles.slotsLoadingOverlay} pointerEvents="none">
+              <ActivityIndicator size="large" color="#CE975E" />
+            </View>
+          )}
+
           {!isConnected && (
             <Text style={styles.connectDeviceMessage}>Please connect a device to start configuring.</Text>
           )}
@@ -916,12 +923,6 @@ export default function DeviceSettings() {
           )}
         </View>
       </Modal>
-
-      {configLoading && (
-        <View style={styles.loadingOverlay} pointerEvents="none">
-          <ActivityIndicator size="large" color="#CE975E" />
-        </View>
-      )}
     </View>
   );
 }
@@ -1104,15 +1105,12 @@ const styles = StyleSheet.create({
   },
   infoModalButtonText: { color: '#141414', fontWeight: 'bold' },
 
-  loadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+  slotsLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(20,20,20,0.85)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1000,
+    zIndex: 10,
+    borderRadius: 10,
   },
 });
