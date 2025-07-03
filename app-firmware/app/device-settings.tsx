@@ -230,6 +230,7 @@ export default function DeviceSettings() {
       ]
     );
   };
+  const handleCalibrate = () => publishMaintenance({ action: 'CALIBRATE' });
 
   /*────────── Wi-Fi DISCONNECT helper ──────────*/
   const confirmDisconnect = () => {
@@ -617,6 +618,17 @@ export default function DeviceSettings() {
                 info="Runs warm water through all tubes. Bottles must be empty."
                 onInfoPress={() => {
                   setSelectedInfo({ title: "Deep Clean", message: "Runs warm water through all tubes. Bottles must be empty." });
+                  setInfoModalVisible(true);
+                }}
+              />
+              {/* Calibrate Button */}
+              <ActionRow
+                label="Calibrate"
+                icon="speedometer-outline"
+                onPress={() => { strongVibration(); bumpIfDisconnected(handleCalibrate); }}
+                info="Calibrates pump speed for accurate pours. Follow on-screen instructions."
+                onInfoPress={() => {
+                  setSelectedInfo({ title: "Calibrate", message: "Calibrates the speed of the pumps to ensure accurate pours every time. Follow the on-screen instructions to complete calibration." });
                   setInfoModalVisible(true);
                 }}
               />
