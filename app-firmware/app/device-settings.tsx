@@ -106,6 +106,7 @@ export default function DeviceSettings() {
   const [isAdvancedCollapsed, setIsAdvancedCollapsed] = useState(true); // open by default
   const advancedRot = useState(new Animated.Value(1))[0]; // open by default
   const [slots, setSlots] = useState<number[]>(Array(15).fill(0));
+  const [volumes, setVolumes] = useState<number[]>(Array(15).fill(0)); // New: volumes for each slot
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -301,8 +302,13 @@ export default function DeviceSettings() {
         const msg = (d as any).value ?? d;
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
           setSlots(msg.slots.map((id: any) => Number(id) || 0));
+          // New: handle volumes if present
+          if (Array.isArray(msg.volumes)) {
+            setVolumes(msg.volumes.map((v: any) => Number(v) || 0));
+          } else {
+            setVolumes(Array(15).fill(0));
+          }
           setConfigLoading(false);
-
           if (retryIntervalRef.current) {
             clearInterval(retryIntervalRef.current);
             retryIntervalRef.current = null;
@@ -316,6 +322,22 @@ export default function DeviceSettings() {
             }
             const next = [...prev];
             next[msg.slot - 1] = Number(msg.ingredientId) || 0;
+            return next;
+          });
+          // New: update volume if present
+          if (typeof msg.volume === 'number') {
+            setVolumes(prev => {
+              const next = [...prev];
+              next[msg.slot - 1] = msg.volume;
+              return next;
+            });
+          }
+        }
+        // New: handle SET_VOLUME message
+        if (msg.action === 'SET_VOLUME' && typeof msg.slot === 'number' && typeof msg.volume === 'number') {
+          setVolumes(prev => {
+            const next = [...prev];
+            next[msg.slot - 1] = msg.volume;
             return next;
           });
         }
@@ -361,6 +383,10 @@ export default function DeviceSettings() {
       return next;
     });
     publishSlot({ action: 'SET_SLOT', slot: idx + 1, ingredientId: id });
+  };
+  const handleSetVolume = (idx: number, volume: number) => {
+    // Send a message to ESP to update the volume for this slot
+    publishSlot({ action: 'SET_VOLUME', slot: idx + 1, volume });
   };
 
   /*────────── Ingredient helpers ──────────*/
@@ -726,6 +752,37 @@ export default function DeviceSettings() {
                     <Text style={styles.clearSlotOverlayText}>X</Text>
                   </TouchableOpacity>
                 )}
+              </View>
+              {/* New: Volume display and set button */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 10 }}>
+                <Text style={{ color: '#CE975E', fontSize: 14, marginRight: 4 }}>
+                  {volumes[idx] ? `${volumes[idx].toFixed(2)} L` : '--'}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (!isConnected) return;
+                    Alert.prompt(
+                      'Set Volume',
+                      'Enter the volume in liters for this slot:',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Set',
+                          onPress: (val) => {
+                            const num = parseFloat(val || '');
+                            if (!isNaN(num) && num > 0) handleSetVolume(idx, num);
+                          },
+                        },
+                      ],
+                      'plain-text',
+                      volumes[idx] ? String(volumes[idx]) : ''
+                    );
+                  }}
+                  style={{ marginLeft: 2, padding: 4 }}
+                  disabled={!isConnected}
+                >
+                  <Ionicons name="water" size={18} color={isConnected ? '#CE975E' : '#4F4F4F'} />
+                </TouchableOpacity>
               </View>
             </View>
           ))}
