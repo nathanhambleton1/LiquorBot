@@ -343,7 +343,7 @@ const BookModal = ({
 }: BookModalProps) => {
   const [saving,  setSaving]  = useState(false);
   const [applied, setApplied] = useState(false);
-  const [ingsExpanded, setIngsExpanded] = useState(false);
+  const [ingsExpanded, setIngsExpanded] = useState(true); // ← default to true
   const scale = useRef(new Animated.Value(1)).current;
 
   if (!book) return null;
