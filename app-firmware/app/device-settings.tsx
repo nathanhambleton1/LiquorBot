@@ -100,6 +100,7 @@ export default function DeviceSettings() {
 
   /*────────── State ──────────*/
   const [infoModalVisible, setInfoModalVisible] = useState(false);
+  const [modalTab, setModalTab] = useState<'select' | 'volume'>('select'); // Added modalTab state
   const [selectedInfo, setSelectedInfo] = useState<{ title: string; message: string } | null>(null);
   const [isMaintenanceCollapsed, setIsMaintenanceCollapsed] = useState(false); // open by default
   const maintenanceRot = useState(new Animated.Value(1))[0]; // open by default
@@ -922,73 +923,114 @@ export default function DeviceSettings() {
           <TouchableOpacity style={styles.modalCloseButton} onPress={() => setModalVisible(false)}>
             <Ionicons name="chevron-down" size={30} color="#DFDCD9" />
           </TouchableOpacity>
-          <Text style={styles.modalHeaderText}>Select Ingredient</Text>
-
-          {/* category selector */}
-          <View style={styles.horizontalPickerContainer}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalPicker}
+          {/* Tabs at the top */}
+          <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 10, marginBottom: 10 }}>
+            <TouchableOpacity
+              style={{
+                borderBottomWidth: modalTab === 'select' ? 2 : 0,
+                borderBottomColor: '#CE975E',
+                marginHorizontal: 20,
+                paddingBottom: 6,
+              }}
+              onPress={() => setModalTab('select')}
             >
-              {categories.map(category => (
-                <TouchableOpacity
-                  key={category}
-                  onPress={() => setSelectedCategory(category)}
-                  style={styles.categoryButton}
+              <Text style={{ color: modalTab === 'select' ? '#CE975E' : '#DFDCD9', fontWeight: 'bold', fontSize: 16 }}>
+                Select Ingredient
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{
+                borderBottomWidth: modalTab === 'volume' ? 2 : 0,
+                borderBottomColor: '#CE975E',
+                marginHorizontal: 20,
+                paddingBottom: 6,
+              }}
+              onPress={() => setModalTab('volume')}
+            >
+              <Text style={{ color: modalTab === 'volume' ? '#CE975E' : '#DFDCD9', fontWeight: 'bold', fontSize: 16 }}>
+                Volume Info
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {/* Tab content */}
+          {modalTab === 'select' ? (
+            <>
+              <Text style={styles.modalHeaderText}>Select Ingredient</Text>
+              {/* category selector */}
+              <View style={styles.horizontalPickerContainer}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.horizontalPicker}
                 >
-                  <View style={styles.categoryButtonContent}>
-                    <Text
-                      style={[
-                        styles.categoryButtonText,
-                        selectedCategory === category && styles.selectedCategoryText,
-                      ]}
+                  {categories.map(category => (
+                    <TouchableOpacity
+                      key={category}
+                      onPress={() => setSelectedCategory(category)}
+                      style={styles.categoryButton}
                     >
-                      {category}
-                    </Text>
-                    {selectedCategory === category && <View style={styles.underline} />}
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* search */}
-          <View style={styles.searchBarContainer}>
-            <Ionicons name="search" size={20} color="#4F4F4F" style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchBar}
-              placeholder="Search Ingredients"
-              placeholderTextColor="#4F4F4F"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-          </View>
-
-          {/* ingredient list */}
-          {loading ? (
-            <Text style={{ color: '#DFDCD9', textAlign: 'center', margin: 10 }}>Loading ingredients...</Text>
-          ) : (
-            <FlatList
-              data={filteredIngredients}
-              keyExtractor={i => String(i.id)}
-              renderItem={({ item, index }) => (
-                <AnimatedIngredientItem
-                  item={item}
-                  index={index}
-                  onPress={() => {
-                    // Prevent duplicate ingredient assignment
-                    if (slots.includes(item.id)) {
-                      Alert.alert('Duplicate Ingredient', 'This ingredient is already in a slot.');
-                      return;
-                    }
-                    handleSetSlot(selectedSlot!, item.id);
-                    setModalVisible(false);
-                    setSearchQuery('');
-                  }}
+                      <View style={styles.categoryButtonContent}>
+                        <Text
+                          style={[
+                            styles.categoryButtonText,
+                            selectedCategory === category && styles.selectedCategoryText,
+                          ]}
+                        >
+                          {category}
+                        </Text>
+                        {selectedCategory === category && <View style={styles.underline} />}
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              {/* search */}
+              <View style={styles.searchBarContainer}>
+                <Ionicons name="search" size={20} color="#4F4F4F" style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchBar}
+                  placeholder="Search Ingredients"
+                  placeholderTextColor="#4F4F4F"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+              </View>
+              {/* ingredient list */}
+              {loading ? (
+                <Text style={{ color: '#DFDCD9', textAlign: 'center', margin: 10 }}>Loading ingredients...</Text>
+              ) : (
+                <FlatList
+                  data={filteredIngredients}
+                  keyExtractor={i => String(i.id)}
+                  renderItem={({ item, index }) => (
+                    <AnimatedIngredientItem
+                      item={item}
+                      index={index}
+                      onPress={() => {
+                        // Prevent duplicate ingredient assignment
+                        if (slots.includes(item.id)) {
+                          Alert.alert('Duplicate Ingredient', 'This ingredient is already in a slot.');
+                          return;
+                        }
+                        handleSetSlot(selectedSlot!, item.id);
+                        setModalVisible(false);
+                        setSearchQuery('');
+                        setModalTab('select'); // Reset tab on close
+                      }}
+                    />
+                  )}
                 />
               )}
-            />
+            </>
+          ) : (
+            // Volume Info tab content (placeholder)
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 40 }}>
+              <Ionicons name="water" size={48} color="#CE975E" style={{ marginBottom: 20 }} />
+              <Text style={{ color: '#CE975E', fontSize: 20, fontWeight: 'bold', marginBottom: 10 }}>Volume Info</Text>
+              <Text style={{ color: '#DFDCD9', fontSize: 16, textAlign: 'center', marginHorizontal: 20 }}>
+                This tab will show detailed volume information and history for the selected slot in the future.
+              </Text>
+            </View>
           )}
         </View>
       </Modal>
