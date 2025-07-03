@@ -28,6 +28,7 @@
     "@react-native-community/datetimepicker": "8.2.0",
     "@react-native-community/netinfo": "^11.4.1",
     "@react-native-community/push-notification-ios": "^1.11.0",
+    "@react-native-community/slider": "^4.5.7",
     "@react-native-picker/picker": "^2.11.0",
     "@react-navigation/bottom-tabs": "^6.5.15",
     "@react-navigation/native": "^6.1.12",
@@ -39,6 +40,7 @@
     "expo-clipboard": "~7.0.1",
     "expo-constants": "~17.0.8",
     "expo-dev-client": "~5.0.20",
+    "expo-file-system": "~18.0.12",
     "expo-font": "~13.0.4",
     "expo-haptics": "~14.0.1",
     "expo-image-manipulator": "~13.0.6",
@@ -66,8 +68,7 @@
     "react-native-vector-icons": "^10.2.0",
     "react-native-web": "~0.19.13",
     "react-native-webview": "13.12.5",
-    "react-native-wifi-reborn": "^4.13.5",
-    "expo-file-system": "~18.0.12"
+    "react-native-wifi-reborn": "^4.13.5"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
