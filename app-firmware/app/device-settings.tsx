@@ -101,10 +101,10 @@ export default function DeviceSettings() {
   /*────────── State ──────────*/
   const [infoModalVisible, setInfoModalVisible] = useState(false);
   const [selectedInfo, setSelectedInfo] = useState<{ title: string; message: string } | null>(null);
-  const [isMaintenanceCollapsed, setIsMaintenanceCollapsed] = useState(true);
-  const maintenanceRot = useState(new Animated.Value(0))[0];
-  const [isAdvancedCollapsed, setIsAdvancedCollapsed] = useState(true);
-  const advancedRot = useState(new Animated.Value(0))[0];
+  const [isMaintenanceCollapsed, setIsMaintenanceCollapsed] = useState(false); // open by default
+  const maintenanceRot = useState(new Animated.Value(1))[0]; // open by default
+  const [isAdvancedCollapsed, setIsAdvancedCollapsed] = useState(true); // open by default
+  const advancedRot = useState(new Animated.Value(1))[0]; // open by default
   const [slots, setSlots] = useState<number[]>(Array(15).fill(0));
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
