@@ -37,6 +37,7 @@ import { deleteEvent }        from '../src/graphql/mutations';
 import { getCurrentUser } from 'aws-amplify/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
+import IngredientSlotModal from './components/IngredientSlotModal';
 
 // Helper for strong, long vibration
 function strongVibration() {
@@ -100,7 +101,6 @@ export default function DeviceSettings() {
 
   /*────────── State ──────────*/
   const [infoModalVisible, setInfoModalVisible] = useState(false);
-  const [modalTab, setModalTab] = useState<'select' | 'volume'>('select'); // Added modalTab state
   const [selectedInfo, setSelectedInfo] = useState<{ title: string; message: string } | null>(null);
   const [isMaintenanceCollapsed, setIsMaintenanceCollapsed] = useState(false); // open by default
   const maintenanceRot = useState(new Animated.Value(1))[0]; // open by default
@@ -110,14 +110,12 @@ export default function DeviceSettings() {
   const [volumes, setVolumes] = useState<number[]>(Array(15).fill(0)); // New: volumes for each slot
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [loading, setLoading] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
   const [showConnectPrompt, setShowConnectPrompt] = useState(false);
   const [undoReady, setUndoReady] = useState(false);
   const [username, setUsername]   = useState('guest');  
+  const [modalInitialTab, setModalInitialTab] = useState<'select' | 'volume'>('select'); // New state for modal tab
   const suppressUndo = useRef(false); // Prevent undo from being tracked during undo
 
   /*────────── Active-event helper ──────────*/
@@ -271,6 +269,11 @@ export default function DeviceSettings() {
   }, []);
 
   // Custom filteredIngredients: sort by ID for Alcohol/Mixer/Sour/Sweet, alpha for All/Misc
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+
+  const [searchQuery, setSearchQuery] = useState(''); // Define searchQuery state
+  const [selectedCategory, setSelectedCategory] = useState('All'); // Define selectedCategory state
+
   const filteredIngredients = ingredients
     .filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))
     .filter(i => selectedCategory === 'All' || i.type === selectedCategory)
@@ -737,6 +740,7 @@ export default function DeviceSettings() {
                       return;
                     }
                     setSelectedSlot(idx);
+                    setModalInitialTab('select');
                     setModalVisible(true);
                   }}
                 >
@@ -762,22 +766,9 @@ export default function DeviceSettings() {
                 <TouchableOpacity
                   onPress={() => {
                     if (!isConnected) return;
-                    Alert.prompt(
-                      'Set Volume',
-                      'Enter the volume in liters for this slot:',
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Set',
-                          onPress: (val) => {
-                            const num = parseFloat(val || '');
-                            if (!isNaN(num) && num > 0) handleSetVolume(idx, num);
-                          },
-                        },
-                      ],
-                      'plain-text',
-                      volumes[idx] ? String(volumes[idx]) : ''
-                    );
+                    setSelectedSlot(idx);
+                    setModalInitialTab('volume');
+                    setModalVisible(true);
                   }}
                   style={{ marginLeft: 2, padding: 4 }}
                   disabled={!isConnected}
@@ -912,128 +903,19 @@ export default function DeviceSettings() {
       </Modal>
 
       {/*────────── Ingredient Selection Modal ──────────*/}
-      <Modal
+      <IngredientSlotModal
         visible={modalVisible}
-        animationType="slide"
-        transparent={false}
-        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <TouchableOpacity style={styles.modalCloseButton} onPress={() => setModalVisible(false)}>
-            <Ionicons name="chevron-down" size={30} color="#DFDCD9" />
-          </TouchableOpacity>
-          {/* Tabs at the top */}
-          <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 10, marginBottom: 10 }}>
-            <TouchableOpacity
-              style={{
-                borderBottomWidth: modalTab === 'select' ? 2 : 0,
-                borderBottomColor: '#CE975E',
-                marginHorizontal: 20,
-                paddingBottom: 6,
-              }}
-              onPress={() => setModalTab('select')}
-            >
-              <Text style={{ color: modalTab === 'select' ? '#CE975E' : '#DFDCD9', fontWeight: 'bold', fontSize: 16 }}>
-                Select Ingredient
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{
-                borderBottomWidth: modalTab === 'volume' ? 2 : 0,
-                borderBottomColor: '#CE975E',
-                marginHorizontal: 20,
-                paddingBottom: 6,
-              }}
-              onPress={() => setModalTab('volume')}
-            >
-              <Text style={{ color: modalTab === 'volume' ? '#CE975E' : '#DFDCD9', fontWeight: 'bold', fontSize: 16 }}>
-                Volume Info
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {/* Tab content */}
-          {modalTab === 'select' ? (
-            <>
-              <Text style={styles.modalHeaderText}>Select Ingredient</Text>
-              {/* category selector */}
-              <View style={styles.horizontalPickerContainer}>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.horizontalPicker}
-                >
-                  {categories.map(category => (
-                    <TouchableOpacity
-                      key={category}
-                      onPress={() => setSelectedCategory(category)}
-                      style={styles.categoryButton}
-                    >
-                      <View style={styles.categoryButtonContent}>
-                        <Text
-                          style={[
-                            styles.categoryButtonText,
-                            selectedCategory === category && styles.selectedCategoryText,
-                          ]}
-                        >
-                          {category}
-                        </Text>
-                        {selectedCategory === category && <View style={styles.underline} />}
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-              {/* search */}
-              <View style={styles.searchBarContainer}>
-                <Ionicons name="search" size={20} color="#4F4F4F" style={styles.searchIcon} />
-                <TextInput
-                  style={styles.searchBar}
-                  placeholder="Search Ingredients"
-                  placeholderTextColor="#4F4F4F"
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                />
-              </View>
-              {/* ingredient list */}
-              {loading ? (
-                <Text style={{ color: '#DFDCD9', textAlign: 'center', margin: 10 }}>Loading ingredients...</Text>
-              ) : (
-                <FlatList
-                  data={filteredIngredients}
-                  keyExtractor={i => String(i.id)}
-                  renderItem={({ item, index }) => (
-                    <AnimatedIngredientItem
-                      item={item}
-                      index={index}
-                      onPress={() => {
-                        // Prevent duplicate ingredient assignment
-                        if (slots.includes(item.id)) {
-                          Alert.alert('Duplicate Ingredient', 'This ingredient is already in a slot.');
-                          return;
-                        }
-                        handleSetSlot(selectedSlot!, item.id);
-                        setModalVisible(false);
-                        setSearchQuery('');
-                        setModalTab('select'); // Reset tab on close
-                      }}
-                    />
-                  )}
-                />
-              )}
-            </>
-          ) : (
-            // Volume Info tab content (placeholder)
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 40 }}>
-              <Ionicons name="water" size={48} color="#CE975E" style={{ marginBottom: 20 }} />
-              <Text style={{ color: '#CE975E', fontSize: 20, fontWeight: 'bold', marginBottom: 10 }}>Volume Info</Text>
-              <Text style={{ color: '#DFDCD9', fontSize: 16, textAlign: 'center', marginHorizontal: 20 }}>
-                This tab will show detailed volume information and history for the selected slot in the future.
-              </Text>
-            </View>
-          )}
-        </View>
-      </Modal>
+        onClose={() => { setModalVisible(false); setSelectedSlot(null); }}
+        ingredients={ingredients}
+        slots={slots}
+        selectedSlot={selectedSlot}
+        setSelectedSlot={setSelectedSlot}
+        handleSetSlot={handleSetSlot}
+        loading={loading}
+        categories={categories}
+        ingName={ingName}
+        initialTab={modalInitialTab} // Pass the initialTab prop
+      />
     </View>
   );
 }
