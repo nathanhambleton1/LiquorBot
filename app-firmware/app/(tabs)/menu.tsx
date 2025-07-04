@@ -49,6 +49,8 @@ import * as Haptics from 'expo-haptics';
 import { AuthModalContext } from '../components/AuthModalContext';
 import { BlurView } from 'expo-blur';
 
+import { ToastAndroid } from 'react-native';
+
 Amplify.configure(config);
 const client = generateClient();
 
@@ -578,6 +580,11 @@ function DrinkItem({
             // Haptic feedback: success jingle when pour is done
             if (Platform.OS === 'ios') {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              // Show iOS alert when drink is ready
+              Alert.alert('Drink Ready', 'Your drink is ready! Enjoy.');
+            } else if (Platform.OS === 'android') {
+              // Show Android toast when drink is ready
+              ToastAndroid.show('Your drink is ready! Enjoy.', ToastAndroid.LONG);
             }
             triggerStatus('success', 'Success! Your drink was poured – enjoy.');
             setCountdown(null); // clear countdown on success
