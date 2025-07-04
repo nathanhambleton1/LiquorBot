@@ -230,7 +230,9 @@ export default function DeviceSettings() {
       ]
     );
   };
-  const handleCalibrate = () => publishMaintenance({ action: 'CALIBRATE' });
+  const handleCalibrate = () => {
+    router.push('/calibration-setup'); // Navigate to calibration setup page
+  };
 
   /*────────── Wi-Fi DISCONNECT helper ──────────*/
   const confirmDisconnect = () => {
