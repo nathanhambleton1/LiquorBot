@@ -294,54 +294,35 @@ export default function DeviceSettings() {
   const retryIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const publishSlot = async (payload: any) => {
     try {
-      await pubsub.publish({ topics: [slotTopic], message: payload });
+      await pubsub.publish({
+        topics: [slotTopic],
+        message: payload, // Pass as object, not string
+      });
     } catch (err) {
-      console.error('Slot publish error:', err);
+      console.error('Failed to publish slot-config:', err);
     }
   };
   useEffect(() => {
     if (liquorbotId === '000') return; // Don't subscribe or fetch config if disconnected
     const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
       next: async (d) => {
-        const msg = (d as any).value ?? d;
+        let msg: any = d.value;
+        if (typeof msg === 'string') {
+          try { msg = JSON.parse(msg); } catch {}
+        }
+        // Handle slot config
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
-          setSlots(msg.slots.map((id: any) => Number(id) || 0));
-          // New: handle volumes if present
-          if (Array.isArray(msg.volumes)) {
-            setVolumes(msg.volumes.map((v: any) => Number(v) || 0));
-          } else {
-            setVolumes(Array(15).fill(0));
-          }
-          setConfigLoading(false);
-          if (retryIntervalRef.current) {
-            clearInterval(retryIntervalRef.current);
-            retryIntervalRef.current = null;
-          }
+          setSlots(msg.slots);
         }
-        if (msg.action === 'SET_SLOT' && typeof msg.slot === 'number') {
-          setSlots(prev => {
-            if (!suppressUndo.current) {
-              saveUndo(prev, username, liquorbotId);
-              setUndoReady(true);
-            }
-            const next = [...prev];
-            next[msg.slot - 1] = Number(msg.ingredientId) || 0;
-            return next;
-          });
-          // New: update volume if present
-          if (typeof msg.volume === 'number') {
-            setVolumes(prev => {
-              const next = [...prev];
-              next[msg.slot - 1] = msg.volume;
-              return next;
-            });
-          }
+        // Handle volume config
+        if (msg.action === 'CURRENT_VOLUMES' && Array.isArray(msg.volumes)) {
+          setVolumes(msg.volumes);
         }
-        // New: handle SET_VOLUME message
-        if (msg.action === 'SET_VOLUME' && typeof msg.slot === 'number' && typeof msg.volume === 'number') {
+        // Handle single volume update
+        if (msg.action === 'VOLUME_UPDATED' && typeof msg.slot === 'number' && typeof msg.volume === 'number') {
           setVolumes(prev => {
             const next = [...prev];
-            next[msg.slot - 1] = msg.volume;
+            next[msg.slot] = msg.volume;
             return next;
           });
         }
@@ -350,6 +331,8 @@ export default function DeviceSettings() {
     });
     if (isConnected && liquorbotId !== '000') {
       fetchCurrentConfig();
+      // Also request volumes
+      publishSlot({ action: 'GET_VOLUMES' });
       retryIntervalRef.current = setInterval(
         () => publishSlot({ action: 'GET_CONFIG' }),
         1500
@@ -368,6 +351,7 @@ export default function DeviceSettings() {
     if (!isConnected || liquorbotId === '000') return;
     setConfigLoading(true);
     publishSlot({ action: 'GET_CONFIG' });
+    publishSlot({ action: 'GET_VOLUMES' }); // Also fetch volumes
   };
   const handleClearAll = () =>                                       
   bumpIfDisconnected(async () => {
@@ -375,6 +359,7 @@ export default function DeviceSettings() {
     setUndoReady(true);            
     publishSlot({ action: 'CLEAR_CONFIG' });
     setSlots(Array(15).fill(0));
+    setVolumes(Array(15).fill(0)); // Clear volumes too
   });
   const handleSetSlot = (idx: number, id: number) => {
     setSlots(prev => {
@@ -389,8 +374,12 @@ export default function DeviceSettings() {
     publishSlot({ action: 'SET_SLOT', slot: idx + 1, ingredientId: id });
   };
   const handleSetVolume = (idx: number, volume: number) => {
-    // Send a message to ESP to update the volume for this slot
-    publishSlot({ action: 'SET_VOLUME', slot: idx + 1, volume });
+    setVolumes(prev => {
+      const next = [...prev];
+      next[idx] = volume;
+      return next;
+    });
+    publishSlot({ action: 'SET_VOLUME', slot: idx, volume }); // idx is 0-based for ESP
   };
 
   /*────────── Ingredient helpers ──────────*/
@@ -727,57 +716,68 @@ export default function DeviceSettings() {
             <Text style={styles.connectDeviceMessage}>Please connect a device to start configuring.</Text>
           )}
 
-          {slots.map((ingredientId, idx) => (
-            <View key={idx} style={styles.slotRow}>
-              <Text style={styles.slotLabel}>Slot {idx + 1}</Text>
-              <View style={styles.pickerButtonContainer}>
-                <TouchableOpacity
-                  style={[styles.pickerButton, !isConnected && styles.pickerButtonDisconnected]}
-                  onPress={() => {
-                    if (!isConnected) {
-                      setShowConnectPrompt(true);
-                      setTimeout(() => setShowConnectPrompt(false), 2000);
-                      return;
-                    }
-                    setSelectedSlot(idx);
-                    setModalInitialTab('select');
-                    setModalVisible(true);
-                  }}
-                >
-                  <Text style={[styles.pickerButtonText, ingName(ingredientId) && styles.selectedPickerButtonText]}>
-                    {ingName(ingredientId) || 'Select Ingredient'}
-                  </Text>
-                </TouchableOpacity>
-                {ingName(ingredientId) && (
+          {slots.map((ingredientId, idx) => {
+            // Determine color based on volume
+            let volumeBg = '#232323'; // default gray
+            let volumeTextColor = '#CE975E'; // default gold text
+            if (ingredientId && typeof volumes[idx] === 'number' && !configLoading) {
+              if (volumes[idx] >= 1.5) {
+                volumeBg = '#63d44a'; // green
+                volumeTextColor = '#141414';
+              } else if (volumes[idx] >= 0.5) {
+                volumeBg = '#CE975E'; // yellow/orange
+                volumeTextColor = '#141414';
+              } else if (volumes[idx] > 0) {
+                volumeBg = '#d44a4a'; // red
+                volumeTextColor = '#141414';
+              }
+            }
+            return (
+              <View key={idx} style={styles.slotRow}>
+                <Text style={styles.slotLabel}>Slot {idx + 1}</Text>
+                <View style={styles.pickerButtonContainer}>
                   <TouchableOpacity
-                    style={[styles.clearSlotOverlay, !isConnected && styles.clearSlotOverlayDisabled]}
-                    onPress={() => isConnected && handleSetSlot(idx, 0)}
-                    disabled={!isConnected}
+                    style={[styles.pickerButton, !isConnected && styles.pickerButtonDisconnected]}
+                    onPress={() => {
+                      if (!isConnected) {
+                        setShowConnectPrompt(true);
+                        setTimeout(() => setShowConnectPrompt(false), 2000);
+                        return;
+                      }
+                      setSelectedSlot(idx);
+                      setModalInitialTab('select');
+                      setModalVisible(true);
+                    }}
                   >
-                    <Text style={styles.clearSlotOverlayText}>X</Text>
+                    <Text style={[styles.pickerButtonText, ingName(ingredientId) && styles.selectedPickerButtonText]}>
+                      {ingName(ingredientId) || 'Select Ingredient'}
+                    </Text>
                   </TouchableOpacity>
-                )}
-              </View>
-              {/* New: Volume display and set button */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 10 }}>
-                <Text style={{ color: '#CE975E', fontSize: 14, marginRight: 4 }}>
-                  {volumes[idx] ? `${volumes[idx].toFixed(2)} L` : '--'}
-                </Text>
+                  {ingName(ingredientId) && (
+                    <TouchableOpacity
+                      style={[styles.clearSlotOverlay, !isConnected && styles.clearSlotOverlayDisabled]}
+                      onPress={() => isConnected && handleSetSlot(idx, 0)}
+                      disabled={!isConnected}
+                    >
+                      <Text style={styles.clearSlotOverlayText}>X</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {/* Updated: Volume display is now a button with dynamic color */}
                 <TouchableOpacity
+                  style={[styles.volumeButton, { backgroundColor: volumeBg }]}
                   onPress={() => {
-                    if (!isConnected) return;
                     setSelectedSlot(idx);
                     setModalInitialTab('volume');
                     setModalVisible(true);
                   }}
-                  style={{ marginLeft: 2, padding: 4 }}
-                  disabled={!isConnected}
+                  activeOpacity={0.7}
                 >
-                  <Ionicons name="water" size={18} color={isConnected ? '#CE975E' : '#4F4F4F'} />
+                  <Text style={[styles.volumeButtonText, { color: volumeTextColor }]}>{volumes[idx]?.toFixed(1)} L</Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         {/* ─────────────────── ADVANCED SETTINGS / DANGER ZONE ─────────────────── */}
@@ -911,6 +911,8 @@ export default function DeviceSettings() {
         selectedSlot={selectedSlot}
         setSelectedSlot={setSelectedSlot}
         handleSetSlot={handleSetSlot}
+        handleSetVolume={handleSetVolume} // NEW PROP
+        volumes={volumes} // NEW PROP
         loading={loading}
         categories={categories}
         ingName={ingName}
@@ -1105,5 +1107,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 10,
     borderRadius: 10,
+  },
+  volumeButton: {
+    backgroundColor: '#232323', // changed to a gray color
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#CE975E',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    marginLeft: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 70,
+    // Match height and vertical padding to pickerButton
+    minHeight: 44,
+    height: 44,
+    // Remove margin if needed to stick to ingredient box
+    marginTop: 0,
+    marginBottom: 0,
+  },
+  volumeButtonText: {
+    color: '#CE975E',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });

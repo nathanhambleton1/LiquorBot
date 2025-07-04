@@ -33,6 +33,8 @@ interface IngredientSlotModalProps {
   selectedSlot: number | null;
   setSelectedSlot: (idx: number | null) => void;
   handleSetSlot: (idx: number, id: number) => void;
+  handleSetVolume: (idx: number, volume: number) => void; // NEW PROP
+  volumes: number[]; // NEW PROP
   loading: boolean;
   categories: string[];
   ingName: (id: number | string) => string;
@@ -86,6 +88,8 @@ export default function IngredientSlotModal({
   selectedSlot,
   setSelectedSlot,
   handleSetSlot,
+  handleSetVolume, // NEW PROP
+  volumes, // NEW PROP
   loading,
   categories,
   ingName,
@@ -95,7 +99,7 @@ export default function IngredientSlotModal({
   const [modalTab, setModalTab] = useState<'select' | 'volume'>(initialTab);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [volumeOperation, setVolumeOperation] = useState<'new'|'add'|'subtract'>('new');
+  const [volumeOperation, setVolumeOperation] = useState<'set'|'add'|'subtract'>('set');
   const [volumeValue, setVolumeValue] = useState<number>(0);
   const [selectedUnit, setSelectedUnit] = useState<'L' | 'mL' | 'oz'>('L');
   const [selectedQuick, setSelectedQuick] = useState<null | 'large' | 'medium' | 'small'>(null);
@@ -191,6 +195,14 @@ export default function IngredientSlotModal({
     else if (Math.abs(volumeValue - quickPresets.small) < 0.001) setSelectedQuick('small');
     else setSelectedQuick(null);
   }, [volumeValue]);
+
+  useEffect(() => {
+    if (selectedSlot !== null && modalTab === 'volume') {
+      // Set initial volume value to current slot's volume
+      setVolumeValue(volumes[selectedSlot] || 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSlot, modalTab]);
 
   return (
     <Modal
@@ -328,15 +340,18 @@ export default function IngredientSlotModal({
               <View style={modalStyles.volumeContainer}>
                 {/* Operation buttons */}
                 <View style={modalStyles.volumeOpsRow}>
-                  <TouchableOpacity onPress={() => setVolumeOperation('new')} style={[modalStyles.volumeOpButton, volumeOperation==='new' && modalStyles.volumeOpButtonActive]}>
-                    <Text style={[modalStyles.volumeOpLabel, volumeOperation==='new' && modalStyles.volumeOpLabelActive]}>New</Text>
+                  <TouchableOpacity onPress={() => setVolumeOperation('set')} style={[modalStyles.volumeOpButton, volumeOperation==='set' && modalStyles.volumeOpButtonActive]}>
+                    <Ionicons name="water-outline" size={28} color={volumeOperation==='set' ? '#CE975E' : '#888'} style={{ marginBottom: 4 }} />
+                    <Text style={[modalStyles.volumeOpLabel, volumeOperation==='set' && modalStyles.volumeOpLabelActive]}>Set</Text>
                     <Text style={modalStyles.volumeOpSubtext}>From empty container</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => setVolumeOperation('add')} style={[modalStyles.volumeOpButton, volumeOperation==='add' && modalStyles.volumeOpButtonActive]}>
+                    <Ionicons name="add-circle-outline" size={28} color={volumeOperation==='add' ? '#63d44a' : '#888'} style={{ marginBottom: 4 }} />
                     <Text style={[modalStyles.volumeOpLabel, volumeOperation==='add' && modalStyles.volumeOpLabelActive]}>Add</Text>
                     <Text style={modalStyles.volumeOpSubtext}>Add to container</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => setVolumeOperation('subtract')} style={[modalStyles.volumeOpButton, volumeOperation==='subtract' && modalStyles.volumeOpButtonActive]}>
+                    <Ionicons name="remove-circle-outline" size={28} color={volumeOperation==='subtract' ? '#d44a4a' : '#888'} style={{ marginBottom: 4 }} />
                     <Text style={[modalStyles.volumeOpLabel, volumeOperation==='subtract' && modalStyles.volumeOpLabelActive]}>Subtract</Text>
                     <Text style={modalStyles.volumeOpSubtext}>Remove from container</Text>
                   </TouchableOpacity>
@@ -372,7 +387,21 @@ export default function IngredientSlotModal({
                 
                 {/* Item placeholders replaced with slider */}
                 <View style={modalStyles.sliderContainer}>
-                  <Text style={{ color: '#DFDCD9', fontSize: 14, marginBottom: 10, textAlign: 'center' }}>Set Volume</Text>
+                  <Text style={{ color: '#DFDCD9', fontSize: 14, marginBottom: 10, textAlign: 'center' }}>Set Container Volume</Text>
+                  {/* Show operation breakdown for add/subtract */}
+                  {(volumeOperation === 'add' || volumeOperation === 'subtract') && selectedSlot !== null && (
+                    <View style={{ marginBottom: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
+                      <Text style={{ color: '#888', fontSize: 13, marginRight: 8 }}>
+                        Starting: <Text style={{
+                          color:
+                            volumeOperation === 'add' ? '#63d44a' :
+                            volumeOperation === 'subtract' ? '#d44a4a' :
+                            '#CE975E',
+                          fontWeight: 'bold',
+                        }}>{volumes[selectedSlot].toFixed(2)} L</Text>
+                      </Text>
+                    </View>
+                  )}
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
                     <TouchableOpacity onPress={() => setSliderValue(getSliderValue() - getStep())} style={{ padding: 6 }}>
                       <Ionicons name="remove-circle-outline" size={24} color="#4F4F4F" />
@@ -392,21 +421,52 @@ export default function IngredientSlotModal({
                       <Ionicons name="add-circle-outline" size={24} color="#4F4F4F" />
                     </TouchableOpacity>
                   </View>
+                  {/* Unit selection row */}
                   <View style={{ flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'flex-end', marginTop: 0 }}>
                     <TouchableOpacity onPress={() => setSelectedUnit('mL')}>
-                      <Text style={{ color: selectedUnit === 'mL' ? '#CE975E' : '#888', fontSize: 13, fontWeight: selectedUnit === 'mL' ? 'bold' : 'normal', textAlign: 'center' }}>{(volumeValue*1000).toFixed(0)} mL</Text>
+                      <Text style={{ 
+                        color: selectedUnit === 'mL' 
+                          ? (volumeOperation === 'add' ? '#63d44a' : volumeOperation === 'subtract' ? '#d44a4a' : '#CE975E') 
+                          : '#888', 
+                        fontSize: 13, 
+                        fontWeight: selectedUnit === 'mL' ? 'bold' : 'normal', 
+                        textAlign: 'center' 
+                      }}>{(volumeValue*1000).toFixed(0)} mL</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => setSelectedUnit('L')}>
-                      <Text style={{ color: selectedUnit === 'L' ? '#CE975E' : '#DFDCD9', fontSize: 20, fontWeight: 'bold', textAlign: 'center' }}>{volumeValue.toFixed(2)} L</Text>
+                      <Text style={{ 
+                        color: selectedUnit === 'L' 
+                          ? (volumeOperation === 'add' ? '#63d44a' : volumeOperation === 'subtract' ? '#d44a4a' : '#CE975E') 
+                          : '#DFDCD9', 
+                        fontSize: 20, 
+                        fontWeight: 'bold', 
+                        textAlign: 'center' 
+                      }}>{volumeValue.toFixed(2)} L</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => setSelectedUnit('oz')}>
-                      <Text style={{ color: selectedUnit === 'oz' ? '#CE975E' : '#888', fontSize: 13, fontWeight: selectedUnit === 'oz' ? 'bold' : 'normal', textAlign: 'center' }}>{(volumeValue*33.814).toFixed(1)} oz</Text>
+                      <Text style={{ 
+                        color: selectedUnit === 'oz' 
+                          ? (volumeOperation === 'add' ? '#63d44a' : volumeOperation === 'subtract' ? '#d44a4a' : '#CE975E') 
+                          : '#888', 
+                        fontSize: 13, 
+                        fontWeight: selectedUnit === 'oz' ? 'bold' : 'normal', 
+                        textAlign: 'center' 
+                      }}>{(volumeValue*33.814).toFixed(1)} oz</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
                 
-                {/* Save button */}
-                <TouchableOpacity style={modalStyles.saveButton} onPress={() => {/* implement save */}}>
+                {/* Save button logic update */}
+                <TouchableOpacity style={modalStyles.saveButton} onPress={() => {
+                  if (selectedSlot !== null) {
+                    let newVolume = volumeValue;
+                    if (volumeOperation === 'add') newVolume = volumes[selectedSlot] + (volumeValue - volumes[selectedSlot]);
+                    else if (volumeOperation === 'subtract') newVolume = Math.max(0, volumes[selectedSlot] - (volumes[selectedSlot] - volumeValue));
+                    // For 'set', just use volumeValue
+                    handleSetVolume(selectedSlot, newVolume);
+                  }
+                  onClose();
+                }}>
                   <Text style={modalStyles.saveButtonText}>Save</Text>
                 </TouchableOpacity>
               </View>

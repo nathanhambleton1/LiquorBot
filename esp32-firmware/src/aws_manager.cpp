@@ -19,6 +19,7 @@ static Preferences prefs;
 
 /* Up to 15 slots (adjust if needed) */
 static uint16_t slotConfig[15] = {0};
+static float    slotVolumes[15] = {0}; // NEW: volume per slot
 
 /* Wi‑Fi + MQTT objects */
 WiFiClientSecure secureClient;
@@ -28,19 +29,28 @@ PubSubClient     mqttClient(secureClient);
 static volatile bool   pourResultPending = false;
 static String          pourResultMessage;
 
-void notifyPourResult(bool success, const char *error /*=nullptr*/) {
-    StaticJsonDocument<128> doc;
-    doc["status"] = success ? "success" : "fail";
-    if (!success && error) doc["error"] = error;
-    serializeJson(doc, pourResultMessage);
-    pourResultPending = true;
-    if (success) {
-        setState(State::IDLE);
-        Serial.println("→ State set to IDLE after pour");
-    } else {
-        setState(State::ERROR);
-        Serial.printf("→ State set to ERROR after pour fail: %s\n", error ? error : "unknown");
-    }
+// ---------- volume config hand-off (non-blocking) ----------
+static volatile bool   volumeConfigPending = false;
+static String          volumeConfigMessage;
+static volatile bool   volumeUpdatePending = false;
+static String          volumeUpdateMessage;
+
+void sendVolumeConfig() {
+    StaticJsonDocument<256> doc;
+    doc["action"] = "CURRENT_VOLUMES";
+    JsonArray arr = doc.createNestedArray("volumes");
+    for (int i = 0; i < 15; ++i) arr.add(slotVolumes[i]);
+    serializeJson(doc, volumeConfigMessage);
+    volumeConfigPending = true;
+}
+
+void notifyVolumeUpdate(uint8_t slot, float volume) {
+    StaticJsonDocument<64> doc;
+    doc["action"] = "VOLUME_UPDATED";
+    doc["slot"] = slot;
+    doc["volume"] = volume;
+    serializeJson(doc, volumeUpdateMessage);
+    volumeUpdatePending = true;
 }
 
 /* ---------- forward decls ---------- */
@@ -92,6 +102,15 @@ void processAWSMessages() {
     if (pourResultPending) {
         sendData(AWS_RECEIVE_TOPIC, pourResultMessage);
         pourResultPending = false;
+    }
+    /* ---------- deferred volume-config publish ---------- */
+    if (volumeConfigPending) {
+        sendData(SLOT_CONFIG_TOPIC, volumeConfigMessage);
+        volumeConfigPending = false;
+    }
+    if (volumeUpdatePending) {
+        sendData(SLOT_CONFIG_TOPIC, volumeUpdateMessage);
+        volumeUpdatePending = false;
     }
 }
 
@@ -153,8 +172,29 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
         return; // main loop continues running
     }
 
-    /* 3 · Slot‑config JSON */
+    /* 3 · Slot‑config JSON or volume messages */
     if (topicStr == SLOT_CONFIG_TOPIC) {
+        // Try to parse as JSON
+        StaticJsonDocument<128> doc;
+        if (deserializeJson(doc, message) == DeserializationError::Ok) {
+            // Check for volume get/set
+            const char *action = doc["action"];
+            if (action && strcmp(action, "GET_VOLUMES") == 0) {
+                sendVolumeConfig();
+                return;
+            }
+            if (action && strcmp(action, "SET_VOLUME") == 0) {
+                int slot = doc["slot"];
+                float vol = doc["volume"];
+                if (slot >= 0 && slot < 15) {
+                    slotVolumes[slot] = vol;
+                    saveSlotConfigToNVS();
+                    notifyVolumeUpdate(slot, vol);
+                }
+                return;
+            }
+        }
+        // Otherwise, treat as slot config
         handleSlotConfigMessage(message);
         return;
     }
@@ -264,8 +304,11 @@ static void loadSlotConfigFromNVS() {
         char key[8];
         snprintf(key, sizeof(key), "slot%d", i);
         slotConfig[i] = prefs.getUInt(key, 0);
+        // Load volumes
+        snprintf(key, sizeof(key), "vol%d", i);
+        slotVolumes[i] = prefs.getFloat(key, 0);
     }
-    Serial.println("Slot config loaded from NVS.");
+    Serial.println("Slot config and volumes loaded from NVS.");
 }
 
 static void saveSlotConfigToNVS() {
@@ -273,6 +316,9 @@ static void saveSlotConfigToNVS() {
         char key[8];
         snprintf(key, sizeof(key), "slot%d", i);
         prefs.putUInt(key, slotConfig[i]);
+        // Save volumes
+        snprintf(key, sizeof(key), "vol%d", i);
+        prefs.putFloat(key, slotVolumes[i]);
     }
-    Serial.println("Slot config saved to NVS.");
+    Serial.println("Slot config and volumes saved to NVS.");
 }
