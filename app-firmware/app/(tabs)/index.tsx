@@ -389,6 +389,34 @@ export default function Index() {
     } finally { setLinkLoading(false); }
   };
 
+  // --- Listen for sessionLoaded changes and reload events if needed ---
+  useEffect(() => {
+    let lastSessionLoaded = false;
+    let interval: NodeJS.Timeout | null = null;
+    let mounted = true;
+    const checkSessionLoaded = async () => {
+      const flag = await AsyncStorage.getItem('sessionLoaded');
+      const isLoaded = flag === 'true';
+      if (isLoaded && !lastSessionLoaded) {
+        setSessionLoaded(true);
+        // Reload events when sessionLoaded transitions to true
+        if (currentUser && liquorbotId) {
+          setEventsLoading(true);
+          await loadCachedEvents();
+          await fetchAndCacheEvents();
+        }
+      }
+      lastSessionLoaded = isLoaded;
+    };
+    interval = setInterval(() => {
+      if (mounted) checkSessionLoaded();
+    }, 200);
+    return () => {
+      mounted = false;
+      if (interval) clearInterval(interval);
+    };
+  }, [currentUser, liquorbotId, loadCachedEvents, fetchAndCacheEvents]);
+
   /* ───────────────────────── UI ───────────────────────── */
   return (
     <ImageBackground
