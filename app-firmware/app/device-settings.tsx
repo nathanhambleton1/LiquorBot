@@ -271,6 +271,11 @@ export default function DeviceSettings() {
     })();
   }, []);
 
+  useEffect(() => {
+    setSlots(s => s.slice(0, slotCount));
+    setVolumes(v => v.slice(0, slotCount));
+  }, [slotCount]);
+
   // Custom filteredIngredients: sort by ID for Alcohol/Mixer/Sour/Sweet, alpha for All/Misc
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
 
@@ -294,7 +299,6 @@ export default function DeviceSettings() {
 
   /*──────────────── Slot-config MQTT subscribe/publish ────────────────*/
   const slotTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
-  const configTopic = `liquorbot/liquorbot120001/slot-config`; // NEW: config topic
   const retryIntervalRef = useRef<NodeJS.Timeout | null>(null); 
 
   const publishSlot = (m: any) => 
@@ -306,8 +310,16 @@ export default function DeviceSettings() {
     setConfigLoading(true);
     
     const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
-      next: ({ value }) => {
-        const msg = typeof value === 'string' ? JSON.parse(value) : value;
+      next: (event) => {
+      /*  Amplify v5 → event = { value, … }  
+          Amplify v6 → event = payload itself                                      */
+      const raw = (event && typeof event === 'object' && 'value' in event)
+        ? (event as any).value                 // v5
+        : event;                              // v6
+
+      let msg: any;
+      try { msg = typeof raw === 'string' ? JSON.parse(raw) : raw; }
+      catch { return; }
         if (!msg) return;
 
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
@@ -339,45 +351,6 @@ export default function DeviceSettings() {
       error: err => console.error('slot-config sub error:', err),
     });
 
-    // NEW: subscribe to config topic and update slots/volumes if message received
-    const configSub = pubsub.subscribe({ topics: [configTopic] }).subscribe({
-      next: (msg) => {
-        console.log('[CONFIG TOPIC RAW]', msg);
-        if (msg && typeof msg === 'object' && 'value' in msg) {
-          const val = msg.value;
-          console.log('[CONFIG TOPIC value]', val);
-          let parsed;
-          try {
-            parsed = typeof val === 'string' ? JSON.parse(val) : val;
-          } catch (e) {
-            parsed = null;
-          }
-          // Helper to pad arrays to slotCount
-          function padToSlotCount(arr: number[]) {
-            if (arr.length >= slotCount) return arr.slice(0, slotCount);
-            return arr.concat(Array(slotCount - arr.length).fill(0));
-          }
-          if (parsed && parsed.action === 'CURRENT_CONFIG' && Array.isArray(parsed.slots)) {
-            setSlots(padToSlotCount(parsed.slots));
-            setConfigLoading(false);
-            if (retryIntervalRef.current) {
-              clearInterval(retryIntervalRef.current);
-              retryIntervalRef.current = null;
-            }
-          }
-          if (parsed && parsed.action === 'CURRENT_VOLUMES' && Array.isArray(parsed.volumes)) {
-            setVolumes(padToSlotCount(parsed.volumes));
-            setConfigLoading(false);
-            if (retryIntervalRef.current) {
-              clearInterval(retryIntervalRef.current);
-              retryIntervalRef.current = null;
-            }
-          }
-        }
-      },
-      error: err => console.error('config topic sub error:', err),
-    });
-
     const fetchConfig = () => {
       publishSlot({ action: 'GET_CONFIG' });
       publishSlot({ action: 'GET_VOLUMES' });
@@ -388,7 +361,6 @@ export default function DeviceSettings() {
 
     return () => {
       sub.unsubscribe();
-      configSub.unsubscribe(); // NEW: cleanup config topic sub
       if (retryIntervalRef.current) {
         clearInterval(retryIntervalRef.current);
         retryIntervalRef.current = null;
