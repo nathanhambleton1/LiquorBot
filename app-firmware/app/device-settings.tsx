@@ -309,6 +309,7 @@ export default function DeviceSettings() {
   useEffect(() => {
     if (liquorbotId === '000') return;
     let gotVolumes = false;
+    let gotConfig = false;
     const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
       next: async (d) => {
         let msg: any = d.value;
@@ -318,6 +319,7 @@ export default function DeviceSettings() {
         // Handle slot config
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
           setSlots(msg.slots.slice(0, slotCount));
+          gotConfig = true;
         }
         // Handle volume config
         if (msg.action === 'CURRENT_VOLUMES' && Array.isArray(msg.volumes)) {
@@ -327,6 +329,10 @@ export default function DeviceSettings() {
             clearInterval(retryVolumesIntervalRef.current);
             retryVolumesIntervalRef.current = null;
           }
+        }
+        // If both config and volumes are received, hide loading spinner
+        if (gotConfig && gotVolumes) {
+          setConfigLoading(false);
         }
         // Handle single volume update
         if (msg.action === 'VOLUME_UPDATED' && typeof msg.slot === 'number' && typeof msg.volume === 'number') {
