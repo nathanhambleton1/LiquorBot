@@ -324,6 +324,7 @@ export default function DeviceSettings() {
     const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
       next: ({ value }) => {
         const msg = typeof value === 'string' ? JSON.parse(value as string) : value;
+        if (!msg) return; // Prevents TypeError if msg is undefined/null
 
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
           setSlots(msg.slots.slice(0, slotCount));
