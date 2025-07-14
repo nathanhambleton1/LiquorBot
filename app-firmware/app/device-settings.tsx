@@ -112,7 +112,7 @@ export default function DeviceSettings() {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
-  const [configLoading, setConfigLoading] = useState(false);
+  const [configLoading, setConfigLoading] = useState(true);
   const [showConnectPrompt, setShowConnectPrompt] = useState(false);
   const [undoReady, setUndoReady] = useState(false);
   const [username, setUsername]   = useState('guest');  
@@ -305,21 +305,20 @@ export default function DeviceSettings() {
     pubsub.publish({ topics: [slotTopic], message: m }).catch(console.error);
 
   useEffect(() => {
-    if (!isConnected || liquorbotId === '000') return;
+    if (!isConnected || liquorbotId === '000' || slotCount === 0) return;
 
-    setConfigLoading(true);
+    pubsub.publish({ topics:[slotTopic], message:{ action:'GET_VOLUMES' } })
+      .catch(console.error);
     
     const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
-      next: (event) => {
-      /*  Amplify v5 → event = { value, … }  
-          Amplify v6 → event = payload itself                                      */
-      const raw = (event && typeof event === 'object' && 'value' in event)
-        ? (event as any).value                 // v5
-        : event;                              // v6
-
-      let msg: any;
-      try { msg = typeof raw === 'string' ? JSON.parse(raw) : raw; }
-      catch { return; }
+      next: ({ value, ...rest }) => {
+        const text = value ?? rest;                     // v5 or v6
+        let msg: any;
+        try {
+          msg = typeof text === 'string' ? JSON.parse(text) : text;
+        } catch {
+          return;
+        }
         if (!msg) return;
 
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
@@ -335,6 +334,7 @@ export default function DeviceSettings() {
         if (msg.action === 'CURRENT_VOLUMES' && Array.isArray(msg.volumes)) {
           // Only show volumes up to the device's slot count
           setVolumes(msg.volumes.slice(0, slotCount));
+          setConfigLoading(false);
         }
 
         if (msg.action === 'VOLUME_UPDATED' && 
