@@ -292,66 +292,47 @@ export default function DeviceSettings() {
       return a.name.localeCompare(b.name);
     });
 
-  /*────────── Slot-config MQTT subscribe/publish ──────────*/
+  /*──────────────── Slot-config MQTT subscribe/publish ────────────────*/
   const slotTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
-  const retryConfigIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const retryVolumesIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const publishSlot = async (payload: any) => {
-    try {
-      await pubsub.publish({
-        topics: [slotTopic],
-        message: payload, // Pass as object, not string
-      });
-    } catch (err) {
-      console.error('Failed to publish slot-config:', err);
-    }
-  };
-  
-  const gotConfigRef  = useRef(false);
-  const gotVolumesRef = useRef(false);
-  const stopLoading   = () => {
+
+  const retryCfg = useRef<NodeJS.Timeout | null>(null);
+  const retryVol = useRef<NodeJS.Timeout | null>(null);
+
+  const publishSlot = (m: any) =>
+    pubsub.publish({ topics: [slotTopic], message: m }).catch(console.error);
+
+  /* —— NEW: reactive flags —— */
+  const [gotCfg, setGotCfg]   = useState(false);
+  const [gotVol, setGotVol]   = useState(false);
+
+  const stopPolling = () => {
     setConfigLoading(false);
-    clearInterval(retryConfigIntervalRef.current!);
-    clearInterval(retryVolumesIntervalRef.current!);
-    retryConfigIntervalRef.current  = null;
-    retryVolumesIntervalRef.current = null;
+    if (retryCfg.current) clearInterval(retryCfg.current);
+    if (retryVol.current) clearInterval(retryVol.current);
+    retryCfg.current = retryVol.current = null;
   };
 
-  // ── inside the big useEffect that (re)subscribes to slot-config ──
   useEffect(() => {
-    if (liquorbotId === '000') return;
+    if (!isConnected || liquorbotId === '000') return;
 
-    // reset flags every time we connect or change device/slotCount
-    gotConfigRef.current  = false;
-    gotVolumesRef.current = false;
-    setConfigLoading(true);        // show spinner while we wait
+    // ① reset flags + show spinner
+    setGotCfg(false);
+    setGotVol(false);
+    setConfigLoading(true);
 
-    // Log the topic being subscribed to
-    console.log('[MQTT] Subscribing to topic:', slotTopic);
-
+    // ② subscribe
     const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
       next: ({ value }) => {
-        let msg = typeof value === 'string' ? JSON.parse(value) : value;
-        if (!msg || typeof msg !== 'object') return; // Guard against undefined/null
-
-        // Log all incoming slot-config messages for debugging
-        if (msg.action === 'CURRENT_CONFIG') {
-          console.log('[MQTT] Received CURRENT_CONFIG:', msg);
-        }
-        if (msg.action === 'CURRENT_VOLUMES') {
-          console.log('[MQTT] Received CURRENT_VOLUMES:', msg);
-        }
+        const msg = typeof value === 'string' ? JSON.parse(value as string) : value;
 
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
           setSlots(msg.slots.slice(0, slotCount));
-          gotConfigRef.current = true;
-          if (gotVolumesRef.current) stopLoading();
+          setGotCfg(true);
         }
 
         if (msg.action === 'CURRENT_VOLUMES' && Array.isArray(msg.volumes)) {
           setVolumes(msg.volumes.slice(0, slotCount));
-          gotVolumesRef.current = true;
-          if (gotConfigRef.current)  stopLoading();
+          setGotVol(true);
         }
 
         if (
@@ -360,45 +341,34 @@ export default function DeviceSettings() {
           typeof msg.volume === 'number' &&
           msg.slot < slotCount
         ) {
-          setVolumes(v => {
-            const next = [...v];
+          setVolumes(prev => {
+            const next = [...prev];
             next[msg.slot] = msg.volume;
             return next;
           });
         }
       },
-      error: (err) => console.error('slot-config sub error:', err),
+      error: err => console.error('slot-config sub error:', err),
     });
 
-    // kick-off GET_CONFIG / GET_VOLUMES pollers
-    if (isConnected) {
-      publishSlot({ action: 'GET_CONFIG'  });
-      publishSlot({ action: 'GET_VOLUMES' });
-      retryConfigIntervalRef.current  = setInterval(() => publishSlot({ action: 'GET_CONFIG'  }), 1500);
-      retryVolumesIntervalRef.current = setInterval(() => publishSlot({ action: 'GET_VOLUMES' }), 1500);
-    }
+    // ③ kick-off polling
+    publishSlot({ action: 'GET_CONFIG' });
+    publishSlot({ action: 'GET_VOLUMES' });
+    retryCfg.current = setInterval(() => publishSlot({ action: 'GET_CONFIG' }), 1500);
+    retryVol.current = setInterval(() => publishSlot({ action: 'GET_VOLUMES' }), 1500);
 
+    // ④ cleanup
     return () => {
       sub.unsubscribe();
-      clearInterval(retryConfigIntervalRef.current!);
-      clearInterval(retryVolumesIntervalRef.current!);
+      if (retryCfg.current) clearInterval(retryCfg.current);
+      if (retryVol.current) clearInterval(retryVol.current);
     };
   }, [isConnected, liquorbotId, slotCount]);
 
-  // Stop polling and hide spinner as soon as both are received
+  /* —— hide overlay as soon as both flags go true —— */
   useEffect(() => {
-    if (gotConfigRef.current && gotVolumesRef.current) {
-      setConfigLoading(false);
-      if (retryConfigIntervalRef.current) {
-        clearInterval(retryConfigIntervalRef.current);
-        retryConfigIntervalRef.current = null;
-      }
-      if (retryVolumesIntervalRef.current) {
-        clearInterval(retryVolumesIntervalRef.current);
-        retryVolumesIntervalRef.current = null;
-      }
-    }
-  }, [gotConfigRef.current, gotVolumesRef.current]);
+    if (gotCfg && gotVol) stopPolling();
+  }, [gotCfg, gotVol]);
 
   const fetchCurrentConfig = () => {
     if (!isConnected || liquorbotId === '000') return;
