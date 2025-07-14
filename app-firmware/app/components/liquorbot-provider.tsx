@@ -34,6 +34,7 @@ interface LiquorBotContextValue {
   isConnected        : boolean;
   slots              : number[];
   liquorbotId        : string;
+  slotCount          : number; // NEW: number of slots for current device
   /* actions */
   setLiquorbotId     : (id: string) => void;
   forceDisconnect    : () => void;
@@ -48,6 +49,7 @@ interface LiquorBotContextValue {
   restorePreviousId  : () => void;
   isOverridden       : boolean;
   clearPrevLiquorbotId: () => void;
+  prevLiquorbotId    : string | null; // <-- Expose previous main device ID
 }
 
 const LiquorBotContext = createContext<LiquorBotContextValue>({} as any);
@@ -82,6 +84,7 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
   /* ---------------- DEVICE ID STATE ---------------- */
   const [liquorbotId, setIdState] = useState('000');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [slotCount, setSlotCount] = useState<number>(15); // default 15
 
   /* last-known heartbeat */
   const lastHb     = useRef(0);
@@ -114,14 +117,19 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
     /* 2️⃣  update the in-memory ID */
     setIdState(id);
 
-    /* 3️⃣  persist or wipe stored pairing */
+    /* 3️⃣  update slotCount from first two digits if valid */
+    const match = id.match(/^(\d{2})/);
+    if (match) setSlotCount(Number(match[1]));
+    else setSlotCount(15); // fallback default
+
+    /* 4️⃣  persist or wipe stored pairing */
     if (currentUser) {
       if (isAdmin)      await persistDeviceId(currentUser, id);
       else              await AsyncStorage.removeItem(DEVICE_KEY(currentUser));
     }
-    /* 4️⃣  re-subscribe to the correct topics */
+    /* 5️⃣  re-subscribe to the correct topics */
     reconnect();
-  }, [currentUser, isAdmin, persistDeviceId, reconnect]);
+  }, [currentUser, isAdmin, persistDeviceId, reconnect, liquorbotId]);
 
   /* quick helper you can import anywhere */
   const forceDisconnect = useCallback(() => {
@@ -269,17 +277,19 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
   /* ---------------- CONTEXT VALUE ---------------- */
   const value = useMemo<LiquorBotContextValue>(() => ({
     /* state */
-    isConnected, slots, liquorbotId,
+    isConnected, slots, liquorbotId, slotCount,
     /* actions */
     setLiquorbotId, forceDisconnect, hardReset, updateSlots, reconnect,
     /* auth */
     groups, isAdmin,
     /* overrides */
     temporaryOverrideId, restorePreviousId, isOverridden, clearPrevLiquorbotId,
+    prevLiquorbotId, // <-- Expose previous main device ID
   }), [
-    isConnected, slots, liquorbotId,
+    isConnected, slots, liquorbotId, slotCount,
     setLiquorbotId, forceDisconnect, hardReset, updateSlots, reconnect,
     groups, isAdmin, temporaryOverrideId, restorePreviousId, isOverridden, clearPrevLiquorbotId,
+    prevLiquorbotId,
   ]);
 
   return <LiquorBotContext.Provider value={value}>{children}</LiquorBotContext.Provider>;

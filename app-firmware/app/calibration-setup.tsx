@@ -279,11 +279,15 @@ export default function CalibrationSetup() {
 
   return (
     <View style={styles.container}>
-      {/* Header with back button */}
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-        <Ionicons name="arrow-back" size={28} color="#DFDCD9" />
-      </TouchableOpacity>
-      <Text style={styles.headerText}>Calibration Setup</Text>
+      {/* Header with back button and centered title */}
+      <View style={styles.headerRow}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={28} color="#DFDCD9" />
+        </TouchableOpacity>
+        <View style={styles.headerTitleWrapper}>
+          <Text style={styles.headerText}>Calibration Setup</Text>
+        </View>
+      </View>
       <View style={styles.content}>
       {/* Intro only on first step */}
       {step === 0 && !isRunning && (
@@ -325,8 +329,32 @@ export default function CalibrationSetup() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#141414', paddingTop: 80, paddingHorizontal: 20 },
-  backButton: { position: 'absolute', top: 40, left: 20, zIndex: 10 },
-  headerText: { fontSize: 24, color: '#DFDCD9', fontWeight: 'bold', textAlign: 'center', marginBottom: 30 },
+  backButton: {
+    position: 'absolute',
+    left: 0,
+    zIndex: 2,
+    padding: 6,
+    borderRadius: 20,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 30,
+    justifyContent: 'center',
+    position: 'relative',
+    minHeight: 40,
+  },
+  headerTitleWrapper: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerText: {
+    fontSize: 24,
+    color: '#DFDCD9',
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
   content: { flex: 1, justifyContent: 'flex-start', alignItems: 'center' },
   introBox: { marginBottom: 30, alignItems: 'center', backgroundColor: '#1F1F1F', borderRadius: 12, padding: 18, width: '100%' },
   introText: { color: '#CE975E', fontSize: 18, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },

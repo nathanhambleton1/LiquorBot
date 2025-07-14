@@ -19,6 +19,10 @@ import WifiManager                   from 'react-native-wifi-reborn';
 import { Buffer }                    from 'buffer';
 import { useRouter }                 from 'expo-router';
 import { useLiquorBot }              from './components/liquorbot-provider';
+import { generateClient } from 'aws-amplify/api';
+import { fetchAuthSession } from '@aws-amplify/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { listEvents } from '../src/graphql/queries';
 
 // ───────── BLE Service & Char UUIDs ─────────
 const SERVICE_UUID          = 'e0be0301-718e-4700-8f55-a24d6160db08';
@@ -38,6 +42,8 @@ export default function ConnectivitySettings() {
   // ───── LiquorBot global state ─────
   const {
     isConnected, liquorbotId, setLiquorbotId, reconnect,
+    isOverridden, restorePreviousId, clearPrevLiquorbotId, prevLiquorbotId,
+    temporaryOverrideId, hardReset, // <-- add these
   } = useLiquorBot();
 
   /*──────── BLE state ────────*/
@@ -64,6 +70,9 @@ export default function ConnectivitySettings() {
   const [manualModalVisible, setManualModalVisible] = useState(false);
   const [manualId, setManualId]                 = useState('');
   const [manualError, setManualError]           = useState('');
+
+  /*──────── Info modal ─────*/
+  const [infoVisible, setInfoVisible]           = useState(false);
 
   /*──────── Managers / refs ─────*/
   const managerRef            = useRef<BleManager | null>(null);
@@ -322,6 +331,64 @@ export default function ConnectivitySettings() {
     setManualId('');
   };
 
+  // --- Sync event override state on mount and when device/user changes ---
+  useEffect(() => {
+    let isMounted = true;
+    const client = generateClient();
+    let currentUser: string | null = null;
+    (async () => {
+      try {
+        // Get current user
+        const ses = await fetchAuthSession();
+        const u = ses.tokens?.idToken?.payload['cognito:username'];
+        currentUser = typeof u === 'string' ? u : null;
+        if (!currentUser) return;
+        // Fetch events
+        const { data } = await client.graphql({
+          query: listEvents,
+          variables: { filter: { or: [
+            { owner: { eq: currentUser } },
+            { guestOwners: { contains: currentUser } },
+          ]}},
+          authMode: 'userPool',
+        }) as { data: any };
+        const now = new Date();
+        const events = (data.listEvents.items || []).map((i: any) => ({
+          id: i.id,
+          name: i.name,
+          startTime: i.startTime,
+          endTime: i.endTime,
+          liquorbotId: i.liquorbotId,
+          owner: i.owner,
+          guestOwners: i.guestOwners ?? [],
+        }));
+        // Find current event
+        let activeEvent = undefined;
+        for (const ev of events) {
+          const s = new Date(ev.startTime);
+          const e = new Date(ev.endTime);
+          const isCurrent = s <= now && e >= now;
+          const isOwner = ev.owner === currentUser;
+          const isGuest = ev.guestOwners?.includes?.(currentUser) ?? false;
+          if (isCurrent && (isOwner || isGuest)) {
+            activeEvent = ev;
+            break;
+          }
+        }
+        if (!isMounted) return;
+        if (activeEvent) {
+          const newId = String(activeEvent.liquorbotId);
+          if (liquorbotId !== newId) temporaryOverrideId(newId, new Date(activeEvent.endTime));
+        } else {
+          if (isOverridden) restorePreviousId();
+        }
+      } catch (err) {
+        // ignore errors
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [liquorbotId, isOverridden, restorePreviousId, temporaryOverrideId]);
+
   /*────────────────── UI ──────────────────*/
   const StepRow = ({ n, label }: { n: 1 | 2 | 3; label: string }) => {
     let icon = <ActivityIndicator size="small" color="#CE975E"/>;
@@ -342,7 +409,30 @@ export default function ConnectivitySettings() {
       <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
         <Ionicons name="chevron-back" size={30} color="#DFDCD9" />
       </TouchableOpacity>
+      {/* info button */}
+      <TouchableOpacity style={styles.infoButton} onPress={() => setInfoVisible(true)}>
+        <Ionicons name="information-circle-outline" size={28} color="#CE975E" />
+      </TouchableOpacity>
       <Text style={styles.headerText}>Connectivity</Text>
+
+      {/* Info Modal */}
+      <Modal visible={infoVisible} transparent animationType="fade" onRequestClose={() => setInfoVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalBox, { maxWidth: 380 }]}> 
+            <TouchableOpacity style={styles.modalClose} onPress={() => setInfoVisible(false)}>
+              <Ionicons name="close" size={22} color="#DFDCD9" />
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { marginBottom: 10 }]}>How Connectivity Works</Text>
+            <Text style={styles.infoText}>
+              <Text style={{ fontWeight: 'bold', color: '#CE975E' }}>Main Device:</Text> This is your default LiquorBot that you connect to for normal use.{'\n\n'}
+              <Text style={{ fontWeight: 'bold', color: '#CE975E' }}>Event Override:</Text> When you join an event, the event's LiquorBot will automatically take priority and become your active device for the duration of the event.{'\n\n'}
+              <Text style={{ fontWeight: 'bold', color: '#CE975E' }}>Backup Device:</Text> While an event is active, your main LiquorBot is kept as a backup and will automatically be restored when the event ends.{'\n\n'}
+              <Text style={{ fontWeight: 'bold', color: '#CE975E' }}>Switching Back:</Text> If you want to reconnect to your main LiquorBot while an event is active, you must leave the event. Once you leave, your main device will be restored as your active connection.{'\n\n'}
+              <Text style={{ color: '#8F8F8F' }}>Events always take priority while they are in progress. You can only connect to your main device when no event is active.</Text>
+            </Text>
+          </View>
+        </View>
+      </Modal>
 
       {/* status */}
       <View style={styles.statusBox}>
@@ -355,6 +445,24 @@ export default function ConnectivitySettings() {
               : `Disconnected - LiquorBot ID: ${displayId}`}
           </Text>
         </View>
+        {/* --- Show event override and backup info --- */}
+        {isOverridden && (
+          <>
+            <Text style={styles.statusText}>
+              Reading from an event LiquorBot ID: {liquorbotId}
+            </Text>
+            <Text style={styles.statusText}>
+              Disconnected from your main LiquorBot ID: {prevLiquorbotId || 'N/A'}
+            </Text>
+          </>
+        )}
+        {!isOverridden && (
+          <Text style={styles.statusText}>
+            {isConnected
+              ? 'Connected to your main LiquorBot device.'
+              : 'Not connected to any event or device.'}
+          </Text>
+        )}
       </View>
 
       {/* device list */}
@@ -382,8 +490,10 @@ export default function ConnectivitySettings() {
                 <ActivityIndicator size="small" color="#CE975E" style={{ marginRight: 8 }} />
               )}
               <Text style={styles.deviceName}>
-                {item.name}{' '}
-                <Text style={{ color: '#4F4F4F', fontSize: 12 }}>({item.code})</Text>
+                {item.name}
+                <Text style={{ color: '#8F8F8F', fontSize: 13 }}>
+                  {`  (${item.code})`}
+                </Text>
               </Text>
               <Ionicons name={item.type === 'wifi' ? 'wifi' : 'bluetooth'} size={18} color="#DFDCD9" />
             </TouchableOpacity>
@@ -543,7 +653,23 @@ export default function ConnectivitySettings() {
 /*────────────────── Styles ──────────────────*/
 const styles = StyleSheet.create({
   container:  { flex: 1, backgroundColor: '#141414', paddingTop: 100, paddingHorizontal: 20 },
-  closeButton:{ position: 'absolute', top: 70, left: 20 },
+  closeButton:{
+    position: 'absolute',
+    top: 70,
+    left: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoButton: {
+    position: 'absolute',
+    top: 70,
+    right: 20,
+    zIndex: 10,
+    padding: 6,
+  },
   headerText: { position: 'absolute', top: 70, alignSelf: 'center', fontSize: 24, color: '#FFFFFF', fontWeight: 'bold' },
 
   statusBox:  { backgroundColor: '#1F1F1F', borderRadius: 10, padding: 20, marginBottom: 20, marginTop: 20 },
@@ -646,5 +772,12 @@ const styles = StyleSheet.create({
   manualGoldBtnText: {
     color: '#CE975E',
     fontSize: 14,
+  },
+
+  infoText: {
+    color: '#DFDCD9',
+    fontSize: 15,
+    marginTop: 8,
+    lineHeight: 22,
   },
 });

@@ -97,6 +97,7 @@ export default function DeviceSettings() {
     isOverridden,       // true if user is currently in an event override
     restorePreviousId,  // to end the override
     clearPrevLiquorbotId,
+    slotCount,          // <--- NEW: number of slots for this device
   } = useLiquorBot();
 
   /*────────── State ──────────*/
@@ -314,19 +315,21 @@ export default function DeviceSettings() {
         }
         // Handle slot config
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
-          setSlots(msg.slots);
+          setSlots(msg.slots.slice(0, slotCount));
         }
         // Handle volume config
         if (msg.action === 'CURRENT_VOLUMES' && Array.isArray(msg.volumes)) {
-          setVolumes(msg.volumes);
+          setVolumes(msg.volumes.slice(0, slotCount));
         }
         // Handle single volume update
         if (msg.action === 'VOLUME_UPDATED' && typeof msg.slot === 'number' && typeof msg.volume === 'number') {
-          setVolumes(prev => {
-            const next = [...prev];
-            next[msg.slot] = msg.volume;
-            return next;
-          });
+          if (msg.slot < slotCount) {
+            setVolumes(prev => {
+              const next = [...prev];
+              next[msg.slot] = msg.volume;
+              return next;
+            });
+          }
         }
       },
       error: (err) => console.error('slot-config sub error:', err),
@@ -347,7 +350,7 @@ export default function DeviceSettings() {
         retryIntervalRef.current = null;
       }
     };
-  }, [isConnected, liquorbotId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isConnected, liquorbotId, slotCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchCurrentConfig = () => {
     if (!isConnected || liquorbotId === '000') return;
@@ -355,18 +358,18 @@ export default function DeviceSettings() {
     publishSlot({ action: 'GET_CONFIG' });
     publishSlot({ action: 'GET_VOLUMES' }); // Also fetch volumes
   };
-  const handleClearAll = () =>                                       
-  bumpIfDisconnected(async () => {
-    await saveUndo(slots, username, liquorbotId);
-    setUndoReady(true);            
-    publishSlot({ action: 'CLEAR_CONFIG' });
-    setSlots(Array(15).fill(0));
-    setVolumes(Array(15).fill(0)); // Clear volumes too
-  });
+  const handleClearAll = () =>                                        
+    bumpIfDisconnected(async () => {
+      await saveUndo(slots.slice(0, slotCount), username, liquorbotId);
+      setUndoReady(true);            
+      publishSlot({ action: 'CLEAR_CONFIG' });
+      setSlots(Array(slotCount).fill(0));
+      setVolumes(Array(slotCount).fill(0)); // Clear volumes too
+    });
   const handleSetSlot = (idx: number, id: number) => {
     setSlots(prev => {
       if (!suppressUndo.current) {            // snapshot *before* we mutate
-        saveUndo(prev, username, liquorbotId);
+        saveUndo(prev.slice(0, slotCount), username, liquorbotId);
         setUndoReady(true);
       }
       const next = [...prev];
@@ -668,39 +671,33 @@ export default function DeviceSettings() {
                     if (!isConnected || !undoReady) return;
                     const prev = await popUndo(username, liquorbotId);
                     if (!prev) return;
-
-                    suppressUndo.current = true;      // ignore echo messages
-                    setUndoReady(false);              // hide button
-
+                    suppressUndo.current = true;
+                    setUndoReady(false);
                     await Promise.all(
                       prev.map((ingId, i) =>
                         publishSlot({ action: 'SET_SLOT', slot: i + 1, ingredientId: ingId })
                       )
                     );
                     await publishSlot({ action: 'GET_CONFIG' });
-                    setSlots(prev);                   // instant UI feedback
+                    setSlots(prev);
                     setTimeout(() => { suppressUndo.current = false; }, 1500);
                   }}
                   disabled={!undoReady || !isConnected}
                   style={{ marginRight: 24, marginLeft: 0 }}
                 >
-                  <Text
-                    style={[
-                      styles.clearAllButtonText,
-                      !isConnected && { opacity: 0.5 },
-                    ]}
-                  >
+                  <Text style={[
+                    styles.clearAllButtonText,
+                    !isConnected && { opacity: 0.5 },
+                  ]}>
                     Undo
                   </Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity onPress={handleClearAll} disabled={!isConnected}>
-                <Text
-                  style={[
-                    styles.clearAllButtonText,
-                    !isConnected && { opacity: 0.5 },
-                  ]}
-                >
+                <Text style={[
+                  styles.clearAllButtonText,
+                  !isConnected && { opacity: 0.5 },
+                ]}>
                   Clear All
                 </Text>
               </TouchableOpacity>
@@ -718,7 +715,7 @@ export default function DeviceSettings() {
             <Text style={styles.connectDeviceMessage}>Please connect a device to start configuring.</Text>
           )}
 
-          {slots.map((ingredientId, idx) => {
+          {isConnected && slots.slice(0, slotCount).map((ingredientId, idx) => {
             // Determine color based on volume
             let volumeBg = '#232323'; // default gray
             let volumeTextColor = '#CE975E'; // default gold text
