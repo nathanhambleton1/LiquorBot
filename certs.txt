@@ -20,4 +20,12 @@ APP SKU: liquorbot_20250527
 
 https://main.dxqquq649m247.amplifyapp.com/
 
-check no doup ingredeint create drink and device settings
+ (NOBRIDGE) LOG  [CONFIG TOPIC RAW] {"action": "GET_CONFIG", Symbol(topic): "liquorbot/liquorbot120001/slot-config"}
+ (NOBRIDGE) LOG  [CONFIG TOPIC RAW] {"action": "GET_VOLUMES", Symbol(topic): "liquorbot/liquorbot120001/slot-config"}
+ (NOBRIDGE) LOG  [CONFIG TOPIC RAW] {"action": "CURRENT_CONFIG", "slots": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], Symbol(topic): "liquorbot/liquorbot120001/slot-config"}
+ (NOBRIDGE) LOG  [UI] slotCount: 15 slots: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] volumes: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+ (NOBRIDGE) LOG  [CONFIG TOPIC RAW] {"action": "CURRENT_VOLUMES", "volumes": [1.54, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], Symbol(topic): "liquorbot/liquorbot120001/slot-config"}
+ (NOBRIDGE) LOG  [CONFIG TOPIC RAW] {"action": "GET_CONFIG", Symbol(topic): "liquorbot/liquorbot120001/slot-config"}
+ (NOBRIDGE) LOG  [CONFIG TOPIC RAW] {"action": "GET_VOLUMES", Symbol(topic): "liquorbot/liquorbot120001/slot-config"}
+ (NOBRIDGE) LOG  [CONFIG TOPIC RAW] {"action": "CURRENT_CONFIG", "slots": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], Symbol(topic): "liquorbot/liquorbot120001/slot-config"}
+ (NOBRIDGE) LOG  [UI] slotCount: 15 slots: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] volumes: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
