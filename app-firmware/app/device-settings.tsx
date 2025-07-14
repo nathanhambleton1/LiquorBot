@@ -329,6 +329,15 @@ export default function DeviceSettings() {
     const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
       next: ({ value }) => {
         let msg = typeof value === 'string' ? JSON.parse(value) : value;
+        if (!msg || typeof msg !== 'object') return; // Guard against undefined/null
+
+        // Log all incoming slot-config messages for debugging
+        if (msg.action === 'CURRENT_CONFIG') {
+          console.log('[MQTT] Received CURRENT_CONFIG:', msg);
+        }
+        if (msg.action === 'CURRENT_VOLUMES') {
+          console.log('[MQTT] Received CURRENT_VOLUMES:', msg);
+        }
 
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
           setSlots(msg.slots.slice(0, slotCount));
