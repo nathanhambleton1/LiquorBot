@@ -326,6 +326,9 @@ export default function DeviceSettings() {
     gotVolumesRef.current = false;
     setConfigLoading(true);        // show spinner while we wait
 
+    // Log the topic being subscribed to
+    console.log('[MQTT] Subscribing to topic:', slotTopic);
+
     const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
       next: ({ value }) => {
         let msg = typeof value === 'string' ? JSON.parse(value) : value;
