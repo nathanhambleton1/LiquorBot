@@ -18,7 +18,7 @@
 
 /* ---------------- Runtime constants -------------------------------------- */
 static unsigned long lastHeartbeat = 0;
-static constexpr unsigned long HB_PERIOD = 5000;      // ms
+static constexpr unsigned long HB_PERIOD = 1000;      // ms
 static unsigned long lastWiFiRetry = 0;
 static constexpr unsigned long WIFI_RETRY_PERIOD = 10000; // ms
 
