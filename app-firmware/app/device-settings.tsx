@@ -306,70 +306,76 @@ export default function DeviceSettings() {
       console.error('Failed to publish slot-config:', err);
     }
   };
-  // Track config/volumes receipt with state so React updates reliably
-  const [gotConfig, setGotConfig] = useState(false);
-  const [gotVolumes, setGotVolumes] = useState(false);
+  
+  const gotConfigRef  = useRef(false);
+  const gotVolumesRef = useRef(false);
+  const stopLoading   = () => {
+    setConfigLoading(false);
+    clearInterval(retryConfigIntervalRef.current!);
+    clearInterval(retryVolumesIntervalRef.current!);
+    retryConfigIntervalRef.current  = null;
+    retryVolumesIntervalRef.current = null;
+  };
 
+  // ── inside the big useEffect that (re)subscribes to slot-config ──
   useEffect(() => {
     if (liquorbotId === '000') return;
-    setGotConfig(false);
-    setGotVolumes(false);
+
+    // reset flags every time we connect or change device/slotCount
+    gotConfigRef.current  = false;
+    gotVolumesRef.current = false;
+    setConfigLoading(true);        // show spinner while we wait
+
     const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
-      next: async (d) => {
-        let msg: any = d.value;
-        if (typeof msg === 'string') {
-          try { msg = JSON.parse(msg); } catch {}
-        }
-        // Handle slot config
+      next: ({ value }) => {
+        let msg = typeof value === 'string' ? JSON.parse(value) : value;
+
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
           setSlots(msg.slots.slice(0, slotCount));
-          setGotConfig(true);
+          gotConfigRef.current = true;
+          if (gotVolumesRef.current) stopLoading();
         }
-        // Handle volume config
+
         if (msg.action === 'CURRENT_VOLUMES' && Array.isArray(msg.volumes)) {
           setVolumes(msg.volumes.slice(0, slotCount));
-          setGotVolumes(true);
+          gotVolumesRef.current = true;
+          if (gotConfigRef.current)  stopLoading();
         }
-        // Handle single volume update
-        if (msg.action === 'VOLUME_UPDATED' && typeof msg.slot === 'number' && typeof msg.volume === 'number') {
-          if (msg.slot < slotCount) {
-            setVolumes(prev => {
-              const next = [...prev];
-              next[msg.slot] = msg.volume;
-              return next;
-            });
-          }
+
+        if (
+          msg.action === 'VOLUME_UPDATED' &&
+          typeof msg.slot === 'number' &&
+          typeof msg.volume === 'number' &&
+          msg.slot < slotCount
+        ) {
+          setVolumes(v => {
+            const next = [...v];
+            next[msg.slot] = msg.volume;
+            return next;
+          });
         }
       },
       error: (err) => console.error('slot-config sub error:', err),
     });
-    if (isConnected && liquorbotId !== '000') {
-      fetchCurrentConfig();
-      retryConfigIntervalRef.current = setInterval(
-        () => publishSlot({ action: 'GET_CONFIG' }),
-        1500
-      );
-      retryVolumesIntervalRef.current = setInterval(
-        () => publishSlot({ action: 'GET_VOLUMES' }),
-        1500
-      );
+
+    // kick-off GET_CONFIG / GET_VOLUMES pollers
+    if (isConnected) {
+      publishSlot({ action: 'GET_CONFIG'  });
+      publishSlot({ action: 'GET_VOLUMES' });
+      retryConfigIntervalRef.current  = setInterval(() => publishSlot({ action: 'GET_CONFIG'  }), 1500);
+      retryVolumesIntervalRef.current = setInterval(() => publishSlot({ action: 'GET_VOLUMES' }), 1500);
     }
+
     return () => {
       sub.unsubscribe();
-      if (retryConfigIntervalRef.current) {
-        clearInterval(retryConfigIntervalRef.current);
-        retryConfigIntervalRef.current = null;
-      }
-      if (retryVolumesIntervalRef.current) {
-        clearInterval(retryVolumesIntervalRef.current);
-        retryVolumesIntervalRef.current = null;
-      }
+      clearInterval(retryConfigIntervalRef.current!);
+      clearInterval(retryVolumesIntervalRef.current!);
     };
   }, [isConnected, liquorbotId, slotCount]);
 
   // Stop polling and hide spinner as soon as both are received
   useEffect(() => {
-    if (gotConfig && gotVolumes) {
+    if (gotConfigRef.current && gotVolumesRef.current) {
       setConfigLoading(false);
       if (retryConfigIntervalRef.current) {
         clearInterval(retryConfigIntervalRef.current);
@@ -380,7 +386,7 @@ export default function DeviceSettings() {
         retryVolumesIntervalRef.current = null;
       }
     }
-  }, [gotConfig, gotVolumes]);
+  }, [gotConfigRef.current, gotVolumesRef.current]);
 
   const fetchCurrentConfig = () => {
     if (!isConnected || liquorbotId === '000') return;
