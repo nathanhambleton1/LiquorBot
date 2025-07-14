@@ -45,7 +45,10 @@ void sendVolumeConfig() {
     doc["action"] = "CURRENT_VOLUMES";
     JsonArray arr = doc.createNestedArray("volumes");
     uint8_t slotCount = getSlotCount();
-    for (int i = 0; i < slotCount; ++i) arr.add(slotVolumes[i]);
+    // FIX: Ensure we send exactly slotCount entries
+    for (int i = 0; i < slotCount; ++i) {
+        arr.add(slotVolumes[i]);
+    }
     serializeJson(doc, volumeConfigMessage);
     volumeConfigPending = true;
 }

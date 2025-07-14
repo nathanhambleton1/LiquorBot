@@ -294,54 +294,40 @@ export default function DeviceSettings() {
 
   /*──────────────── Slot-config MQTT subscribe/publish ────────────────*/
   const slotTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
+  const retryIntervalRef = useRef<NodeJS.Timeout | null>(null); 
 
-  const retryCfg = useRef<NodeJS.Timeout | null>(null);
-  const retryVol = useRef<NodeJS.Timeout | null>(null);
-
-  const publishSlot = (m: any) =>
+  const publishSlot = (m: any) => 
     pubsub.publish({ topics: [slotTopic], message: m }).catch(console.error);
-
-  /* —— NEW: reactive flags —— */
-  const [gotCfg, setGotCfg]   = useState(false);
-  const [gotVol, setGotVol]   = useState(false);
-
-  const stopPolling = () => {
-    setConfigLoading(false);
-    if (retryCfg.current) clearInterval(retryCfg.current);
-    if (retryVol.current) clearInterval(retryVol.current);
-    retryCfg.current = retryVol.current = null;
-  };
 
   useEffect(() => {
     if (!isConnected || liquorbotId === '000') return;
 
-    // ① reset flags + show spinner
-    setGotCfg(false);
-    setGotVol(false);
     setConfigLoading(true);
-
-    // ② subscribe
+    
     const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
       next: ({ value }) => {
-        const msg = typeof value === 'string' ? JSON.parse(value as string) : value;
-        if (!msg) return; // Prevents TypeError if msg is undefined/null
+        const msg = typeof value === 'string' ? JSON.parse(value) : value;
+        if (!msg) return;
 
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
+          // Only show slots up to the device's slot count
           setSlots(msg.slots.slice(0, slotCount));
-          setGotCfg(true);
+          setConfigLoading(false);
+          if (retryIntervalRef.current) {
+            clearInterval(retryIntervalRef.current);
+            retryIntervalRef.current = null;
+          }
         }
 
         if (msg.action === 'CURRENT_VOLUMES' && Array.isArray(msg.volumes)) {
+          // Only show volumes up to the device's slot count
           setVolumes(msg.volumes.slice(0, slotCount));
-          setGotVol(true);
         }
 
-        if (
-          msg.action === 'VOLUME_UPDATED' &&
-          typeof msg.slot === 'number' &&
-          typeof msg.volume === 'number' &&
-          msg.slot < slotCount
-        ) {
+        if (msg.action === 'VOLUME_UPDATED' && 
+            typeof msg.slot === 'number' && 
+            typeof msg.volume === 'number' &&
+            msg.slot < slotCount) {
           setVolumes(prev => {
             const next = [...prev];
             next[msg.slot] = msg.volume;
@@ -352,31 +338,23 @@ export default function DeviceSettings() {
       error: err => console.error('slot-config sub error:', err),
     });
 
-    // ③ kick-off polling
-    publishSlot({ action: 'GET_CONFIG' });
-    publishSlot({ action: 'GET_VOLUMES' });
-    retryCfg.current = setInterval(() => publishSlot({ action: 'GET_CONFIG' }), 1500);
-    retryVol.current = setInterval(() => publishSlot({ action: 'GET_VOLUMES' }), 1500);
+    const fetchConfig = () => {
+      publishSlot({ action: 'GET_CONFIG' });
+      publishSlot({ action: 'GET_VOLUMES' });
+    };
 
-    // ④ cleanup
+    fetchConfig();
+    retryIntervalRef.current = setInterval(fetchConfig, 1500);
+
     return () => {
       sub.unsubscribe();
-      if (retryCfg.current) clearInterval(retryCfg.current);
-      if (retryVol.current) clearInterval(retryVol.current);
+      if (retryIntervalRef.current) {
+        clearInterval(retryIntervalRef.current);
+        retryIntervalRef.current = null;
+      }
     };
-  }, [isConnected, liquorbotId, slotCount]);
+  }, [isConnected, liquorbotId, slotCount]); // Added slotCount dependency
 
-  /* —— hide overlay as soon as both flags go true —— */
-  useEffect(() => {
-    if (gotCfg && gotVol) stopPolling();
-  }, [gotCfg, gotVol]);
-
-  const fetchCurrentConfig = () => {
-    if (!isConnected || liquorbotId === '000') return;
-    setConfigLoading(true);
-    publishSlot({ action: 'GET_CONFIG' });
-    publishSlot({ action: 'GET_VOLUMES' }); // Also fetch volumes
-  };
   const handleClearAll = () =>                                        
     bumpIfDisconnected(async () => {
       await saveUndo(slots.slice(0, slotCount), username, liquorbotId);
