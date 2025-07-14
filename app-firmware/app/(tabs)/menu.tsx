@@ -50,6 +50,7 @@ import { AuthModalContext } from '../components/AuthModalContext';
 import { BlurView } from 'expo-blur';
 
 import { ToastAndroid } from 'react-native';
+import * as Notifications from 'expo-notifications';
 
 Amplify.configure(config);
 const client = generateClient();
@@ -560,7 +561,9 @@ function DrinkItem({
             typeof raw === 'string'
               ? (() => { try { return JSON.parse(raw) } catch { return { message: raw } } })()
               : raw;
+          // Updated status extraction to handle both status: 'success' and success: true
           const status = (payload.status ?? payload.result ?? payload.message ?? (typeof payload === 'string' ? payload : '')).toString().toLowerCase().trim();
+          const isSuccess = status === 'success' || payload.success === true;
 
           // --- NEW: handle ETA ---
           if (status === 'eta' && typeof payload.eta === 'number') {
@@ -576,7 +579,7 @@ function DrinkItem({
           }
           // -----------------------
 
-          if (status === 'success') {
+          if (isSuccess) {
             // Haptic feedback: success jingle when pour is done
             if (Platform.OS === 'ios') {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -594,6 +597,16 @@ function DrinkItem({
             } catch (e) {
               console.warn('✓ pour logged locally – failed to store in DB', e);
             }
+            // --- NEW: Schedule a local notification ---
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: 'LiquorBot: Drink Ready!',
+                body: `Your ${drink.name} is ready. Enjoy!`,
+                // You can add a custom icon here if you add it to your assets and configure notification appearance
+              },
+              trigger: null, // send immediately
+            });
+            // ------------------------------------------
             setLogging(false);
             clearTimeout(timeoutId);
           } else if (['fail', 'failed', 'error'].includes(status)) {
@@ -850,6 +863,21 @@ export default function MenuScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const { isConnected, slots, liquorbotId, isAdmin } = useLiquorBot();
   const isFocused = useIsFocused();
+
+  // --- MQTT receive topic logger for debugging pour results ---
+  React.useEffect(() => {
+    if (!liquorbotId) return;
+    const topic = `liquorbot/liquorbot${liquorbotId}/receive`;
+    const sub = pubsub.subscribe({ topics: [topic] }).subscribe({
+      next: (evt) => {
+        console.log('[MenuScreen] MQTT receive topic message:', evt);
+      },
+      error: (err) => {
+        console.error('[MenuScreen] MQTT receive topic error:', err);
+      },
+    });
+    return () => sub.unsubscribe();
+  }, [liquorbotId]);
 
   /* ------------------------- STATE ------------------------- */
   const [drinks, setDrinks] = useState<Drink[]>([]);

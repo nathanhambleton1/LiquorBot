@@ -24,7 +24,11 @@
         "NSBluetoothAlwaysUsageDescription": "LiquorBot needs Bluetooth to discover and connect to your LiquorBot dispenser.",
         "NSBluetoothPeripheralUsageDescription": "LiquorBot uses Bluetooth to communicate with your LiquorBot dispenser.",
         "UIViewControllerBasedStatusBarAppearance": false,
-        "UIStatusBarStyle": "UIStatusBarStyleLightContent"
+        "UIStatusBarStyle": "UIStatusBarStyleLightContent",
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
+        "NSUserNotificationAlertStyle": "alert"
       },
       "splash": {
         "image": "./assets/images/home-background.jpg",

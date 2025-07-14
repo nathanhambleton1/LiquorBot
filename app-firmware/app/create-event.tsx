@@ -227,6 +227,14 @@ export default function EventsScreen(){
   const router=useRouter();
   const{liquorbotId}=useLiquorBot();
 
+  // Dynamically determine max ingredients from first two digits of liquorbotId
+  const maxIngredients = useMemo(() => {
+    if (!liquorbotId) return 15; // fallback
+    const str = String(liquorbotId).padStart(2, '0');
+    const parsed = parseInt(str.slice(0, 2), 10);
+    return isNaN(parsed) ? 15 : parsed;
+  }, [liquorbotId]);
+
   /* meta */
   const today=useMemo(()=>fmt(new Date()),[]);
   const[name,setName]=useState('');
@@ -268,7 +276,7 @@ export default function EventsScreen(){
     menu.forEach(d=>parseIng(d).forEach(i=>s.add(i)));
     return s;
   },[menu]);
-  const slotsOK=ingredientSet.size<=15;
+  const slotsOK=ingredientSet.size<=maxIngredients;
   const[showSlots,setShowSlots]=useState(false);
   const [showTimeInfo, setShowTimeInfo] = useState(false);
 
@@ -278,7 +286,7 @@ export default function EventsScreen(){
     for (const id of ing) {
       if (!ingredientSet.has(id)) extra++;      // only count new uniques
     }
-    return ingredientSet.size + extra <= 15;    // true → safe to add
+    return ingredientSet.size + extra <= maxIngredients;    // true → safe to add
   };
 
   useEffect(() => {
@@ -376,7 +384,7 @@ export default function EventsScreen(){
   );
 
   /* helpers */
-  const fmtSlots=()=>`${ingredientSet.size}/15 unique ingredients`;
+  const fmtSlots=()=>`${ingredientSet.size}/${maxIngredients} unique ingredients`;
   const addDrink=(d:Drink)=>{
     if (menu.some(drink => drink.id === d.id)) {
       Alert.alert('Already added', 'This drink is already in the menu.');
@@ -384,7 +392,7 @@ export default function EventsScreen(){
       return;
     }
     const after=new Set([...ingredientSet,...parseIng(d)]);
-    if(after.size>15){Alert.alert('Too many ingredients');return;}
+    if(after.size>maxIngredients){Alert.alert('Too many ingredients');return;}
     setMenu(m=>[...m,d]);setPV(false);setQ('');
   };
   function nextDay(mmddyyyy: string) {
@@ -843,10 +851,10 @@ export default function EventsScreen(){
               disabled={!slotsOK || !name.trim() || menu.length === 0 || isDateInPast(startDate) || (multiDay && isDateInPast(endDate))}
               onPress={save}
             >
-              <Text style={styles.saveTxt}>Save Event</Text>
+              <Text style={styles.saveTxt}>Save Event</Text>
             </TouchableOpacity>
             <Text style={styles.deviceIdText}>
-              This event will be hosted on LiquorBot: {liquorbotId}
+              This event will be hosted on LiquorBot: {liquorbotId} (Max ingredients: {maxIngredients})
             </Text>
           </ScrollView>
         )}
@@ -1189,7 +1197,7 @@ const styles = StyleSheet.create({
   infoText:         { color: '#DFDCD9', fontSize: 14, lineHeight: 20 },
   infoClose:        { position: 'absolute', top: 12, right: 12, padding: 4 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#141414' },
-  deviceIdText:     { color: '#4F4F4F', fontSize: 12, textAlign: 'center', marginTop: 16 },
+  deviceIdText:     { color: '#4F4F4F', fontSize: 11, textAlign: 'center', marginTop: 16 },
   backdrop:         { ...StyleSheet.absoluteFillObject, backgroundColor: '#0009' },
   card:             { position: 'absolute', backgroundColor: '#1F1F1F', borderRadius: 16, overflow: 'hidden', justifyContent: 'center' },
   closeIcon:        { position: 'absolute', top: 6, right: 6, padding: 6, zIndex: 10, elevation: 10 },
