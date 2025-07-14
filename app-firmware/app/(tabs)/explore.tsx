@@ -109,7 +109,6 @@ async function getCoverImageSource(url: string, key: string): Promise<{ uri: str
 /* -------------------------------------------------------------------------- */
 /*                              CONSTANTS                                     */
 /* -------------------------------------------------------------------------- */
-const MAX_INGS      = 15;   // hardware limit (slots)
 const MIN_DRINKS    = 3;
 const OVERLAP_CAP   = 0.20; // per-section
 const CAROUSEL_LOOP = 30;
@@ -167,6 +166,7 @@ function buildBookDistinct(
   id: string,
   name: string,
   desc: string,
+  maxIngredients: number = 12,
 ): RecipeBook | null {
   if (!pool.length) return null;
 
@@ -176,11 +176,12 @@ function buildBookDistinct(
   for (let attempt = 0; attempt < 10; attempt++) {
     const ordered = [...shuffle(uniquePool), ...shuffle(dupPool)];
     const sel: Drink[] = [];
-    const ingSet = new Set<number>();
+    let ingSet = new Set<number>();
 
     for (const d of ordered) {
-      const nextIng = new Set([...ingSet, ...parseIngIds(d)]);
-      if (nextIng.size > MAX_INGS) continue;
+      const drinkIngs = parseIngIds(d);
+      const nextIngSet = new Set([...ingSet, ...drinkIngs]);
+      if (nextIngSet.size > maxIngredients) continue;
 
       const dupCntIfAdd =
         sel.filter((x) => sectionUsed.has(x.id)).length +
@@ -188,20 +189,32 @@ function buildBookDistinct(
 
       if (dupCntIfAdd / (sel.length + 1) <= OVERLAP_CAP) {
         sel.push(d);
-        nextIng.forEach((id) => ingSet.add(id));
-        if (sel.length >= 8 || ingSet.size >= MAX_INGS) break;
+        ingSet = nextIngSet;
+        if (sel.length >= 8 || ingSet.size >= maxIngredients) break;
       }
     }
 
-    if (sel.length >= MIN_DRINKS) {
-      sel.forEach((d) => sectionUsed.add(d.id));
+    // Only keep drinks that fit within the maxIngredients cap
+    let runningIngs = new Set<number>();
+    const chosen: Drink[] = [];
+    for (const d of sel) {
+      const drinkIngs = parseIngIds(d);
+      const nextSet = new Set([...runningIngs, ...drinkIngs]);
+      if (nextSet.size > maxIngredients) break;
+      chosen.push(d);
+      runningIngs = nextSet;
+    }
+    if (chosen.length < 3) continue;
+
+    if (chosen.length >= MIN_DRINKS) {
+      chosen.forEach((d) => sectionUsed.add(d.id));
       return {
         id,
         name,
         description: desc,
-        drinks: sel,
-        ingredientIds: [...ingSet],
-        image: sel[0]?.image || placeholder,
+        ingredientIds: Array.from(runningIngs),
+        drinks: chosen,
+        image: chosen[0]?.image || '',
       };
     }
   }
@@ -499,7 +512,7 @@ const BookCard = ({ book, onPress }: BookCardProps) => {
 /* -------------------------------------------------------------------------- */
 export default function ExploreScreen() {
   /* gate non-admins */
-  const { isAdmin } = useLiquorBot();
+  const { isAdmin, slotCount } = useLiquorBot(); // <-- get slotCount from context
   if (!isAdmin) {
     router.replace('/');
     return null;
@@ -574,12 +587,14 @@ export default function ExploreScreen() {
         }
       } catch { /* ignore */ }
 
-      const built = generateBooks(drinks, ingredientMap);
+      // Use slotCount if > 12, else default to 12
+      const maxIngredients = slotCount > 12 ? slotCount : 12;
+      const built = generateBooks(drinks, ingredientMap, maxIngredients);
       setBooks(built);
       setLoading(false);
       try { await AsyncStorage.setItem(storageKey, JSON.stringify(built)); } catch {}
     })();
-  }, [drinks, ingredients, userId]);
+  }, [drinks, ingredients, userId, slotCount]);
 
   /* ––––– REFRESH HANDLER ––––– */
   const handleRefresh = useCallback(async () => {
@@ -588,11 +603,13 @@ export default function ExploreScreen() {
     setLoading(true);
     setBooks([]);
     try { await AsyncStorage.removeItem(`exploreBooks_${userId}`); } catch {}
-    const rebuilt = generateBooks(drinks, ingredientMap);
+    // Use slotCount if > 12, else default to 12
+    const maxIngredients = slotCount > 12 ? slotCount : 12;
+    const rebuilt = generateBooks(drinks, ingredientMap, maxIngredients);
     setBooks(rebuilt);
     setLoading(false);
     try { await AsyncStorage.setItem(`exploreBooks_${userId}`, JSON.stringify(rebuilt)); } catch {}
-  }, [drinks, ingredientMap, userId]);
+  }, [drinks, ingredientMap, userId, slotCount]);
 
   /* ––––– SLOT-CONFIG publisher ––––– */
   const publishSlotMessage = useCallback(async (payload: any) => {
@@ -738,6 +755,7 @@ export default function ExploreScreen() {
 function generateBooks(
   drinks: Drink[],
   ingredientMap: Map<number, Ingredient>,
+  maxIngredients: number = 12,
 ): [string, RecipeBook[]][] {
   /* helper: the first Alcohol found in the recipe */
   const baseSpirit = (d: Drink) => {
@@ -758,6 +776,7 @@ function generateBooks(
       `starter_${i}`,
       `Starter Pack #${i + 1}`,
       'Miscellaneous beginner load-out.',
+      maxIngredients,
     );
     if (!b) break;
     starterBooks.push(b);
@@ -778,6 +797,7 @@ function generateBooks(
       `spirit_${cat.toLowerCase().replace(/\s+/g, '_')}`,
       `${cat} Classics`,
       `Essential cocktails based on ${cat.toLowerCase()}.`,
+      maxIngredients,
     );
     if (b) spiritBooks.push(b);
   });
@@ -800,6 +820,7 @@ function generateBooks(
       `party_${idx}`,
       names[idx % names.length],
       'High-variety party load-out.',
+      maxIngredients,
     );
     attempts++; idx++;
     if (!b) continue;
