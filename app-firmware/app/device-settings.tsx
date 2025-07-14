@@ -306,10 +306,14 @@ export default function DeviceSettings() {
       console.error('Failed to publish slot-config:', err);
     }
   };
+  // Track config/volumes receipt with state so React updates reliably
+  const [gotConfig, setGotConfig] = useState(false);
+  const [gotVolumes, setGotVolumes] = useState(false);
+
   useEffect(() => {
     if (liquorbotId === '000') return;
-    let gotVolumes = false;
-    let gotConfig = false;
+    setGotConfig(false);
+    setGotVolumes(false);
     const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
       next: async (d) => {
         let msg: any = d.value;
@@ -319,20 +323,12 @@ export default function DeviceSettings() {
         // Handle slot config
         if (msg.action === 'CURRENT_CONFIG' && Array.isArray(msg.slots)) {
           setSlots(msg.slots.slice(0, slotCount));
-          gotConfig = true;
+          setGotConfig(true);
         }
         // Handle volume config
         if (msg.action === 'CURRENT_VOLUMES' && Array.isArray(msg.volumes)) {
           setVolumes(msg.volumes.slice(0, slotCount));
-          gotVolumes = true;
-          if (retryVolumesIntervalRef.current) {
-            clearInterval(retryVolumesIntervalRef.current);
-            retryVolumesIntervalRef.current = null;
-          }
-        }
-        // If both config and volumes are received, hide loading spinner
-        if (gotConfig && gotVolumes) {
-          setConfigLoading(false);
+          setGotVolumes(true);
         }
         // Handle single volume update
         if (msg.action === 'VOLUME_UPDATED' && typeof msg.slot === 'number' && typeof msg.volume === 'number') {
@@ -349,7 +345,6 @@ export default function DeviceSettings() {
     });
     if (isConnected && liquorbotId !== '000') {
       fetchCurrentConfig();
-      // Repeatedly request config and volumes until both are received
       retryConfigIntervalRef.current = setInterval(
         () => publishSlot({ action: 'GET_CONFIG' }),
         1500
@@ -371,6 +366,21 @@ export default function DeviceSettings() {
       }
     };
   }, [isConnected, liquorbotId, slotCount]);
+
+  // Stop polling and hide spinner as soon as both are received
+  useEffect(() => {
+    if (gotConfig && gotVolumes) {
+      setConfigLoading(false);
+      if (retryConfigIntervalRef.current) {
+        clearInterval(retryConfigIntervalRef.current);
+        retryConfigIntervalRef.current = null;
+      }
+      if (retryVolumesIntervalRef.current) {
+        clearInterval(retryVolumesIntervalRef.current);
+        retryVolumesIntervalRef.current = null;
+      }
+    }
+  }, [gotConfig, gotVolumes]);
 
   const fetchCurrentConfig = () => {
     if (!isConnected || liquorbotId === '000') return;
