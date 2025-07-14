@@ -114,13 +114,17 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
     resetHb();
     setIsConnected(false);
 
-    /* 2️⃣  update the in-memory ID */
-    setIdState(id);
+    /* 2️⃣  update slotCount from first two digits if valid */
+    let match = id.match(/^(\d{2})/);
+    let newSlotCount = 15;
+    if (!match && id.length >= 2 && /^\d+$/.test(id.slice(0, 2))) {
+      match = [id.slice(0, 2), id.slice(0, 2)];
+    }
+    if (match) newSlotCount = Number(match[1]);
+    setSlotCount(newSlotCount);
 
-    /* 3️⃣  update slotCount from first two digits if valid */
-    const match = id.match(/^(\d{2})/);
-    if (match) setSlotCount(Number(match[1]));
-    else setSlotCount(15); // fallback default
+    /* 3️⃣  update the in-memory ID */
+    setIdState(id);
 
     /* 4️⃣  persist or wipe stored pairing */
     if (currentUser) {
