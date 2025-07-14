@@ -296,6 +296,18 @@ void sendHeartbeat() {
     sendData(HEARTBEAT_TOPIC, "{\"msg\":\"heartbeat\"}");
 }
 
+/* ---------- Pour result notification (called from FreeRTOS task) ---------- */
+void notifyPourResult(bool success, const char *error) {
+    StaticJsonDocument<128> doc;
+    doc["action"] = "POUR_RESULT";
+    doc["success"] = success;
+    if (!success && error) {
+        doc["error"] = error;
+    }
+    serializeJson(doc, pourResultMessage);
+    pourResultPending = true;
+}
+
 /* -------------------------------------------------------------------------- */
 /*                       NVS SAVE / LOAD HELPERS                              */
 /* -------------------------------------------------------------------------- */
