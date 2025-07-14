@@ -28,11 +28,15 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
   useEffect(() => {
     (async () => {
       try {
+        console.log('[SignIn] Checking if already signed in...');
         if (await getCurrentUser()) {
+          console.log('[SignIn] Already signed in, redirecting to tabs.');
           if (modalMode && authModal?.close) authModal.close();
           else router.replace('/(tabs)');
         }
-      } catch {}
+      } catch (err) {
+        console.log('[SignIn] Not signed in:', err);
+      }
       finally { setIsLoading(false); }
     })();
   }, []);
@@ -41,15 +45,16 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
   const onSignInPress = async () => {
     setError('');
     setIsLoading(true);
+    console.log('[SignIn] Attempting sign in for', username);
     try {
       const { isSignedIn, nextStep } = await signIn({ username, password });
+      console.log('[SignIn] signIn result:', { isSignedIn, nextStep });
 
       if (isSignedIn) {
-        /* WAIT until full AWS creds (Identity ID + IoT keys) are ready.
-           forceRefresh guarantees we block until they arrive on first sign-in. */
+        console.log('[SignIn] Signed in, fetching session...');
         await fetchAuthSession({ forceRefresh: true });
+        console.log('[SignIn] Session fetched, opening sessionLoading modal...');
         if (modalMode && authModal?.open) {
-          /* swap content in the SAME sheet – keeps providers mounted */
           authModal.open('sessionLoading', {
             onFinish: () => authModal.close(),   // let SessionLoading close itself
             modalMode: true,
@@ -57,10 +62,11 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
         } else {
           router.replace('/auth/session-loading');
         }
-      return;
-    }
+        return;
+      }
 
       if (nextStep?.signInStep === 'CONFIRM_SIGN_UP') {
+        console.log('[SignIn] User needs to confirm sign up.');
         if (modalMode && authModal?.open) authModal.open('confirmCode', { username, password });
         else router.push({ pathname: './confirm-code', params: { username, password } });
         return;
@@ -68,6 +74,7 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
 
       setError('Additional authentication required (not implemented yet).');
     } catch (e: any) {
+      console.log('[SignIn] Sign in error:', e);
       if (e?.code === 'UserNotConfirmedException') {
         if (modalMode && authModal?.open) authModal.open('confirmCode', { username, password });
         else router.push({ pathname: './confirm-code', params: { username, password } });
