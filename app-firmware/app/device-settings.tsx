@@ -402,6 +402,8 @@ export default function DeviceSettings() {
   const ingName = (id: number | string) =>
     ingredients.find(i => i.id === Number(id))?.name ?? '';
 
+  const truncate = (str: string, n: number) => str && str.length > n ? str.slice(0, n - 1) + '…' : str;
+
   /*────────── Components ──────────*/
   const AnimatedIngredientItem = ({
     item,
@@ -718,8 +720,8 @@ export default function DeviceSettings() {
 
           {/* Slot config loading overlay (local to slots box) */}
           {configLoading && (
-            <View style={styles.slotsLoadingOverlay} pointerEvents="none">
-              <ActivityIndicator size="large" color="#CE975E" />
+            <View style={styles.slotsLoadingOverlay} pointerEvents="auto"> {/* Changed from none to auto */}
+              <ActivityIndicator size="large" color="#CE975E" style={{ marginTop: 100 }} />
             </View>
           )}
 
@@ -731,7 +733,15 @@ export default function DeviceSettings() {
             // Determine color based on volume
             let volumeBg = '#232323'; // default gray
             let volumeTextColor = '#CE975E'; // default gold text
-            if (ingredientId && typeof volumes[idx] === 'number' && !configLoading) {
+            let volumeButtonDisabled = false;
+            let volumeButtonStyle = {};
+            if (!ingName(ingredientId)) {
+              // No ingredient: gray out and disable
+              volumeBg = '#222';
+              volumeTextColor = '#555';
+              volumeButtonDisabled = true;
+              volumeButtonStyle = { opacity: 0.5 };
+            } else if (typeof volumes[idx] === 'number' && !configLoading) {
               if (volumes[idx] >= 1.5) {
                 volumeBg = '#63d44a'; // green
                 volumeTextColor = '#141414';
@@ -760,29 +770,45 @@ export default function DeviceSettings() {
                       setModalVisible(true);
                     }}
                   >
-                    <Text style={[styles.pickerButtonText, ingName(ingredientId) && styles.selectedPickerButtonText]}>
-                      {ingName(ingredientId) || 'Select Ingredient'}
+                    <Text style={[styles.pickerButtonText, ingName(ingredientId) && styles.selectedPickerButtonText]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {truncate(ingName(ingredientId), 14) || 'Select Ingredient'}
                     </Text>
                   </TouchableOpacity>
                   {ingName(ingredientId) && (
                     <TouchableOpacity
                       style={[styles.clearSlotOverlay, !isConnected && styles.clearSlotOverlayDisabled]}
-                      onPress={() => isConnected && handleSetSlot(idx, 0)}
+                      onPress={() => {
+                        if (isConnected) {
+                          handleSetSlot(idx, 0);
+                          setVolumes(prev => {
+                            const next = [...prev];
+                            next[idx] = 0;
+                            return next;
+                          });
+                          // Send volume clear to microcontroller as well
+                          publishSlot({ action: 'SET_VOLUME', slot: idx, volume: 0 });
+                        }
+                      }}
                       disabled={!isConnected}
                     >
                       <Text style={styles.clearSlotOverlayText}>X</Text>
                     </TouchableOpacity>
                   )}
                 </View>
-                {/* Updated: Volume display is now a button with dynamic color */}
+                {/* Updated: Volume display is now a button with dynamic color, grayed out and disabled if no ingredient */}
                 <TouchableOpacity
-                  style={[styles.volumeButton, { backgroundColor: volumeBg }]}
+                  style={[styles.volumeButton, { backgroundColor: volumeBg }, volumeButtonStyle]}
                   onPress={() => {
+                    if (volumeButtonDisabled) return;
                     setSelectedSlot(idx);
                     setModalInitialTab('volume');
                     setModalVisible(true);
                   }}
-                  activeOpacity={0.7}
+                  activeOpacity={volumeButtonDisabled ? 1 : 0.7}
+                  disabled={volumeButtonDisabled}
                 >
                   <Text style={[styles.volumeButtonText, { color: volumeTextColor }]}>{volumes[idx]?.toFixed(1)} L</Text>
                 </TouchableOpacity>
@@ -1114,8 +1140,9 @@ const styles = StyleSheet.create({
   slotsLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(20,20,20,0.85)',
-    justifyContent: 'center',
+    justifyContent: 'flex-start', // align spinner to top
     alignItems: 'center',
+    paddingTop: 10, // add space from the top
     zIndex: 10,
     borderRadius: 10,
   },

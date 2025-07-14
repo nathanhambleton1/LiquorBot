@@ -49,7 +49,8 @@ import * as Haptics from 'expo-haptics';
 import { AuthModalContext } from '../components/AuthModalContext';
 import { BlurView } from 'expo-blur';
 
-import { ToastAndroid } from 'react-native';
+import { ToastAndroid, AppState } from 'react-native';
+import * as Notifications from 'expo-notifications';
 
 Amplify.configure(config);
 const client = generateClient();
@@ -233,6 +234,7 @@ function DrinkItem({
   const [statusType, setStatusType] = useState<'success' | 'error' | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [scheduledNotificationId, setScheduledNotificationId] = useState<string | null>(null);
   const isDrinkMakeable = (drink: Drink) => {
     if (!drink.ingredients) return false;
     const needed = drink.ingredients
@@ -561,11 +563,23 @@ function DrinkItem({
               ? (() => { try { return JSON.parse(raw) } catch { return { message: raw } } })()
               : raw;
           const status = (payload.status ?? payload.result ?? payload.message ?? (typeof payload === 'string' ? payload : '')).toString().toLowerCase().trim();
+          const isSuccess = status === 'success' || payload.success === true;
 
           // --- NEW: handle ETA ---
           if (status === 'eta' && typeof payload.eta === 'number') {
+            // 1) schedule the notification for payload.eta seconds from now:
+            const notificationId = await Notifications.scheduleNotificationAsync({
+              content: {
+                title: 'LiquorBot: Drink Ready!',
+                body: `Your ${drink.name} has been poured, Enjoy!`,
+              },
+              trigger: { type: 'timeInterval', seconds: payload.eta, repeats: false } as any, // type workaround
+            });
+            // 2) store notificationId in state so you can cancel it
+            setScheduledNotificationId(notificationId);
+            // 3) start your countdown UI as before
             startCountdown(payload.eta);
-            // Log pour IMMEDIATELY on ETA, not just on success
+            // 4) you can log the pour immediately on ETA
             try {
               const user = await getCurrentUser();
               await logPouredDrink(user?.username ?? null);
@@ -576,15 +590,20 @@ function DrinkItem({
           }
           // -----------------------
 
-          if (status === 'success') {
-            // Haptic feedback: success jingle when pour is done
-            if (Platform.OS === 'ios') {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              // Show iOS alert when drink is ready
-              Alert.alert('Drink Ready', 'Your drink is ready! Enjoy.');
-            } else if (Platform.OS === 'android') {
-              // Show Android toast when drink is ready
-              ToastAndroid.show('Your drink is ready! Enjoy.', ToastAndroid.LONG);
+          if (isSuccess) {
+            // only show the in-app Alert if the app is frontmost
+            if (AppState.currentState === 'active') {
+              if (Platform.OS === 'ios') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                Alert.alert('Drink Ready', 'Your drink is ready! Enjoy.');
+              } else if (Platform.OS === 'android') {
+                ToastAndroid.show('Your drink is ready! Enjoy.', ToastAndroid.LONG);
+              }
+            }
+            // (optional) cancel the pending ETA notification
+            if (scheduledNotificationId) {
+              await Notifications.cancelScheduledNotificationAsync(scheduledNotificationId);
+              setScheduledNotificationId(null);
             }
             triggerStatus('success', 'Success! Your drink was poured – enjoy.');
             setCountdown(null); // clear countdown on success
@@ -594,6 +613,7 @@ function DrinkItem({
             } catch (e) {
               console.warn('✓ pour logged locally – failed to store in DB', e);
             }
+            // --- (no need to schedule another notification here) ---
             setLogging(false);
             clearTimeout(timeoutId);
           } else if (['fail', 'failed', 'error'].includes(status)) {
@@ -602,9 +622,13 @@ function DrinkItem({
                 ? ` – ${payload.error}`
                 : '';
             triggerStatus('error', `Pour Failed${reason}.`);
-            // Haptic feedback: long error vibration on pour failure
             if (Platform.OS === 'ios') {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            }
+            // Cancel any pending notification if pour failed
+            if (scheduledNotificationId) {
+              await Notifications.cancelScheduledNotificationAsync(scheduledNotificationId);
+              setScheduledNotificationId(null);
             }
             setLogging(false);
             clearTimeout(timeoutId);
@@ -623,7 +647,7 @@ function DrinkItem({
       sub.unsubscribe();
       clearTimeout(timeoutId);
     };
-  }, [logging, liquorbotId]);
+  }, [logging, liquorbotId, scheduledNotificationId]);
 
   const handleToggleLike = () => toggleFavorite(drink.id);
   const canEdit = drink.isCustom && currentUserId && currentUserId === drink.owner;
@@ -850,6 +874,21 @@ export default function MenuScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const { isConnected, slots, liquorbotId, isAdmin } = useLiquorBot();
   const isFocused = useIsFocused();
+
+  // --- MQTT receive topic logger for debugging pour results ---
+  React.useEffect(() => {
+    if (!liquorbotId) return;
+    const topic = `liquorbot/liquorbot${liquorbotId}/receive`;
+    const sub = pubsub.subscribe({ topics: [topic] }).subscribe({
+      next: (evt) => {
+        console.log('[MenuScreen] MQTT receive topic message:', evt);
+      },
+      error: (err) => {
+        console.error('[MenuScreen] MQTT receive topic error:', err);
+      },
+    });
+    return () => sub.unsubscribe();
+  }, [liquorbotId]);
 
   /* ------------------------- STATE ------------------------- */
   const [drinks, setDrinks] = useState<Drink[]>([]);

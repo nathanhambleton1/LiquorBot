@@ -305,15 +305,25 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
     }
   }, [liquorbotId, liquorBotCtx.isAdmin]);
 
+  // Remove all liquorbotId checks for admin/non-admin
+  useEffect(() => {
+    console.log('[SessionLoading] isAdmin:', liquorBotCtx.isAdmin, 'liquorbotId:', liquorbotId);
+    setProviderReady(true);
+  }, [liquorbotId, liquorBotCtx.isAdmin]);
+
   // Check for signed-in user on mount
   useEffect(() => {
     let isMounted = true;
     (async () => {
       try {
+        console.log('[SessionLoading] Checking for current user...');
         await getCurrentUser();
-        if (isMounted) setCheckingUser(false);
-      } catch {
-        // No user signed in, hide session loading and go to home/index page
+        if (isMounted) {
+          console.log('[SessionLoading] User found, continuing.');
+          setCheckingUser(false);
+        }
+      } catch (err) {
+        console.log('[SessionLoading] No user found or error:', err);
         if (isMounted) {
           setCheckingUser(false);
           router.replace('/'); // Go to home/index page
@@ -323,27 +333,25 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
     return () => { isMounted = false; };
   }, []);
 
-  // Only run bootstrap when providerReady is true and liquorbotId is valid
+  // Only run bootstrap when providerReady is true
   useEffect(() => {
-    if (checkingUser) return; // Wait for user check
-    if (!providerReady) return;
-    // For admins, only run if liquorbotId is not '000'
-    if (liquorBotCtx.isAdmin && (!liquorbotId || liquorbotId === '000')) return;
+    if (checkingUser) { console.log('[SessionLoading] Waiting for user check...'); return; }
+    if (!providerReady) { console.log('[SessionLoading] Provider not ready...'); return; }
     let retryTimeout: NodeJS.Timeout | null = null;
     const runBootstrap = () => {
-      // console.log('[DEBUG] runBootstrap called, pct:', pct, 'online:', online);
+      console.log('[SessionLoading] runBootstrap called, pct:', pct, 'online:', online);
       if (!online) {
-        // console.log('[DEBUG] runBootstrap: skipping, offline');
-        return;              // hold until internet
+        console.log('[SessionLoading] Offline, waiting for connection.');
+        return;
       }
       if (pct > 0 && pct < 0.99) {
-        // console.log('[DEBUG] runBootstrap: skipping, pct in progress', pct);
-        return; // already running
+        console.log('[SessionLoading] Progress in progress, skipping.');
+        return;
       }
       setPct(0);
-      // console.log('[DEBUG] runBootstrap: calling bootstrap');
+      console.log('[SessionLoading] Calling bootstrap...');
       bootstrap().catch(err => {
-        console.warn('bootstrap error →', err);
+        console.warn('[SessionLoading] bootstrap error →', err);
         setStatus('Unexpected error – retrying…');
         if (retryCount.current < maxRetries) {
           const delay = Math.min(2000 * Math.pow(2, retryCount.current), 20000); // exponential backoff, max 20s
@@ -351,19 +359,16 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
           retryTimeout = setTimeout(runBootstrap, delay);
         } else {
           setStatus('Failed to load after several attempts. Please restart the app.');
-          // Automatically close the session loading popup/modal if possible
           if (typeof onRequestCloseWithAnimation === 'function') {
             onRequestCloseWithAnimation();
           } else if (modalMode && typeof onFinish === 'function') {
             onFinish();
           } else {
-            // fallback: navigate to home/index
             router.replace('/');
           }
         }
       });
     };
-
     const appStateCb = (s: AppStateStatus) => s === 'active' && runBootstrap();
     const unsubApp   = AppState.addEventListener('change', appStateCb);
     runBootstrap();
@@ -375,24 +380,22 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
 
   /* --------------- main bootstrap --------------- */
   async function bootstrap(): Promise<void> {
-    // console.log('[DEBUG] bootstrap called, liquorbotId:', liquorbotId);
+    console.log('[SessionLoading] bootstrap called, liquorbotId:', liquorbotId);
     cancel.current = false;
-    // 0 ▸ check for internet connectivity (block until online)
     setStatus('Checking internet connection…'); bump(0.01);
     const netState = await NetInfo.fetch();
+    console.log('[SessionLoading] NetInfo:', netState);
     if (!netState.isConnected) {
       setStatus('No internet connection. Please connect to the internet to continue.'); bump(0.01);
       return;
     }
-    // 0.5 ▸ check device heartbeat if paired
     if (liquorbotId && liquorbotId !== '000') {
       setStatus('Communicating with your LiquorBot device…'); bump(0.015);
-      // console.log('[DEBUG] About to call checkHeartbeatOnce with', liquorbotId);
+      console.log('[SessionLoading] About to call checkHeartbeatOnce with', liquorbotId);
       const ok = await checkHeartbeatOnce(liquorbotId);
-      // console.log('[DEBUG] checkHeartbeatOnce returned', ok);
+      console.log('[SessionLoading] checkHeartbeatOnce returned', ok);
       if (ok) {
         setStatus('Device is online and ready!'); bump(0.02);
-        // --- NEW: Sync device config ---
         setStatus('Syncing device configuration…'); bump(0.025);
         const slotTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
         let configReceived = false;
@@ -421,21 +424,21 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
             error: (err) => {
               if (!configReceived) {
                 setStatus('Failed to sync device config (will retry in background)…');
+                console.warn('[SessionLoading] Device config error:', err);
                 sub.unsubscribe();
                 resolve();
               }
             },
           });
-          // Send GET_CONFIG
           try {
             const msg = { action: 'GET_CONFIG' };
             await pubsub.publish({ topics: [slotTopic], message: msg });
           } catch (err) {
             setStatus('Failed to request device config.');
+            console.warn('[SessionLoading] Failed to request device config:', err);
             sub.unsubscribe();
             resolve();
           }
-          // Timeout after 1.5s
           setTimeout(() => {
             if (!configReceived) {
               setStatus('Device config not received (will retry in background)…');
@@ -446,49 +449,43 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
         });
       } else {
         setStatus('Device not responding (will retry in background)…'); bump(0.02);
+        console.warn('[SessionLoading] Device not responding.');
       }
     }
-
-    // 1 ▸ clear image cache if needed
     const IMG_CACHE_VER = 1;
     const ver = await AsyncStorage.getItem('imgCacheVer');
+    console.log('[SessionLoading] imgCacheVer:', ver);
     if (parseInt(ver ?? '0', 10) < IMG_CACHE_VER) {
       setStatus('Clearing old image cache…'); bump(0.025);
       await clearImageCache();
       await AsyncStorage.setItem('imgCacheVer', String(IMG_CACHE_VER));
+      console.log('[SessionLoading] Cleared image cache.');
     }
-
-    // 1.5 ▸ check for first-time launch
     const [haveDrinks, haveIngs] = await AsyncStorage.multiGet(['drinksJson', 'ingredientsJson']);
     const coldStart = !(haveDrinks[1] && haveIngs[1]);
     setFirstRun(coldStart);
+    console.log('[SessionLoading] coldStart:', coldStart, 'online:', online);
     if (coldStart && !online) {
       setStatus('Internet required to complete first-time setup.'); bump(0.03);
       return;
     }
-
     try {
-      // 2 ▸ refresh Cognito session
       setStatus('Refreshing secure login…');
+      console.log('[SessionLoading] Calling fetchAuthSession...');
       const session = await fetchAuthSession({ forceRefresh: true });
+      console.log('[SessionLoading] fetchAuthSession result:', session);
       bump(0.08);
-
-      // 3 ▸ IoT policy
       setStatus('Configuring secure IoT connection…');
+      console.log('[SessionLoading] Attaching IoT policy...');
       await attachIoTPolicy(); bump(0.12);
-
-      // 4 ▸ logo + BG
       setStatus('Loading app assets…');
       await Asset.loadAsync([LOGO, require('@/assets/images/home-background.jpg')]);
       bump(0.16);
-
-      // 5 ▸ pull JSON (or use cache when offline)
       let drinksRaw = haveDrinks[1] ?? '';
       let ingsRaw   = haveIngs[1]   ?? '';
       if (online) {
         setStatus('Checking for menu updates…');
         try {
-          // Always fetch from public S3 URL
           const dUrl = getPublicS3Url('drinkMenu/drinks.json');
           const iUrl = getPublicS3Url('drinkMenu/ingredients.json');
           const [dRes, iRes] = await Promise.all([
@@ -507,11 +504,12 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
             ingsRaw = iTxt;
             await AsyncStorage.setItem('ingredientsJson', ingsRaw);
           }
+          console.log('[SessionLoading] Menu JSON loaded.');
         } catch (err) {
-          console.warn('Menu JSON fetch error →', err);
+          console.warn('[SessionLoading] Menu JSON fetch error →', err);
           if (!drinksRaw || !ingsRaw) {
             setStatus('Failed to load menu JSON. Check your internet connection.');
-            throw err;  // abort bootstrap to trigger retry logic
+            throw err;
           } else {
             setStatus('Using cached menu…');
           }
@@ -521,11 +519,8 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
         return;
       }
       bump(0.22);
-      // Defensive: never parse empty JSON
       if (!drinksRaw) throw new Error('No drinks JSON available');
       if (!ingsRaw) throw new Error('No ingredients JSON available');
-
-      // 6 ▸ cache images (signed-URL fallback) - FIXED SECTION
       setStatus('Caching drink and glass images…');
       const drinks = JSON.parse(drinksRaw) as { id:number; image:string }[];
       const glassKeys = [
@@ -539,10 +534,8 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
         id: 10_000 + idx,
         image: k
       }));
-      // Use robust cacheAllDrinkImages for both drinks and glasses
       await cacheAllDrinkImages([...drinks, ...glassDesc], bump, 0.22, 0.68);
-
-      // 7 ▸ cache upcoming events locally (non-critical)
+      console.log('[SessionLoading] Images cached.');
       setStatus('Loading your upcoming events…');
       try {
         const username = session.tokens?.idToken?.payload['cognito:username'] as string;
@@ -555,26 +548,26 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
           });
           await AsyncStorage.setItem('cachedEvents', JSON.stringify(data?.listEvents?.items ?? []));
         }
-      } catch {/* ignore */ }
+      } catch (err) {
+        console.warn('[SessionLoading] Failed to load events:', err);
+      }
       bump(0.90);
-
-      // 7.5 ▸ preload calendar/index page events (ensure ready for home screen)
       setStatus('Preloading events and calendar…');
       try {
         const cached = await AsyncStorage.getItem('cachedEvents');
         if (cached) {
-          // Optionally parse to ensure valid JSON and ready for index page
           JSON.parse(cached);
         }
-      } catch {/* ignore */ }
+      } catch (err) {
+        console.warn('[SessionLoading] Failed to preload events:', err);
+      }
       bump(0.95);
-
-      // 8 ▸ done
       await AsyncStorage.setItem('sessionLoaded', 'true');
       if (!cancel.current) {
         setPct(1);
         setStatus('Ready!');
-        retryCount.current = 0; // reset retry count on success
+        retryCount.current = 0;
+        console.log('[SessionLoading] Session loading complete.');
         if (typeof onRequestCloseWithAnimation === 'function') {
           onRequestCloseWithAnimation();
         } else {
@@ -586,6 +579,7 @@ export default function SessionLoading({ modalMode, onFinish, onRequestCloseWith
         return;
       }
     } catch (err: any) {
+      console.warn('[SessionLoading] Bootstrap error:', err);
       if (!online) { setStatus('Connection lost – waiting…'); return; }
       throw err;
     }

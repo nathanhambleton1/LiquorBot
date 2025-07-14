@@ -11,8 +11,7 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { signIn, getCurrentUser } from 'aws-amplify/auth';
-import { MaterialIcons } from '@expo/vector-icons';
+import { signIn, getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';import { MaterialIcons } from '@expo/vector-icons';
 import { AuthModalContext } from '../components/AuthModalContext';
 
 export default function SignIn({ modalMode }: { modalMode?: boolean }) {
@@ -29,11 +28,15 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
   useEffect(() => {
     (async () => {
       try {
+        console.log('[SignIn] Checking if already signed in...');
         if (await getCurrentUser()) {
+          console.log('[SignIn] Already signed in, redirecting to tabs.');
           if (modalMode && authModal?.close) authModal.close();
           else router.replace('/(tabs)');
         }
-      } catch {}
+      } catch (err) {
+        console.log('[SignIn] Not signed in:', err);
+      }
       finally { setIsLoading(false); }
     })();
   }, []);
@@ -42,32 +45,28 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
   const onSignInPress = async () => {
     setError('');
     setIsLoading(true);
+    console.log('[SignIn] Attempting sign in for', username);
     try {
       const { isSignedIn, nextStep } = await signIn({ username, password });
+      console.log('[SignIn] signIn result:', { isSignedIn, nextStep });
 
       if (isSignedIn) {
-        // Wait for Cognito session to be available before proceeding
-        try {
-          await getCurrentUser(); // Ensures session is ready
-        } catch {}
-        if (authModal?.close) await new Promise(res => {
-          authModal.close();                  // 1. slide sheet out
-          /* wait for the slide-out animation to complete (500 ms in AuthModal) */
-          setTimeout(res, 520);
-      });
-      /* 2. now bring up the loading sheet (or page) cleanly               */
-      if (modalMode && authModal?.open) {
-        authModal.open('sessionLoading', {
-          onFinish: () => authModal.close(),
-          modalMode: true,
-        });
-      } else {
-        router.replace('/auth/session-loading');
+        console.log('[SignIn] Signed in, fetching session...');
+        await fetchAuthSession({ forceRefresh: true });
+        console.log('[SignIn] Session fetched, opening sessionLoading modal...');
+        if (modalMode && authModal?.open) {
+          authModal.open('sessionLoading', {
+            onFinish: () => authModal.close(),   // let SessionLoading close itself
+            modalMode: true,
+          });
+        } else {
+          router.replace('/auth/session-loading');
+        }
+        return;
       }
-      return;
-    }
 
       if (nextStep?.signInStep === 'CONFIRM_SIGN_UP') {
+        console.log('[SignIn] User needs to confirm sign up.');
         if (modalMode && authModal?.open) authModal.open('confirmCode', { username, password });
         else router.push({ pathname: './confirm-code', params: { username, password } });
         return;
@@ -75,6 +74,7 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
 
       setError('Additional authentication required (not implemented yet).');
     } catch (e: any) {
+      console.log('[SignIn] Sign in error:', e);
       if (e?.code === 'UserNotConfirmedException') {
         if (modalMode && authModal?.open) authModal.open('confirmCode', { username, password });
         else router.push({ pathname: './confirm-code', params: { username, password } });

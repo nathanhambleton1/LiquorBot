@@ -32,6 +32,8 @@ import { eventsByCode }   from '../../src/graphql/queries';
 import { joinEvent }      from '../../src/graphql/mutations';
 import { AuthModalContext } from '../components/AuthModalContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';import { BlurView } from 'expo-blur';
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
 
 // -------------------- types --------------------
 interface AppEvent {
@@ -416,6 +418,24 @@ export default function Index() {
       if (interval) clearInterval(interval);
     };
   }, [currentUser, liquorbotId, loadCachedEvents, fetchAndCacheEvents]);
+
+  // Ask for notification permissions on first app open
+  useEffect(() => {
+    (async () => {
+      // Only ask once: use AsyncStorage flag
+      const asked = await AsyncStorage.getItem('hasAskedNotificationPermission');
+      if (asked === 'true') return;
+      let status = (await Notifications.getPermissionsAsync()).status;
+      if (status !== 'granted') {
+        status = (await Notifications.requestPermissionsAsync()).status;
+      }
+      if (status === 'granted') {
+        // Optionally: get push token here if you want to use remote push
+        // const token = (await Notifications.getExpoPushTokenAsync()).data;
+      }
+      await AsyncStorage.setItem('hasAskedNotificationPermission', 'true');
+    })();
+  }, []);
 
   /* ───────────────────────── UI ───────────────────────── */
   return (
