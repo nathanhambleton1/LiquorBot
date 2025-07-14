@@ -21,6 +21,11 @@ static Preferences prefs;
 static uint16_t slotConfig[15] = {0};
 static float    slotVolumes[15] = {0}; // NEW: volume per slot
 
+// Get slot count from first two digits of LIQUORBOT_ID
+static uint8_t getSlotCount() {
+    return (LIQUORBOT_ID[0] - '0') * 10 + (LIQUORBOT_ID[1] - '0');
+}
+
 /* Wi‑Fi + MQTT objects */
 WiFiClientSecure secureClient;
 PubSubClient     mqttClient(secureClient);
@@ -39,7 +44,8 @@ void sendVolumeConfig() {
     StaticJsonDocument<256> doc;
     doc["action"] = "CURRENT_VOLUMES";
     JsonArray arr = doc.createNestedArray("volumes");
-    for (int i = 0; i < 15; ++i) arr.add(slotVolumes[i]);
+    uint8_t slotCount = getSlotCount();
+    for (int i = 0; i < slotCount; ++i) arr.add(slotVolumes[i]);
     serializeJson(doc, volumeConfigMessage);
     volumeConfigPending = true;
 }
@@ -179,6 +185,7 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
         if (deserializeJson(doc, message) == DeserializationError::Ok) {
             // Check for volume get/set
             const char *action = doc["action"];
+            uint8_t slotCount = getSlotCount();
             if (action && strcmp(action, "GET_VOLUMES") == 0) {
                 sendVolumeConfig();
                 return;
@@ -186,7 +193,7 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
             if (action && strcmp(action, "SET_VOLUME") == 0) {
                 int slot = doc["slot"];
                 float vol = doc["volume"];
-                if (slot >= 0 && slot < 15) {
+                if (slot >= 0 && slot < slotCount) {
                     slotVolumes[slot] = vol;
                     saveSlotConfigToNVS();
                     notifyVolumeUpdate(slot, vol);
@@ -249,7 +256,8 @@ static void handleSlotConfigMessage(const String &json) {
         StaticJsonDocument<256> resp;
         resp["action"] = "CURRENT_CONFIG";
         JsonArray arr  = resp.createNestedArray("slots");
-        for (uint8_t i = 0; i < 15; ++i) arr.add(slotConfig[i]);
+        uint8_t slotCount = getSlotCount();
+        for (uint8_t i = 0; i < slotCount; ++i) arr.add(slotConfig[i]);
 
         String out;
         serializeJson(resp, out);
@@ -261,18 +269,20 @@ static void handleSlotConfigMessage(const String &json) {
     else if (strcmp(action, "SET_SLOT") == 0) {
         int slotIdx      = doc["slot"];       // 1‑based from app
         int ingredientId = doc["ingredientId"];
-        if (slotIdx >= 1 && slotIdx <= 15) {
+        uint8_t slotCount = getSlotCount();
+        if (slotIdx >= 1 && slotIdx <= slotCount) {
             slotConfig[slotIdx - 1] = ingredientId;
             saveSlotConfigToNVS();
             Serial.printf("Slot %d ← %d\n", slotIdx, ingredientId);
         } else {
-            Serial.println("Slot index out of range (1‑15).");
+            Serial.println("Slot index out of range (1‑slotCount).");
         }
     }
 
     /* CLEAR_CONFIG */
     else if (strcmp(action, "CLEAR_CONFIG") == 0) {
-        memset(slotConfig, 0, sizeof(slotConfig));
+        uint8_t slotCount = getSlotCount();
+        for (uint8_t i = 0; i < slotCount; ++i) slotConfig[i] = 0;
         saveSlotConfigToNVS();
         Serial.println("All slots cleared.");
     }

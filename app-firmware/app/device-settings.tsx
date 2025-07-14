@@ -294,7 +294,8 @@ export default function DeviceSettings() {
 
   /*────────── Slot-config MQTT subscribe/publish ──────────*/
   const slotTopic = `liquorbot/liquorbot${liquorbotId}/slot-config`;
-  const retryIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const retryConfigIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const retryVolumesIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const publishSlot = async (payload: any) => {
     try {
       await pubsub.publish({
@@ -306,7 +307,8 @@ export default function DeviceSettings() {
     }
   };
   useEffect(() => {
-    if (liquorbotId === '000') return; // Don't subscribe or fetch config if disconnected
+    if (liquorbotId === '000') return;
+    let gotVolumes = false;
     const sub = pubsub.subscribe({ topics: [slotTopic] }).subscribe({
       next: async (d) => {
         let msg: any = d.value;
@@ -320,6 +322,11 @@ export default function DeviceSettings() {
         // Handle volume config
         if (msg.action === 'CURRENT_VOLUMES' && Array.isArray(msg.volumes)) {
           setVolumes(msg.volumes.slice(0, slotCount));
+          gotVolumes = true;
+          if (retryVolumesIntervalRef.current) {
+            clearInterval(retryVolumesIntervalRef.current);
+            retryVolumesIntervalRef.current = null;
+          }
         }
         // Handle single volume update
         if (msg.action === 'VOLUME_UPDATED' && typeof msg.slot === 'number' && typeof msg.volume === 'number') {
@@ -336,21 +343,28 @@ export default function DeviceSettings() {
     });
     if (isConnected && liquorbotId !== '000') {
       fetchCurrentConfig();
-      // Also request volumes
-      publishSlot({ action: 'GET_VOLUMES' });
-      retryIntervalRef.current = setInterval(
+      // Repeatedly request config and volumes until both are received
+      retryConfigIntervalRef.current = setInterval(
         () => publishSlot({ action: 'GET_CONFIG' }),
+        1500
+      );
+      retryVolumesIntervalRef.current = setInterval(
+        () => publishSlot({ action: 'GET_VOLUMES' }),
         1500
       );
     }
     return () => {
       sub.unsubscribe();
-      if (retryIntervalRef.current) {
-        clearInterval(retryIntervalRef.current);
-        retryIntervalRef.current = null;
+      if (retryConfigIntervalRef.current) {
+        clearInterval(retryConfigIntervalRef.current);
+        retryConfigIntervalRef.current = null;
+      }
+      if (retryVolumesIntervalRef.current) {
+        clearInterval(retryVolumesIntervalRef.current);
+        retryVolumesIntervalRef.current = null;
       }
     };
-  }, [isConnected, liquorbotId, slotCount]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isConnected, liquorbotId, slotCount]);
 
   const fetchCurrentConfig = () => {
     if (!isConnected || liquorbotId === '000') return;
