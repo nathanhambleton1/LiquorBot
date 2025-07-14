@@ -630,7 +630,7 @@ export default function ExploreScreen() {
     );
     try {
       const sortedIds = sortIngredientsByType(book.ingredientIds, ingredientMap);
-      const padded = Array.from({ length: 15 }, (_, i) =>
+      const padded = Array.from({ length: slotCount }, (_, i) =>
         i < sortedIds.length ? sortedIds[i] : 0,
       );
       await Promise.all(

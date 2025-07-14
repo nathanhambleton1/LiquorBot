@@ -84,7 +84,7 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
   /* ---------------- DEVICE ID STATE ---------------- */
   const [liquorbotId, setIdState] = useState('000');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [slotCount, setSlotCount] = useState<number>(15); // default 15
+  const [slotCount, setSlotCount] = useState<number>(12); // default 12
 
   /* last-known heartbeat */
   const lastHb     = useRef(0);
@@ -92,7 +92,7 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
 
   /* connection flag & slot map */
   const [isConnected, setIsConnected] = useState(false);
-  const [slots,       setSlots]       = useState<number[]>(Array(15).fill(0));
+  const [slots,       setSlots]       = useState<number[]>(Array(12).fill(0));
 
   /* bump-tick to force resubscribe */
   const [tick, setTick] = useState(0);
@@ -116,7 +116,7 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
 
     /* 2️⃣  update slotCount from first two digits if valid */
     let match = id.match(/^(\d{2})/);
-    let newSlotCount = 15;
+    let newSlotCount = 12;
     if (!match && id.length >= 2 && /^\d+$/.test(id.slice(0, 2))) {
       match = [id.slice(0, 2), id.slice(0, 2)];
     }
