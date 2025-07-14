@@ -11,8 +11,7 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { signIn, getCurrentUser } from 'aws-amplify/auth';
-import { MaterialIcons } from '@expo/vector-icons';
+import { signIn, getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';import { MaterialIcons } from '@expo/vector-icons';
 import { AuthModalContext } from '../components/AuthModalContext';
 
 export default function SignIn({ modalMode }: { modalMode?: boolean }) {
@@ -46,24 +45,18 @@ export default function SignIn({ modalMode }: { modalMode?: boolean }) {
       const { isSignedIn, nextStep } = await signIn({ username, password });
 
       if (isSignedIn) {
-        // Wait for Cognito session to be available before proceeding
-        try {
-          await getCurrentUser(); // Ensures session is ready
-        } catch {}
-        if (authModal?.close) await new Promise(res => {
-          authModal.close();                  // 1. slide sheet out
-          /* wait for the slide-out animation to complete (500 ms in AuthModal) */
-          setTimeout(res, 520);
-      });
-      /* 2. now bring up the loading sheet (or page) cleanly               */
-      if (modalMode && authModal?.open) {
-        authModal.open('sessionLoading', {
-          onFinish: () => authModal.close(),
-          modalMode: true,
-        });
-      } else {
-        router.replace('/auth/session-loading');
-      }
+        /* WAIT until full AWS creds (Identity ID + IoT keys) are ready.
+           forceRefresh guarantees we block until they arrive on first sign-in. */
+        await fetchAuthSession({ forceRefresh: true });
+        if (modalMode && authModal?.open) {
+          /* swap content in the SAME sheet – keeps providers mounted */
+          authModal.open('sessionLoading', {
+            onFinish: () => authModal.close(),   // let SessionLoading close itself
+            modalMode: true,
+          });
+        } else {
+          router.replace('/auth/session-loading');
+        }
       return;
     }
 

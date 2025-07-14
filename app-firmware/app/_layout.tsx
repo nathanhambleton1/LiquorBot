@@ -34,6 +34,14 @@ import { AuthModalProvider } from './components/AuthModalContext';
 import AuthModal from './components/AuthModal';
 import SessionLoadingOnStart from './components/SessionLoadingOnStart';
 
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert:    true,   // <-- show the banner/alert
+    shouldPlaySound:    true,   // <-- play the sound
+    shouldSetBadge:     false,  // <-- update the app icon badge
+  }),
+});
+
 export default function RootLayout() {
   // Show session loading on cold start
   const authModal = useContext(AuthModalContext);

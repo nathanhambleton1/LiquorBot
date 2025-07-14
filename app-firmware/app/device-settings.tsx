@@ -402,6 +402,8 @@ export default function DeviceSettings() {
   const ingName = (id: number | string) =>
     ingredients.find(i => i.id === Number(id))?.name ?? '';
 
+  const truncate = (str: string, n: number) => str && str.length > n ? str.slice(0, n - 1) + '…' : str;
+
   /*────────── Components ──────────*/
   const AnimatedIngredientItem = ({
     item,
@@ -760,8 +762,11 @@ export default function DeviceSettings() {
                       setModalVisible(true);
                     }}
                   >
-                    <Text style={[styles.pickerButtonText, ingName(ingredientId) && styles.selectedPickerButtonText]}>
-                      {ingName(ingredientId) || 'Select Ingredient'}
+                    <Text style={[styles.pickerButtonText, ingName(ingredientId) && styles.selectedPickerButtonText]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {truncate(ingName(ingredientId), 14) || 'Select Ingredient'}
                     </Text>
                   </TouchableOpacity>
                   {ingName(ingredientId) && (
