@@ -16,7 +16,8 @@
  
  #include <Arduino.h>
  
- #define LED_COUNT 1
+ // 24-pixel RGB ring
+ #define LED_COUNT 24
  
  // Initialize the LED ring (call once in setup)
  void initLED();
@@ -39,8 +40,8 @@
  void ledOff();
 
  // State-based LED feedback helpers
- void ledPouring();   // Fade to green for POURING state
+ void ledPouring();   // Flash + fade to green for POURING state
  void ledError();     // Fade to red for ERROR state
- void ledIdle();      // Fade to white for IDLE state
+ void ledIdle();      // Fade to white for IDLE state (always-on white idle)
  
  #endif // LED_CONTROL_H

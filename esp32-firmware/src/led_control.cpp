@@ -29,6 +29,8 @@ void initLED() {
   strip.begin();
   strip.show(); // Initialize all pixels to 'off'
   currentColor = strip.Color(0, 0, 0);
+  // Immediately fade to idle (white) on startup
+  fadeToWhite();
 }
 
 void setLEDColor(uint32_t color) {
@@ -41,27 +43,21 @@ void setLEDColor(uint32_t color) {
 
 void fadeToColor(uint32_t targetColor) {
   uint16_t stepDelay = DEFAULT_FADE_DURATION / DEFAULT_STEPS;
-  
   // Extract current RGB components
   uint8_t currR = (currentColor >> 16) & 0xFF;
   uint8_t currG = (currentColor >> 8) & 0xFF;
   uint8_t currB = currentColor & 0xFF;
-  
   // Extract target RGB components
   uint8_t targetR = (targetColor >> 16) & 0xFF;
   uint8_t targetG = (targetColor >> 8) & 0xFF;
   uint8_t targetB = targetColor & 0xFF;
-  
   // Calculate per-step increments
   float stepR = (targetR - currR) / (float) DEFAULT_STEPS;
   float stepG = (targetG - currG) / (float) DEFAULT_STEPS;
   float stepB = (targetB - currB) / (float) DEFAULT_STEPS;
-  
   float r = currR, g = currG, b = currB;
   for (uint8_t i = 0; i < DEFAULT_STEPS; i++) {
-    r += stepR;
-    g += stepG;
-    b += stepB;
+    r += stepR; g += stepG; b += stepB;
     setLEDColor(strip.Color((uint8_t)r, (uint8_t)g, (uint8_t)b));
     delay(stepDelay);
   }
@@ -69,30 +65,24 @@ void fadeToColor(uint32_t targetColor) {
   setLEDColor(targetColor);
 }
 
-void fadeToRed() {
-  fadeToColor(strip.Color(255, 0, 0));
-}
+void fadeToRed()   { fadeToColor(strip.Color(255, 0, 0)); }
+void fadeToGreen() { fadeToColor(strip.Color(0, 255, 0)); }
+void fadeToWhite() { fadeToColor(strip.Color(255, 255, 255)); }
 
-void fadeToGreen() {
-  fadeToColor(strip.Color(0, 255, 0));
-}
+void ledOn()  { fadeToWhite(); }
+void ledOff() { fadeToColor(strip.Color(0, 0, 0)); }
 
-void fadeToWhite() {
-  fadeToColor(strip.Color(255, 255, 255));
-}
-
-void ledOn() {
-  // Fade from black to white
-  fadeToColor(strip.Color(255, 255, 255));
-}
-
-void ledOff() {
-  // Fade from current color to black
-  fadeToColor(strip.Color(0, 0, 0));
+// Helper: brief flash effect (white -> off -> target) to add attention
+static void flashTo(uint32_t targetColor) {
+  // quick white flash
+  setLEDColor(strip.Color(255,255,255)); delay(120);
+  setLEDColor(strip.Color(0,0,0));       delay(80);
+  fadeToColor(targetColor);
 }
 
 void ledPouring() {
-  fadeToGreen();
+  // Flash then fade to green
+  flashTo(strip.Color(0, 255, 60)); // slightly tinted green
 }
 
 void ledError() {
@@ -100,5 +90,6 @@ void ledError() {
 }
 
 void ledIdle() {
+  // Return to steady white over a couple seconds
   fadeToWhite();
 }

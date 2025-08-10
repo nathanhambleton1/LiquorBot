@@ -1,0 +1,376 @@
+/*  drink_controller.cpp  – OLD-HARDWARE (GPIO) BACK-PORT
+ *  Works with the original MOSFET-driven LiquorBot (individual GPIO pins)
+ *  Author: Nathan Hambleton – back-port 08 Jun 2025 by ChatGPT
+ * -------------------------------------------------------------------------- */
+
+// PWM setup for PUMP1 (ESP32)
+#ifndef PUMP1_PWM_CHANNEL
+#define PUMP1_PWM_CHANNEL 0
+#endif
+#ifndef PUMP1_PWM_FREQ
+#define PUMP1_PWM_FREQ 1000
+#endif
+#ifndef PUMP1_PWM_RES
+#define PUMP1_PWM_RES 8
+#endif
+
+#include <Arduino.h>
+#include <vector>
+#include <algorithm>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <ArduinoJson.h>  // Include ArduinoJson library for JSON handling
+
+#include "state_manager.h"   // setState(), isBusy()
+#include "aws_manager.h"     // notifyPourResult()
+#include "pin_config.h"      // PUMP1_PIN (use DRIVER1+ 17)
+#include "led_control.h"
+
+// Cleaning durations (in milliseconds)
+#ifndef CLEAN_WATER_MS
+#define CLEAN_WATER_MS 2000
+#endif
+#ifndef CLEAN_AIR_MS
+#define CLEAN_AIR_MS 3000
+#endif
+
+/* ---------------- SOLENOID + OUTPUT PINS (original hardware) -------------- */
+#define SOL_OUTPUT_PIN  23   // Combined outlet valve (was SOL_OUTPUT)
+
+static const uint8_t SOL_PINS[14] = {
+    13,  /* SOL_1  */
+    12,  /* SOL_2  */
+    14,  /* SOL_3  */
+    27,  /* SOL_4  */
+    26,  /* SOL_5  */
+    25,  /* SOL_6  */
+    33,  /* SOL_7  */
+    19,  /* SOL_8  */
+    18,  /* SOL_9  */
+     5,  /* SOL_10 */
+     4,  /* SOL_11 */
+    32,  /* SOL_12 */
+    21,  /* SOL_13 (WATER) */
+    22   /* SOL_14 (AIR)   */
+};
+
+/* ---------------------------- TYPES --------------------------------------- */
+struct IngredientCommand {
+    int   slot;      // 1-13  (14-16 ignored on old hardware)
+    float amount;    // ounces
+    int   priority;  // lower = earlier
+};
+
+/* ------------------------ FORWARD DECLS ----------------------------------- */
+static void setSolenoid(int slot, bool on);
+static void dispenseDrink(std::vector<IngredientCommand> &parsed);
+static std::vector<IngredientCommand> parseDrinkCommand(const String &str);
+static void pourDrinkTask(void *param);
+static float flowRate(int numOpen);
+static void dispenseParallelGroup(std::vector<IngredientCommand> &group);
+void cleanupDrinkController();
+static float estimatePourTime(const std::vector<IngredientCommand> &parsed);
+
+/* -------------------------------------------------------------------------- */
+/*                           INITIALISATION                                   */
+/* -------------------------------------------------------------------------- */
+void initDrinkController() {
+    /* Pump */
+    pinMode(PUMP1_PIN, OUTPUT);
+    digitalWrite(PUMP1_PIN, LOW);
+    // PWM setup for PUMP1
+    ledcSetup(PUMP1_PWM_CHANNEL, PUMP1_PWM_FREQ, PUMP1_PWM_RES);
+    ledcAttachPin(PUMP1_PIN, PUMP1_PWM_CHANNEL);
+    ledcWrite(PUMP1_PWM_CHANNEL, 0); // Start off
+
+    pinMode(PUMP2_PIN, OUTPUT);
+    digitalWrite(PUMP2_PIN, LOW);
+
+    /* Common outlet */
+    pinMode(SOL_OUTPUT_PIN, OUTPUT);
+    digitalWrite(SOL_OUTPUT_PIN, LOW);
+
+    /* 14 individual solenoids */
+    for (uint8_t i = 0; i < 14; ++i) {
+        pinMode(SOL_PINS[i], OUTPUT);
+        digitalWrite(SOL_PINS[i], LOW);
+    }
+
+    Serial.println("GPIO drink controller ready (old hardware).");
+}
+
+/* ------------------------ PUBLIC API (FreeRTOS task starter) ---------------- */
+void startPourTask(const String &commandStr) {
+    // Allocate memory for command string (FreeRTOS-safe)
+    char *raw = static_cast<char*>(pvPortMalloc(commandStr.length() + 1));
+    if (!raw) {
+        Serial.println("❌ Failed to allocate memory for pour task");
+        setState(State::ERROR);
+        ledError();
+        notifyPourResult(false, "alloc_fail");
+        return;
+    }
+    strcpy(raw, commandStr.c_str());
+
+    // Create FreeRTOS task
+    if (xTaskCreate(
+        pourDrinkTask,   // Task function
+        "pourTask",      // Task name
+        4096,            // Stack size
+        raw,             // Parameter (command string)
+        1,               // Priority
+        nullptr          // Task handle
+    ) != pdPASS) {
+        Serial.println("❌ Failed to create pour task");
+        setState(State::ERROR);
+        ledError();
+        vPortFree(raw);
+        notifyPourResult(false, "task_fail");
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                     PUBLIC API – kicks off FreeRTOS task                   */
+/* -------------------------------------------------------------------------- */
+static void pourDrinkTask(void *param) {
+    char *raw = static_cast<char *>(param);
+    String cmd(raw);
+    free(raw);
+
+    setState(State::POURING);
+    Serial.println("→ State set to POURING");
+    ledPouring();
+
+    auto parsed = parseDrinkCommand(cmd);
+    if (parsed.empty()) {
+        notifyPourResult(false, "empty_command");
+        setState(State::ERROR);
+        ledError();
+        vTaskDelete(nullptr);
+    }
+
+    // --- NEW LOGGING START ---
+    Serial.println("📋 Recipe details:");
+    for (auto &ic : parsed) {
+        Serial.printf("   • Slot %2d → %5.2f oz   (prio %d)\n",
+                      ic.slot, ic.amount, ic.priority);
+    }
+    float eta = estimatePourTime(parsed);
+    Serial.printf("Estimated total pour time: %.2f s\n", eta);
+    Serial.println("--------------------------");
+    {
+       StaticJsonDocument<64> doc;
+       doc["status"] = "eta";          // special flag
+       doc["eta"]    = eta;            // seconds (float)
+       String out;
+       serializeJson(doc, out);
+       sendData(AWS_RECEIVE_TOPIC, out);
+   }
+   
+    // --- NEW LOGGING END ---
+
+    dispenseDrink(parsed);
+
+    notifyPourResult(true, nullptr);
+    setState(State::IDLE);
+    Serial.println("→ State set to IDLE");
+    ledIdle();
+    Serial.println("✅ Pour complete");
+    vTaskDelete(nullptr);
+}
+
+/* -------------------------------------------------------------------------- */
+/*                   ESTIMATE TOTAL POUR TIME (in seconds)                    */
+/* -------------------------------------------------------------------------- */
+static float estimatePourTime(const std::vector<IngredientCommand> &parsed) {
+    // make a local copy and sort by priority
+    auto v = parsed;
+    std::sort(v.begin(), v.end(),
+              [](const IngredientCommand &a, const IngredientCommand &b){ return a.priority < b.priority; });
+
+    float totalSec = 0.0f;
+    size_t i = 0;
+    while (i < v.size()) {
+        int pr = v[i].priority;
+        float groupSumOz = 0.0f;
+        int   count     = 0;
+        // gather this priority group
+        while (i < v.size() && v[i].priority == pr) {
+            groupSumOz += v[i].amount;
+            count++;
+            i++;
+        }
+        float rate = flowRate(count);         // oz/sec for count open solenoids
+        if (rate > 0.0f) {
+            totalSec += groupSumOz / rate;
+        }
+    }
+    return totalSec + 4.0f; // add 4 seconds for cleaning & delays
+}
+
+/* -------------------------------------------------------------------------- */
+/*                             PARSE LOGIC                                    */
+/* -------------------------------------------------------------------------- */
+static std::vector<IngredientCommand> parseDrinkCommand(const String &commandStr) {
+    std::vector<IngredientCommand> parsed;
+    int start = 0;
+    while (true) {
+        int comma = commandStr.indexOf(',', start);
+        String seg = (comma == -1)
+                     ? commandStr.substring(start)
+                     : commandStr.substring(start, comma);
+        seg.trim();
+        if (seg.length()) {
+            int c1 = seg.indexOf(':');
+            int c2 = seg.indexOf(':', c1 + 1);
+            if (c1 != -1) {
+                IngredientCommand ic;
+                ic.slot = seg.substring(0, c1).toInt();
+                if (c2 != -1) {
+                    ic.amount   = seg.substring(c1 + 1, c2).toFloat();
+                    ic.priority = seg.substring(c2 + 1).toInt();
+                } else {
+                    ic.amount   = seg.substring(c1 + 1).toFloat();
+                    ic.priority = 99;
+                }
+                parsed.push_back(ic);
+            }
+        }
+        if (comma == -1) break;
+        start = comma + 1;
+    }
+    return parsed;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                       DISPENSE  (priority groups)                          */
+/* -------------------------------------------------------------------------- */
+static void dispenseDrink(std::vector<IngredientCommand> &parsed) {
+    /* Open outlet & start pump */
+    digitalWrite(SOL_OUTPUT_PIN, HIGH);
+    // Set pump to full speed (PWM max)
+    ledcWrite(PUMP1_PWM_CHANNEL, 255);
+    Serial.println("Pump ON, outlet open.");
+
+    /* Sort commands by priority ASC */
+    std::sort(parsed.begin(), parsed.end(),
+              [](const IngredientCommand &a, const IngredientCommand &b) {
+                  return a.priority < b.priority;
+              });
+
+    size_t i = 0;
+    while (i < parsed.size()) {
+        int currentPr = parsed[i].priority;
+        std::vector<IngredientCommand> group;
+        while (i < parsed.size() && parsed[i].priority == currentPr) {
+            group.push_back(parsed[i]);
+            ++i;
+        }
+        Serial.printf("\n— Priority %d (%u items) —\n", currentPr, group.size());
+        dispenseParallelGroup(group);
+    }
+
+    cleanupDrinkController();
+
+    Serial.println("Starting tube cleaning sequence");
+    // TURN PUMP & OUTLET BACK ON so fluid/air actually flows
+    digitalWrite(SOL_OUTPUT_PIN, HIGH);
+    // Set pump to full speed for water flush
+    ledcWrite(PUMP1_PWM_CHANNEL, 255);
+
+    // WATER flush (SOL_PINS[12] is pin 21)
+    Serial.println("Water flush...");
+    digitalWrite(SOL_PINS[12], HIGH);
+    delay(CLEAN_WATER_MS);
+    digitalWrite(SOL_PINS[12], LOW);
+
+    // AIR flush (SOL_PINS[13] is pin 22)
+    Serial.println("Air flush (slowed pump)...");
+    // Slow down pump for air flush
+    ledcWrite(PUMP1_PWM_CHANNEL, 180); // ~40% speed
+    digitalWrite(SOL_PINS[13], HIGH);
+    delay(CLEAN_AIR_MS);
+    digitalWrite(SOL_PINS[13], LOW);
+
+    // now turn everything off again
+    ledcWrite(PUMP1_PWM_CHANNEL, 0);
+    digitalWrite(PUMP1_PIN, LOW);
+    digitalWrite(SOL_OUTPUT_PIN, LOW);
+    Serial.println("Tube cleaning sequence complete");
+}
+
+/* ----------------------- PARALLEL GROUP DISPENSE --------------------------- */
+struct PourState {
+    int   slot;
+    float ouncesLeft;
+    bool  done;
+};
+
+static void dispenseParallelGroup(std::vector<IngredientCommand> &group) {
+    std::vector<PourState> pours;
+    for (auto &ic : group) {
+        /* skip slots > 13 (not wired on old hardware) */
+        if (ic.slot < 1 || ic.slot > 13) continue;
+        pours.push_back({ ic.slot, ic.amount, false });
+    }
+    if (pours.empty()) return;
+
+    const unsigned long stepMs  = 50;
+    const float         stepSec = 0.05f;
+
+    while (true) {
+        int openCnt = 0;
+        float needSum = 0;
+        for (auto &p : pours) {
+            if (!p.done && p.ouncesLeft > 0.0f) {
+                openCnt++;
+                needSum += p.ouncesLeft;
+            }
+        }
+        if (openCnt == 0) break;
+
+        for (auto &p : pours) {
+            setSolenoid(p.slot, !p.done && p.ouncesLeft > 0.0f);
+        }
+
+        float totalFlow = flowRate(openCnt);
+        for (auto &p : pours) {
+            if (p.done || p.ouncesLeft <= 0.0f) continue;
+            float frac   = p.ouncesLeft / needSum;
+            float dispOz = totalFlow * frac * stepSec;
+            p.ouncesLeft -= dispOz;
+            if (p.ouncesLeft <= 0.0f) {
+                p.done = true;
+                setSolenoid(p.slot, false);
+            }
+        }
+        delay(stepMs);
+    }
+
+    /* ensure all OFF */
+    for (auto &p : pours) setSolenoid(p.slot, false);
+}
+
+/* ------------------------ SUPPORT FUNC HELPERS ----------------------------- */
+static void setSolenoid(int slot, bool on) {
+    if (slot < 1 || slot > 13) return;
+    digitalWrite(SOL_PINS[slot - 1], on ? HIGH : LOW);
+}
+
+/* ------------------------ FLOW RATE CALCULATION ----------------------------- */
+static float flowRate(int n) {            /* time is in total oz/sec */
+    switch (n) {
+        case 1:  return 0.38f;
+        case 2:  return 0.54f;
+        case 3:  return 0.61f;
+        case 4:  return 0.65f;
+        default: return 0.68f;             /* 5+ */
+    }
+}
+
+void cleanupDrinkController() {
+    for (uint8_t i = 0; i < 14; ++i) digitalWrite(SOL_PINS[i], LOW);
+    digitalWrite(SOL_OUTPUT_PIN, LOW);
+}
+
+/* -------------------------------------------------------------------------- */
