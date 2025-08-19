@@ -43,10 +43,25 @@
 #define PUMP_PWM_FREQ    1000   // Hz
 #define PUMP_PWM_RES     8      // bits (0..255 duty)
 
+// Pump duty presets for water flush vs. air purge (can be tuned per hardware)
+#define PUMP_WATER_DUTY  255    // full speed for water
+#define PUMP_AIR_DUTY    160    // gentler for air purge/back-blow
+
 /* ----------------------------- Cleaning Durations ------------------------------ */
 // Slot 13 = WATER flush, Slot 14 = AIR (trash/purge) per drink_controller logic
-#define CLEAN_WATER_MS   2000   // ms pump ON + water valve open
-#define CLEAN_AIR_MS     3000   // ms pump ON + air (trash) valve open
+#define CLEAN_WATER_MS     2000   // ms pump ON + water valve (SPI slot 13) open
+#define CLEAN_AIR_TOP_MS   1500   // ms pump ON to push air out of top/spout (outputs 1/4 path)
+#define CLEAN_TRASH_MS     2500   // ms pump ON + trash/air valve (SPI slot 14) open to dump
+
+/* ----------------------------- Outlet/Top Solenoids (GPIO) --------------------- */
+// Four additional non-SPI solenoids near the outlet controlled directly via GPIO.
+// Index → GPIO mapping:
+//  1 → 25,  2 → 26,  3 → 27,  4 → 14
+// These default to OFF at boot and are opened/closed by drink_controller.
+#define OUT_SOL1_PIN     25
+#define OUT_SOL2_PIN     26
+#define OUT_SOL3_PIN     27
+#define OUT_SOL4_PIN     14
 
 /* ----------------------------- LED (status) ------------------------------------ */
 #define LED_PIN          4   // NeoPixel data pin (24 LED ring)

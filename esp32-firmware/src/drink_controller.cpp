@@ -62,6 +62,11 @@ static void         pumpSetup();
 static void         pumpForward(bool on);
 static void         pumpSetPWMDuty(uint8_t duty); // 0..255, on IN1 (drive/coast PWM)
 static void         pumpStop();
+// Outlet solenoids (GPIO direct)
+static void         outletSolenoidsSetup();
+static void         outletSolenoidSet(uint8_t idx, bool on); // idx 1..4
+static void         outletAllOff();
+static void         outletSetState(bool s1, bool s2, bool s3, bool s4);
 static void         ncvSetup();
 static void         ncvFlush();
 static inline void  ncvSetPair(uint16_t &word, uint8_t ch/*1..8*/, uint8_t cmd);
@@ -90,6 +95,9 @@ void initDrinkController() {
 
   // DRV8870 pump
   pumpSetup();
+
+  // Outlet solenoids
+  outletSolenoidsSetup();
 
   Serial.println("DrinkController: SPI+NCV7240 ready, pump ready.");
 }
@@ -133,7 +141,7 @@ static void pourDrinkTask(void *param) {
   {
     std::vector<IngredientCommand> filtered;
     for (auto &c : parsed) {
-      if (isValidIngredientSlot(c.slot)) filtered.push_back(c);
+  if (isValidIngredientSlot(c.slot)) filtered.push_back(c);
       else Serial.printf("(skip slot %d – not present on this device)\n", c.slot);
     }
     parsed.swap(filtered);
@@ -163,13 +171,23 @@ static void pourDrinkTask(void *param) {
   }
 
   // Clear NCV faults and ensure OFF baseline
+  Serial.println("[INIT] Clearing NCV7240 faults and forcing all outputs OFF");
   ncvAll(NCV_CMD_STBY); // clear latches per‑channel
-  ncvAll(NCV_CMD_OFF);  // baseline OFF
+  ncvAll(NCV_CMD_OFF);  // baseline OFF (slots 1..16)
 
-  // Open outlet (if you have a common outlet valve, assign it a slot and add here)
-  // Start pump at full speed
+  // Explicitly assert starting outlet/SPI state for safety:
+  //  • Output solenoids: 1=ON, 3=ON (pour path), 2=OFF, 4=OFF
+  //  • SPI specials: slot 13 (water) OFF, slot 14 (trash/air) OFF
+  Serial.println("[POUR] Setting outlet path: OUT1=ON, OUT3=ON, OUT2=OFF, OUT4=OFF");
+  outletSetState(true, false, true, false);
+  Serial.println("[POUR] Ensuring slot 13 (water) and slot 14 (trash/air) are CLOSED");
+  ncvSetSlot(13, false);
+  ncvSetSlot(14, false);
+
+  // Start pump at full water duty for pour
+  Serial.printf("[POUR] Starting pump (duty=%u)\n", (unsigned)PUMP_WATER_DUTY);
   pumpForward(true);
-  pumpSetPWMDuty(255);
+  pumpSetPWMDuty(PUMP_WATER_DUTY);
 
   // Sort by priority
   std::sort(parsed.begin(), parsed.end(),
@@ -188,15 +206,47 @@ static void pourDrinkTask(void *param) {
   pumpStop();
   cleanupDrinkController();
 
-  // Tube cleaning sequence (water then air) with reduced pump duty
-  Serial.println("Starting tube cleaning sequence");
+  // =====================
+  // Staged cleaning flow
+  // =====================
+  Serial.println("[CLEAN] Beginning staged cleaning sequence");
+
+  // Ensure all ingredient slots (1..12) are closed before cleaning
+  Serial.println("[CLEAN] Closing all ingredient slots (1..12)");
+  for (int s = 1; s <= 12; ++s) ncvSetSlot(s, false);
+
+  // Step 1: Water flush → outputs 1=ON,3=ON,2=OFF,4=OFF; open slot 13 for CLEAN_WATER_MS
+  Serial.printf("[CLEAN-1] Water flush: OUT1=ON, OUT3=ON, OUT2=OFF, OUT4=OFF; slot13=OPEN for %u ms\n", (unsigned)CLEAN_WATER_MS);
+  outletSetState(true, false, true, false);
   pumpForward(true);
-  pumpSetPWMDuty(255); // full for water
-  ncvSetSlot(13, true); delay(CLEAN_WATER_MS); ncvSetSlot(13, false);
-  pumpSetPWMDuty(160); // gentler for air purge
-  ncvSetSlot(14, true); delay(CLEAN_AIR_MS);   ncvSetSlot(14, false);
+  pumpSetPWMDuty(PUMP_WATER_DUTY);
+  ncvSetSlot(13, true);
+  delay(CLEAN_WATER_MS);
+  ncvSetSlot(13, false);
+  Serial.println("[CLEAN-1] Water flush complete; slot13=CLOSED");
+
+  // Step 2: Air purge (top) → outputs 1=ON,3=OFF,2=OFF,4=ON; push out to spout
+  Serial.printf("[CLEAN-2] Air purge top: OUT1=ON, OUT3=OFF, OUT2=OFF, OUT4=ON for %u ms\n", (unsigned)CLEAN_AIR_TOP_MS);
+  outletSetState(true, false, false, true);
+  pumpForward(true);
+  pumpSetPWMDuty(PUMP_AIR_DUTY);
+  delay(CLEAN_AIR_TOP_MS);
+  Serial.println("[CLEAN-2] Air purge top complete");
+
+  // Step 3: Trash drain (combined) → OUT1=OFF, OUT2=ON, OUT3=OFF, OUT4=ON; slot14=OPEN
+  Serial.printf("[CLEAN-3] Trash drain: OUT1=OFF, OUT2=ON, OUT3=OFF, OUT4=ON; slot14=OPEN for %u ms\n", (unsigned)CLEAN_TRASH_MS);
+  outletSetState(false, true, false, true);
+  pumpForward(true);
+  pumpSetPWMDuty(PUMP_AIR_DUTY);
+  ncvSetSlot(14, true);
+  delay(CLEAN_TRASH_MS);
+  ncvSetSlot(14, false);
+  Serial.println("[CLEAN-3] Trash drain complete; slot14=CLOSED");
+
+  // Stop pump and close all outlets
   pumpStop();
-  Serial.println("Tube cleaning sequence complete");
+  Serial.println("[CLEAN] Staged cleaning sequence complete; stopping pump and closing outlets");
+  outletAllOff();
 
   notifyPourResult(true, nullptr);
   setState(State::IDLE);
@@ -251,6 +301,10 @@ void dispenseDrink(std::vector<IngredientCommand> &parsed) {
   }
   if (parsed.empty()) return;
 
+  // Open auxiliary outlet solenoids 1 & 3 during dispense
+  outletSolenoidSet(1, true);
+  outletSolenoidSet(3, true);
+
   // Start pump full speed
   pumpForward(true);
   pumpSetPWMDuty(255);
@@ -268,12 +322,22 @@ void dispenseDrink(std::vector<IngredientCommand> &parsed) {
   }
 
   pumpStop();
+
+  // Close auxiliary outlet solenoids after dispense
+  outletSolenoidSet(1, false);
+  outletSolenoidSet(3, false);
+  outletAllOff();
 }
 
 static void dispenseParallelGroup(std::vector<IngredientCommand> &group) {
   std::vector<PourState> pours;
   for (auto &ic : group) {
     if (!isValidIngredientSlot(ic.slot)) continue; // safe
+    if (ic.slot == 13 || ic.slot == 14) {
+      // Don't allow specials during pour scheduling
+      Serial.printf("[WARN] Ignoring special slot %d during pour; reserved for cleaning.\n", ic.slot);
+      continue;
+    }
     pours.push_back({ ic.slot, ic.amount, false });
   }
   if (pours.empty()) return;
@@ -435,4 +499,47 @@ void cleanupDrinkController() {
   ncvAll(NCV_CMD_OFF);
   // Pump stop
   pumpStop();
+}
+
+/* ------------------------ Outlet/Top Solenoids (GPIO) ------------------------- */
+static void outletSolenoidsSetup() {
+  pinMode(OUT_SOL1_PIN, OUTPUT);
+  pinMode(OUT_SOL2_PIN, OUTPUT);
+  pinMode(OUT_SOL3_PIN, OUTPUT);
+  pinMode(OUT_SOL4_PIN, OUTPUT);
+  digitalWrite(OUT_SOL1_PIN, LOW);
+  digitalWrite(OUT_SOL2_PIN, LOW);
+  digitalWrite(OUT_SOL3_PIN, LOW);
+  digitalWrite(OUT_SOL4_PIN, LOW);
+}
+
+static void outletSolenoidSet(uint8_t idx, bool on) {
+  uint8_t pin = 0;
+  switch (idx) {
+    case 1: pin = OUT_SOL1_PIN; break;
+    case 2: pin = OUT_SOL2_PIN; break;
+    case 3: pin = OUT_SOL3_PIN; break;
+    case 4: pin = OUT_SOL4_PIN; break;
+    default: return;
+  }
+  digitalWrite(pin, on ? HIGH : LOW);
+  Serial.printf("[OUTLET] OUT%d=%s\n", idx, on ? "ON" : "OFF");
+}
+
+static void outletAllOff() {
+  digitalWrite(OUT_SOL1_PIN, LOW);
+  digitalWrite(OUT_SOL2_PIN, LOW);
+  digitalWrite(OUT_SOL3_PIN, LOW);
+  digitalWrite(OUT_SOL4_PIN, LOW);
+  Serial.println("[OUTLET] All outputs OFF (1..4)");
+}
+
+static void outletSetState(bool s1, bool s2, bool s3, bool s4) {
+  // Set all outputs together for deterministic routing
+  digitalWrite(OUT_SOL1_PIN, s1 ? HIGH : LOW);
+  digitalWrite(OUT_SOL2_PIN, s2 ? HIGH : LOW);
+  digitalWrite(OUT_SOL3_PIN, s3 ? HIGH : LOW);
+  digitalWrite(OUT_SOL4_PIN, s4 ? HIGH : LOW);
+  Serial.printf("[OUTLET] State: OUT1=%s, OUT2=%s, OUT3=%s, OUT4=%s\n",
+                s1?"ON":"OFF", s2?"ON":"OFF", s3?"ON":"OFF", s4?"ON":"OFF");
 }
