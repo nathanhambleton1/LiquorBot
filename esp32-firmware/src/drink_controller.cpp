@@ -154,6 +154,38 @@ static void pourDrinkTask(void *param) {
     vTaskDelete(nullptr);
   }
 
+  // Pre-pour stock check (convert recipe oz to liters, compare with stored liters)
+  {
+    uint8_t maxIngr = getIngredientCountFromId();
+    float needOz[15] = {0};
+    for (auto &ic : parsed) {
+      if (ic.slot >= 1 && ic.slot <= maxIngr) {
+        needOz[ic.slot - 1] += ic.amount;
+      }
+    }
+    bool insufficient = false;
+    for (uint8_t i = 0; i < maxIngr && i < 15; ++i) {
+      if (needOz[i] <= 0) continue;
+      float needL = needOz[i] / 33.814f;
+      float haveL = getVolumeLitersForSlot(i);
+      if (haveL + 1e-6f < needL) { // small epsilon
+        insufficient = true;
+        Serial.printf("[STOCK] Slot %u needs %.3f L but has %.3f L — insufficient.\n", (unsigned)(i+1), needL, haveL);
+      }
+    }
+    if (insufficient) {
+      StaticJsonDocument<96> doc;
+      doc["status"] = "fail";
+      doc["error"] = "Insufficient ingredients";
+      String out; serializeJson(doc, out);
+      sendData(AWS_RECEIVE_TOPIC, out);
+      notifyPourResult(false, "insufficient_ingredients");
+      setState(State::IDLE);
+      ledIdle();
+      vTaskDelete(nullptr);
+    }
+  }
+
   // Log details + ETA
   Serial.println("📋 Recipe details:");
   for (auto &ic : parsed) {
@@ -247,6 +279,26 @@ static void pourDrinkTask(void *param) {
   pumpStop();
   Serial.println("[CLEAN] Staged cleaning sequence complete; stopping pump and closing outlets");
   outletAllOff();
+
+  // ---------------------
+  // Update slot volumes
+  // ---------------------
+  {
+    uint8_t maxIngr = getIngredientCountFromId();
+    float used[15] = {0};
+    for (auto &ic : parsed) {
+      if (ic.slot >= 1 && ic.slot <= maxIngr) {
+        used[ic.slot - 1] += ic.amount; // amounts are ounces
+      }
+    }
+    for (uint8_t iSlot = 0; iSlot < maxIngr && iSlot < 15; ++iSlot) {
+      if (used[iSlot] > 0.0f) {
+        useVolumeForSlot(iSlot, used[iSlot]);
+      }
+    }
+    // Persist once after batch update
+    saveVolumesNow();
+  }
 
   notifyPourResult(true, nullptr);
   setState(State::IDLE);

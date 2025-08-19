@@ -19,7 +19,7 @@ static Preferences prefs;
 
 /* Up to 15 slots (adjust if needed) */
 static uint16_t slotConfig[15] = {0};
-static float    slotVolumes[15] = {0}; // NEW: volume per slot
+static float    slotVolumes[15] = {0}; // volume per slot, stored in liters (L)
 
 // Get slot count from first two digits of LIQUORBOT_ID
 static uint8_t getSlotCount() {
@@ -37,12 +37,30 @@ static String          pourResultMessage;
 // ---------- volume config hand-off (non-blocking) ----------
 static volatile bool   volumeConfigPending = false;
 static String          volumeConfigMessage;
-static volatile bool   volumeUpdatePending = false;
-static String          volumeUpdateMessage;
+
+// Replace single pending update with a small ring buffer of updates
+struct VolumeUpdate { uint8_t slot; float volumeL; };
+static constexpr uint8_t VU_CAP = 16;
+static volatile uint8_t vuHead = 0; // write index
+static volatile uint8_t vuTail = 0; // read index
+static VolumeUpdate vuQueue[VU_CAP];
+
+static inline bool vuIsEmpty() { return vuHead == vuTail; }
+static inline bool vuIsFull()  { return (uint8_t)(vuHead + 1) % VU_CAP == vuTail; }
+static void enqueueVolumeUpdate(uint8_t slot, float volL) {
+    uint8_t next = (uint8_t)(vuHead + 1) % VU_CAP;
+    if (next == vuTail) {
+        // queue full – drop oldest (advance tail)
+        vuTail = (uint8_t)(vuTail + 1) % VU_CAP;
+    }
+    vuQueue[vuHead] = { slot, volL };
+    vuHead = next;
+}
 
 void sendVolumeConfig() {
     StaticJsonDocument<256> doc;
     doc["action"] = "CURRENT_VOLUMES";
+    doc["unit"] = "L"; // values are liters
     JsonArray arr = doc.createNestedArray("volumes");
     uint8_t slotCount = getSlotCount();
     // FIX: Ensure we send exactly slotCount entries
@@ -54,12 +72,8 @@ void sendVolumeConfig() {
 }
 
 void notifyVolumeUpdate(uint8_t slot, float volume) {
-    StaticJsonDocument<64> doc;
-    doc["action"] = "VOLUME_UPDATED";
-    doc["slot"] = slot;
-    doc["volume"] = volume;
-    serializeJson(doc, volumeUpdateMessage);
-    volumeUpdatePending = true;
+    // Keep legacy helper but route into queue
+    enqueueVolumeUpdate(slot, volume);
 }
 
 /* ---------- forward decls ---------- */
@@ -117,9 +131,17 @@ void processAWSMessages() {
         sendData(SLOT_CONFIG_TOPIC, volumeConfigMessage);
         volumeConfigPending = false;
     }
-    if (volumeUpdatePending) {
-        sendData(SLOT_CONFIG_TOPIC, volumeUpdateMessage);
-        volumeUpdatePending = false;
+    // Drain queued VOLUME_UPDATED events (volumes in liters)
+    while (!vuIsEmpty()) {
+        VolumeUpdate vu = vuQueue[vuTail];
+        vuTail = (uint8_t)(vuTail + 1) % VU_CAP;
+        StaticJsonDocument<96> doc;
+        doc["action"] = "VOLUME_UPDATED";
+        doc["slot"] = vu.slot;          // zero-based index
+    doc["volume"] = vu.volumeL;    // liters
+        doc["unit"] = "L";
+        String out; serializeJson(doc, out);
+        sendData(SLOT_CONFIG_TOPIC, out);
     }
 }
 
@@ -196,10 +218,22 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
             if (action && strcmp(action, "SET_VOLUME") == 0) {
                 int slot = doc["slot"];
                 float vol = doc["volume"];
+                // Optional unit; default liters (app uses liters)
+                const char *unit = doc["unit"] | "L";
+                float volL = vol;
+                if (unit) {
+                    if (!strcasecmp(unit, "L") || !strcasecmp(unit, "liters") || !strcasecmp(unit, "litres")) {
+                        volL = vol;
+                    } else if (!strcasecmp(unit, "ML") || !strcasecmp(unit, "milliliters") || !strcasecmp(unit, "millilitres")) {
+                        volL = vol / 1000.0f;
+                    } else if (!strcasecmp(unit, "OZ") || !strcasecmp(unit, "ounces")) {
+                        volL = vol / 33.814f;
+                    }
+                }
                 if (slot >= 0 && slot < slotCount) {
-                    slotVolumes[slot] = vol;
+                    slotVolumes[slot] = volL;
                     saveSlotConfigToNVS();
-                    notifyVolumeUpdate(slot, vol);
+                    enqueueVolumeUpdate((uint8_t)slot, volL);
                 }
                 return;
             }
@@ -346,4 +380,30 @@ static void saveSlotConfigToNVS() {
         prefs.putFloat(key, slotVolumes[i]);
     }
     Serial.println("Slot config and volumes saved to NVS.");
+}
+
+/* -------------------------------------------------------------------------- */
+/*                       PUBLIC VOLUME HELPERS                                */
+/* -------------------------------------------------------------------------- */
+void useVolumeForSlot(uint8_t slotZeroBased, float ouncesUsed) {
+    uint8_t slotCount = getSlotCount();
+    if (slotZeroBased >= slotCount) return;
+    if (ouncesUsed <= 0) return;
+    // Convert ounces to liters for internal storage
+    float litersUsed = ouncesUsed / 33.814f;
+    float current = slotVolumes[slotZeroBased];
+    float updated = current - litersUsed;
+    if (updated < 0) updated = 0;
+    slotVolumes[slotZeroBased] = updated;
+    enqueueVolumeUpdate(slotZeroBased, updated); // enqueue liters
+}
+
+void saveVolumesNow() {
+    saveSlotConfigToNVS();
+}
+
+float getVolumeLitersForSlot(uint8_t slotZeroBased) {
+    uint8_t slotCount = getSlotCount();
+    if (slotZeroBased >= slotCount) return 0.0f;
+    return slotVolumes[slotZeroBased];
 }

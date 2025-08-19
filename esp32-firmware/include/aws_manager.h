@@ -25,4 +25,22 @@ void receiveData(char *topic, byte *payload, unsigned int length);
 void sendHeartbeat();
 void notifyPourResult(bool success, const char *error = nullptr);
 
+/* Volume management helpers (device stores and publishes volumes in liters).
+ * Decrement the stored volume for a slot (zero-based index) by ouncesUsed
+ * (ounces from the recipe). This converts oz→L internally and clamps at 0,
+ * enqueues a VOLUME_UPDATED publish for the app, and lets you persist via
+ * saveVolumesNow() after batching.
+ */
+void useVolumeForSlot(uint8_t slotZeroBased, float ouncesUsed);
+
+/* Persist current slot volumes to NVS immediately. Safe to call after a batch
+ * of useVolumeForSlot updates to avoid excessive flash writes.
+ */
+void saveVolumesNow();
+
+/* Read the current stored volume (liters) for a slot (zero-based).
+ * Returns >= 0 liters; slots out of range return 0.
+ */
+float getVolumeLitersForSlot(uint8_t slotZeroBased);
+
 #endif // AWS_MANAGER_H
