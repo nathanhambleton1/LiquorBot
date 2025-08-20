@@ -211,6 +211,14 @@ static void pourDrinkTask(void *param) {
 
   // Guard: require cup present before starting pour
   Serial.println("[SAFETY] Waiting for cup on pressure pad before pour...");
+  // If no cup at start, notify app immediately (single message) and continue waiting
+  if (!isCupPresent()) {
+    StaticJsonDocument<128> doc;
+    doc["status"] = "fail";
+    doc["error"]  = "No Glass Detected - place glass to start";
+    String out; serializeJson(doc, out);
+    sendData(AWS_RECEIVE_TOPIC, out);
+  }
   unsigned long waitStart = millis();
   while (!isCupPresent()) {
     if ((millis() - waitStart) > 30000UL) {
@@ -426,6 +434,7 @@ static void dispenseParallelGroup(std::vector<IngredientCommand> &group) {
 
   const unsigned long stepMs  = 50;  // scheduler tick
   const float         stepSec = 0.05f;
+  bool pauseAlertSent = false; // ensure we only notify the app once per pause
 
   while (true) {
     // Pause/resume safety: if cup removed, STOP pump, keep solenoids as-is, and wait
@@ -433,6 +442,15 @@ static void dispenseParallelGroup(std::vector<IngredientCommand> &group) {
       // Immediately stop pump to prevent spillage; leave valves as they are
       pumpStop();
       Serial.println("[SAFETY] Cup removed – pausing pour until return...");
+      // Notify app once per pause using existing status/error formatting
+      if (!pauseAlertSent) {
+        StaticJsonDocument<128> doc;
+        doc["status"] = "fail";
+        doc["error"]  = "Glass Removed - replace glass to continue";
+        String out; serializeJson(doc, out);
+        sendData(AWS_RECEIVE_TOPIC, out);
+        pauseAlertSent = true;
+      }
       // Flash LED red while waiting
       while (!isCupPresent()) {
         ledFlashRedQuick();
@@ -442,6 +460,7 @@ static void dispenseParallelGroup(std::vector<IngredientCommand> &group) {
       // Back to solid red and resume pump
       fadeToRed();
       pumpSetPWMDuty(PUMP_WATER_DUTY);
+      pauseAlertSent = false; // allow future pauses to alert again
     }
     int openCnt = 0; float needSum = 0.0f;
     for (auto &p : pours) if (!p.done && p.ouncesLeft > 0.0f) { openCnt++; needSum += p.ouncesLeft; }

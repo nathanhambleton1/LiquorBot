@@ -12,6 +12,7 @@
 #include "wifi_setup.h"
 #include "bluetooth_setup.h"
 #include "maintenance_controller.h"
+#include "pressure_pad.h"
 
 /* ---------- NVS for slot‑config persistence ---------- */
 #include <Preferences.h>
@@ -195,6 +196,17 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
             sendData(AWS_RECEIVE_TOPIC, out);
             Serial.printf("✖ Busy – drink rejected. Current state: %d\n", (int)getCurrentState());
             return;
+        }
+
+        // Require cup present BEFORE starting any pour processing
+        if (!isCupPresent()) {
+            StaticJsonDocument<128> doc;
+            doc["status"] = "fail";
+            doc["error"]  = "No Glass Detected - place glass to start";
+            String out; serializeJson(doc, out);
+            sendData(AWS_RECEIVE_TOPIC, out);
+            Serial.println("✖ Pour rejected – no glass detected.");
+            return; // do not change state or start the pour task
         }
         setState(State::POURING);
         Serial.println("→ State set to POURING");
