@@ -27,6 +27,8 @@
  
  // Fade from the current color to the specified target color using default settings
  void fadeToColor(uint32_t targetColor);
+ // Overload: Fade with custom duration and steps
+ void fadeToColor(uint32_t targetColor, uint16_t durationMs, uint8_t steps);
  
  // Convenience functions for preset fades
  void fadeToRed();
@@ -40,8 +42,9 @@
  void ledOff();
 
  // State-based LED feedback helpers
- void ledPouring();   // Flash + fade to green for POURING state
+ void ledPouring();   // Fade to red for POURING state
  void ledError();     // Fade to red for ERROR state
- void ledIdle();      // Fade to white for IDLE state (always-on white idle)
+ void ledIdle();      // Fade to white for IDLE state (steady white)
+ void ledSuccess();   // Fade to green, flash green/white briefly, then fade back to white
  
  #endif // LED_CONTROL_H

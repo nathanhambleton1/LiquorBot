@@ -22,7 +22,7 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, NEO_GRB + NEO_KH
 static uint32_t currentColor = 0;
 
 // Default fade configuration (adjust these values as needed)
-static const uint16_t DEFAULT_FADE_DURATION = 1000;  // in milliseconds
+static const uint16_t DEFAULT_FADE_DURATION = 800;   // in milliseconds (slightly faster)
 static const uint8_t DEFAULT_STEPS = 50;
 
 void initLED() {
@@ -65,6 +65,27 @@ void fadeToColor(uint32_t targetColor) {
   setLEDColor(targetColor);
 }
 
+void fadeToColor(uint32_t targetColor, uint16_t durationMs, uint8_t steps) {
+  if (steps == 0) { setLEDColor(targetColor); return; }
+  uint16_t stepDelay = durationMs / steps;
+  uint8_t currR = (currentColor >> 16) & 0xFF;
+  uint8_t currG = (currentColor >> 8) & 0xFF;
+  uint8_t currB = currentColor & 0xFF;
+  uint8_t targetR = (targetColor >> 16) & 0xFF;
+  uint8_t targetG = (targetColor >> 8) & 0xFF;
+  uint8_t targetB = targetColor & 0xFF;
+  float stepR = (targetR - currR) / (float) steps;
+  float stepG = (targetG - currG) / (float) steps;
+  float stepB = (targetB - currB) / (float) steps;
+  float r = currR, g = currG, b = currB;
+  for (uint8_t i = 0; i < steps; i++) {
+    r += stepR; g += stepG; b += stepB;
+    setLEDColor(strip.Color((uint8_t)r, (uint8_t)g, (uint8_t)b));
+    delay(stepDelay);
+  }
+  setLEDColor(targetColor);
+}
+
 void fadeToRed()   { fadeToColor(strip.Color(255, 0, 0)); }
 void fadeToGreen() { fadeToColor(strip.Color(0, 255, 0)); }
 void fadeToWhite() { fadeToColor(strip.Color(255, 255, 255)); }
@@ -80,9 +101,26 @@ static void flashTo(uint32_t targetColor) {
   fadeToColor(targetColor);
 }
 
+// Helper: flash between two colors for a given duration (blocking)
+static void flashBetween(uint32_t c1, uint32_t c2, uint16_t durationMs) {
+  // Smooth alternation using short fades
+  const uint16_t beat = 200;      // total time per color
+  const uint8_t  steps = 20;      // smoothness per transition
+  unsigned long start = millis();
+  bool toC2 = true;
+  while ((millis() - start) < durationMs) {
+    if (toC2) {
+      fadeToColor(c2, beat, steps);
+    } else {
+      fadeToColor(c1, beat, steps);
+    }
+    toC2 = !toC2;
+  }
+}
+
 void ledPouring() {
-  // Flash then fade to green
-  flashTo(strip.Color(0, 255, 60)); // slightly tinted green
+  // Fade to red to warn "don't move glass"
+  fadeToColor(strip.Color(255, 0, 0));
 }
 
 void ledError() {
@@ -92,4 +130,13 @@ void ledError() {
 void ledIdle() {
   // Return to steady white over a couple seconds
   fadeToWhite();
+}
+
+void ledSuccess() {
+  // From red, fade to green, smooth flash G/white ~1.2s, then fade back to white
+  uint32_t green = strip.Color(0, 255, 0);
+  uint32_t white = strip.Color(255, 255, 255);
+  fadeToColor(green, 400, 25);     // quick fade to green
+  flashBetween(green, white, 1200);
+  fadeToColor(white, 600, 30);     // gentle fade back to white
 }

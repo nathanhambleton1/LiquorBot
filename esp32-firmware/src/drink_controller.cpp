@@ -79,6 +79,8 @@ static uint8_t      getIngredientCountFromId();
 static bool         isValidIngredientSlot(int slot);
 static float        estimatePourTime(const std::vector<IngredientCommand> &parsed);
 static void         pourDrinkTask(void *param);
+// LED success cue task (non-blocking)
+static void         ledSuccessTask(void *param);
 
 /* ============================================================================================ */
 /*                                           INIT                                               */
@@ -234,7 +236,7 @@ static void pourDrinkTask(void *param) {
     dispenseParallelGroup(group);
   }
 
-  // Finish
+  // Finish dispense: stop mechanics
   pumpStop();
   cleanupDrinkController();
 
@@ -264,6 +266,9 @@ static void pourDrinkTask(void *param) {
   pumpSetPWMDuty(PUMP_AIR_DUTY);
   delay(CLEAN_AIR_TOP_MS);
   Serial.println("[CLEAN-2] Air purge top complete");
+
+  // Start success LED sequence AFTER water flush and top air purge, but don't block trash drain
+  xTaskCreatePinnedToCore(ledSuccessTask, "LedSuccess", 2048, nullptr, 1, nullptr, 1);
 
   // Step 3: Trash drain (combined) → OUT1=OFF, OUT2=ON, OUT3=OFF, OUT4=ON; slot14=OPEN
   Serial.printf("[CLEAN-3] Trash drain: OUT1=OFF, OUT2=ON, OUT3=OFF, OUT4=ON; slot14=OPEN for %u ms\n", (unsigned)CLEAN_TRASH_MS);
@@ -302,8 +307,15 @@ static void pourDrinkTask(void *param) {
 
   notifyPourResult(true, nullptr);
   setState(State::IDLE);
+  // Ensure steady white idle after cleaning
   ledIdle();
   Serial.println("✅ Pour complete → IDLE");
+  vTaskDelete(nullptr);
+}
+
+static void ledSuccessTask(void *param) {
+  // Run success animation (green/white then back to white)
+  ledSuccess();
   vTaskDelete(nullptr);
 }
 
