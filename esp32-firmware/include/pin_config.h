@@ -66,4 +66,17 @@
 /* ----------------------------- LED (status) ------------------------------------ */
 #define LED_PIN          4   // NeoPixel data pin (24 LED ring)
 
+/* ----------------------------- Pressure Pad (FSR) ---------------------------- */
+// Choose an ADC1-capable GPIO (e.g., 32, 33, 34, 35, 36, 39). Do not use ADC2 when WiFi is used.
+// Default to GPIO 34 (input-only). Adjust to your wiring.
+#define PRESSURE_ADC_PIN     32
+// Optional attenuation (one of ADC_0db, ADC_2_5db, ADC_6db, ADC_11db). Comment out to skip.
+//#define PRESSURE_ADC_ATTEN   ADC_11db
+
+// Presence thresholds (expressed as fraction over baseline). Can be tuned at runtime too.
+// With typical wiring, a cup lowers ADC. A ~15–16% drop should register as present.
+#define PRESSURE_ON_PCT      0.14f  // 14% in the presence direction => present
+#define PRESSURE_OFF_PCT     0.08f  // fall below 8% to clear (hysteresis < on)
+#define PRESSURE_DEBOUNCE_MS 120
+
 #endif // PIN_CONFIG_H

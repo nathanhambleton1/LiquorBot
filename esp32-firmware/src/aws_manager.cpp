@@ -334,7 +334,9 @@ void sendData(const String &topic, const String &msg) {
         return;
     }
     // Publish and immediately service the network to flush it out
-    Serial.printf("→ %s : %s\n", topic.c_str(), msg.c_str());
+    if (topic != HEARTBEAT_TOPIC) {
+        Serial.printf("→ %s : %s\n", topic.c_str(), msg.c_str());
+    }
     mqttClient.publish(topic.c_str(), msg.c_str());
     mqttClient.loop();   // <— ensures the packet goes out right away
 }

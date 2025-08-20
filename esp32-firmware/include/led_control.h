@@ -42,7 +42,6 @@
  void ledOff();
 
  // State-based LED feedback helpers
- void ledPouring();   // Fade to red for POURING state
  void ledError();     // Fade to red for ERROR state
  void ledIdle();      // Fade to white for IDLE state (steady white)
  void ledSuccess();   // Fade to green, flash green/white briefly, then fade back to white

@@ -15,12 +15,16 @@
 #include "drink_controller.h"
 #include "led_control.h"
 #include "state_manager.h"
+#include "pressure_pad.h"
 
 /* ---------------- Runtime constants -------------------------------------- */
 static unsigned long lastHeartbeat = 0;
 static constexpr unsigned long HB_PERIOD = 1000;      // ms
 static unsigned long lastWiFiRetry = 0;
 static constexpr unsigned long WIFI_RETRY_PERIOD = 10000; // ms
+static unsigned long lastPadLog = 0;
+static constexpr unsigned long PAD_LOG_PERIOD = 2000; // ms
+static bool lastCupPresent = false; // for LED transition when idle
 
 /* ------------------------------------------------------------------------- */
 void setup() {
@@ -39,6 +43,12 @@ void setup() {
     
     initDrinkController();
     initLED();
+
+    // Start pressure pad sampling ASAP
+    pressurePadInit();
+    // Quick baseline calibration at boot assuming pad is empty
+    pressurePadCalibrate(1200);
+    // (Removed pad config log)
 
     // Setup complete, set state to IDLE
     setState(State::IDLE);
@@ -78,5 +88,26 @@ void loop() {
     if (millis() - lastHeartbeat >= HB_PERIOD) {
         if (WiFi.status() == WL_CONNECTED) sendHeartbeat();
         lastHeartbeat = millis();
+    }
+
+    /* 4 · Pressure pad telemetry (every ~2s) */
+    if (millis() - lastPadLog >= PAD_LOG_PERIOD) {
+        lastPadLog = millis();
+        // (Removed periodic pad telemetry log)
+    }
+
+    /* 5 · Cup presence LED cue when IDLE only (don’t override pour/clean) */
+    if (isIdle()) {
+        bool present = isCupPresent();
+        if (present != lastCupPresent) {
+            lastCupPresent = present;
+            if (present) {
+                // Cup placed → warn user not to move (fade to red)
+                fadeToRed();
+            } else {
+                // Cup removed → back to idle white
+                ledIdle();
+            }
+        }
     }
 }

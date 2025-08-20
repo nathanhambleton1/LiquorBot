@@ -38,6 +38,7 @@
 #include "state_manager.h"
 #include "aws_manager.h"     // notifyPourResult(), sendData(), LIQUORBOT_ID
 #include "led_control.h"
+#include "pressure_pad.h"
 
 /* All pin / timing constants now come exclusively from pin_config.h.
  * Removed legacy fallback #defines (SPI_MOSI, SPI_MISO, SPI_SCK, SPI_CS,
@@ -134,7 +135,7 @@ static void pourDrinkTask(void *param) {
   free(raw);
 
   setState(State::POURING);
-  ledPouring();
+  fadeToRed();
   Serial.println("→ State set to POURING");
 
   // Parse command
@@ -176,7 +177,7 @@ static void pourDrinkTask(void *param) {
       }
     }
     if (insufficient) {
-      StaticJsonDocument<96> doc;
+    JsonDocument doc;
       doc["status"] = "fail";
       doc["error"] = "Insufficient ingredients";
       String out; serializeJson(doc, out);
@@ -197,7 +198,7 @@ static void pourDrinkTask(void *param) {
   Serial.printf("Estimated total pour time: %.2f s\n", eta);
   Serial.println("---------------------------------");
   {
-    StaticJsonDocument<96> doc;
+    JsonDocument doc;
     doc["status"] = "eta";
     doc["eta"]    = eta; // seconds
     String out; serializeJson(doc, out);
@@ -208,6 +209,21 @@ static void pourDrinkTask(void *param) {
   Serial.println("[INIT] Clearing NCV7240 faults and forcing all outputs OFF");
   ncvAll(NCV_CMD_STBY); // clear latches per‑channel
   ncvAll(NCV_CMD_OFF);  // baseline OFF (slots 1..16)
+
+  // Guard: require cup present before starting pour
+  Serial.println("[SAFETY] Waiting for cup on pressure pad before pour...");
+  unsigned long waitStart = millis();
+  while (!isCupPresent()) {
+    if ((millis() - waitStart) > 30000UL) {
+      Serial.println("[SAFETY] No cup detected within 30s. Aborting pour.");
+      notifyPourResult(false, "no_cup");
+      setState(State::IDLE);
+      ledIdle();
+      vTaskDelete(nullptr);
+    }
+    delay(50);
+  }
+  Serial.println("[SAFETY] Cup detected. Proceeding with pour.");
 
   // Explicitly assert starting outlet/SPI state for safety:
   //  • Output solenoids: 1=ON, 3=ON (pour path), 2=OFF, 4=OFF
@@ -410,6 +426,17 @@ static void dispenseParallelGroup(std::vector<IngredientCommand> &group) {
   const float         stepSec = 0.05f;
 
   while (true) {
+    // Pause/resume safety: if cup removed, close valves and wait
+    if (!isCupPresent()) {
+      // Close all active slots immediately
+      for (auto &p : pours) if (!p.done && p.ouncesLeft > 0.0f) ncvSetSlot(p.slot, false);
+      pumpSetPWMDuty(0); // reduce spatter while paused
+      Serial.println("[SAFETY] Cup removed – pausing pour until return...");
+      // Wait until cup present again
+      while (!isCupPresent()) { delay(50); }
+      Serial.println("[SAFETY] Cup returned – resuming pour.");
+      pumpSetPWMDuty(PUMP_WATER_DUTY);
+    }
     int openCnt = 0; float needSum = 0.0f;
     for (auto &p : pours) if (!p.done && p.ouncesLeft > 0.0f) { openCnt++; needSum += p.ouncesLeft; }
     if (openCnt == 0) break;
@@ -428,7 +455,7 @@ static void dispenseParallelGroup(std::vector<IngredientCommand> &group) {
       if (p.ouncesLeft <= 0.0f) { p.ouncesLeft = 0.0f; p.done = true; ncvSetSlot(p.slot, false); }
     }
 
-    delay(stepMs);
+  delay(stepMs);
   }
 
   for (auto &p : pours) ncvSetSlot(p.slot, false); // ensure off

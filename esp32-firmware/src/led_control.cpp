@@ -86,9 +86,9 @@ void fadeToColor(uint32_t targetColor, uint16_t durationMs, uint8_t steps) {
   setLEDColor(targetColor);
 }
 
-void fadeToRed()   { fadeToColor(strip.Color(255, 0, 0)); }
-void fadeToGreen() { fadeToColor(strip.Color(0, 255, 0)); }
-void fadeToWhite() { fadeToColor(strip.Color(255, 255, 255)); }
+void fadeToRed()   { fadeToColor(strip.Color(255, 0, 0), 300, 60); }
+void fadeToGreen() { fadeToColor(strip.Color(0, 255, 0), 300, 60); }
+void fadeToWhite() { fadeToColor(strip.Color(255, 255, 255), 300, 60); }
 
 void ledOn()  { fadeToWhite(); }
 void ledOff() { fadeToColor(strip.Color(0, 0, 0)); }
@@ -116,11 +116,6 @@ static void flashBetween(uint32_t c1, uint32_t c2, uint16_t durationMs) {
     }
     toC2 = !toC2;
   }
-}
-
-void ledPouring() {
-  // Fade to red to warn "don't move glass"
-  fadeToColor(strip.Color(255, 0, 0));
 }
 
 void ledError() {

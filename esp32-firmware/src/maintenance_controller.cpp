@@ -85,7 +85,7 @@ void startDeepCleanTask() {
 // --- FreeRTOS task implementations ---
 static void readySystemTask(void *param) {
     setState(State::MAINTENANCE);
-    ledPouring();
+    fadeToRed();
     Serial.println("→ State set to MAINTENANCE (READY_SYSTEM)");
     // Simulate work for 10 seconds, but yield frequently for heartbeats/messages
     const unsigned long totalMs = 10000;
@@ -105,7 +105,7 @@ static void readySystemTask(void *param) {
 
 static void emptySystemTask(void *param) {
     setState(State::MAINTENANCE);
-    ledPouring();
+    fadeToRed();
     Serial.println("→ State set to MAINTENANCE (EMPTY_SYSTEM)");
     const unsigned long totalMs = 10000;
     const unsigned long stepMs = 50;
@@ -123,7 +123,7 @@ static void emptySystemTask(void *param) {
 
 static void deepCleanTask(void *param) {
     setState(State::MAINTENANCE);
-    ledPouring();
+    fadeToRed();
     Serial.println("→ State set to MAINTENANCE (DEEP_CLEAN)");
     // Ensure all solenoids are closed
     cleanupDrinkController();
