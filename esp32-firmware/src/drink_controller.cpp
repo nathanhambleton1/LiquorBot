@@ -135,7 +135,6 @@ static void pourDrinkTask(void *param) {
   free(raw);
 
   setState(State::POURING);
-  fadeToRed();
   Serial.println("→ State set to POURING");
 
   // Parse command
@@ -224,6 +223,9 @@ static void pourDrinkTask(void *param) {
     delay(50);
   }
   Serial.println("[SAFETY] Cup detected. Proceeding with pour.");
+
+  // Now that we are actually starting the pour, fade LED to red
+  fadeToRed();
 
   // Explicitly assert starting outlet/SPI state for safety:
   //  • Output solenoids: 1=ON, 3=ON (pour path), 2=OFF, 4=OFF

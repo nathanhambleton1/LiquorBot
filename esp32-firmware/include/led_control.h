@@ -46,4 +46,7 @@
  void ledIdle();      // Fade to white for IDLE state (steady white)
  void ledSuccess();   // Fade to green, flash green/white briefly, then fade back to white
  
+ // Alert helper: quick blocking red flash (used when cup is removed mid-pour)
+ void ledFlashRedQuick();
+ 
  #endif // LED_CONTROL_H

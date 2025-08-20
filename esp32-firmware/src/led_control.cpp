@@ -135,3 +135,14 @@ void ledSuccess() {
   flashBetween(green, white, 1200);
   fadeToColor(white, 600, 30);     // gentle fade back to white
 }
+
+void ledFlashRedQuick() {
+  // Brief attention-grabbing red blink without long blocking
+  uint32_t red = strip.Color(255, 0, 0);
+  uint32_t off = strip.Color(0, 0, 0);
+  // Two short pulses ~400ms total
+  setLEDColor(red); delay(120);
+  setLEDColor(off); delay(80);
+  setLEDColor(red); delay(120);
+  // leave it red to indicate pause/error state
+}

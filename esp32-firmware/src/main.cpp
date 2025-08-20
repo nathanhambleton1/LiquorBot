@@ -102,8 +102,8 @@ void loop() {
         if (present != lastCupPresent) {
             lastCupPresent = present;
             if (present) {
-                // Cup placed → warn user not to move (fade to red)
-                fadeToRed();
+                // Cup placed → show READY (fade to green)
+                fadeToGreen();
             } else {
                 // Cup removed → back to idle white
                 ledIdle();
