@@ -245,6 +245,7 @@ function DrinkItem({
   const isMakeable = isDrinkMakeable(drink);
 
   const triggerStatus = (type: 'success' | 'error', message: string) => {
+    setCountdown(null); // Clear countdown when showing a status
     setStatusType(type);
     setStatusMessage(message);
     statusAnim.setValue(1);
@@ -301,6 +302,8 @@ function DrinkItem({
   }
 
   function startCountdown(sec: number) {
+    setStatusType(null); // Clear status when starting a countdown
+    setStatusMessage('');
     setCountdown(Math.ceil(sec));
     const id = setInterval(() => {
       setCountdown((prev) => {
@@ -781,7 +784,7 @@ function DrinkItem({
           statusDone={statusType}
           onPour={handlePourDrink}
         />
-        {statusType && (
+        {statusType ? (
           <Text
             style={[
               styles.statusMessageOverlay,
@@ -790,12 +793,11 @@ function DrinkItem({
           >
             {statusMessage}
           </Text>
-        )}
-        {countdown !== null && (
+        ) : countdown !== null ? (
           <Text style={[styles.statusMessageOverlay, styles.successText]}>
             {countdown}s remaining…
           </Text>
-        )}
+        ) : null}
       </Animated.View>
     );
   }

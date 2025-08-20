@@ -169,7 +169,8 @@ export default function EmptySystem() {
   };
 
   const handleBack = () => {
-    router.replace('/device-settings');
+    // Cancel emptying if needed (handled by cleanup effect)
+    router.back(); // Go back to previous page in the stack
   };
 
   // UI for each step
