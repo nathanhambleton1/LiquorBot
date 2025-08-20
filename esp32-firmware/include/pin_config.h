@@ -74,9 +74,10 @@
 //#define PRESSURE_ADC_ATTEN   ADC_11db
 
 // Presence thresholds (expressed as fraction over baseline). Can be tuned at runtime too.
-// With typical wiring, a cup lowers ADC. A ~15–16% drop should register as present.
-#define PRESSURE_ON_PCT      0.14f  // 14% in the presence direction => present
-#define PRESSURE_OFF_PCT     0.08f  // fall below 8% to clear (hysteresis < on)
+// Lower these if lighter cups aren’t detected; raise to avoid false positives.
+// With typical wiring, a cup lowers ADC.
+#define PRESSURE_ON_PCT      0.05f  // 5% in the presence direction => present (more sensitive)
+#define PRESSURE_OFF_PCT     0.02f  // 2% to clear (keeps ~40% hysteresis band)
 #define PRESSURE_DEBOUNCE_MS 120
 
 #endif // PIN_CONFIG_H

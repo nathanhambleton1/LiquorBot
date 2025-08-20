@@ -428,15 +428,19 @@ static void dispenseParallelGroup(std::vector<IngredientCommand> &group) {
   const float         stepSec = 0.05f;
 
   while (true) {
-    // Pause/resume safety: if cup removed, close valves and wait
+    // Pause/resume safety: if cup removed, STOP pump, keep solenoids as-is, and wait
     if (!isCupPresent()) {
-      // Close all active slots immediately
-      for (auto &p : pours) if (!p.done && p.ouncesLeft > 0.0f) ncvSetSlot(p.slot, false);
-      pumpSetPWMDuty(0); // reduce spatter while paused
+      // Immediately stop pump to prevent spillage; leave valves as they are
+      pumpStop();
       Serial.println("[SAFETY] Cup removed – pausing pour until return...");
-      // Wait until cup present again
-      while (!isCupPresent()) { delay(50); }
+      // Flash LED red while waiting
+      while (!isCupPresent()) {
+        ledFlashRedQuick();
+        delay(120);
+      }
       Serial.println("[SAFETY] Cup returned – resuming pour.");
+      // Back to solid red and resume pump
+      fadeToRed();
       pumpSetPWMDuty(PUMP_WATER_DUTY);
     }
     int openCnt = 0; float needSum = 0.0f;
