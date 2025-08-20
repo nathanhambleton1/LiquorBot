@@ -57,11 +57,8 @@ void startEmptyIngredientTask(uint8_t ingredientSlot) {
 
 // Stop emptying the single ingredient
 void stopEmptyIngredientTask() {
-    if (!emptyingSingleIngredient) {
-        Serial.println("✖ No EMPTY_INGREDIENT in progress");
-        sendData(MAINTENANCE_TOPIC, "{\"status\":\"fail\",\"error\":\"not_running\"}");
-        return;
-    }
+    // Always perform the stop sequence, regardless of state
+    Serial.println("[FORCE STOP] Stopping EMPTY_INGREDIENT sequence (if running)");
     // Close all ingredient slots
     for (uint8_t slot = 1; slot <= 14; ++slot) {
         dcSetSpiSlot(slot, false);
@@ -74,7 +71,7 @@ void stopEmptyIngredientTask() {
     emptyingSingleIngredient = false;
     currentEmptySlot = 0;
     sendData(MAINTENANCE_TOPIC, "{\"status\":\"ok\",\"action\":\"EMPTY_INGREDIENT_STOP\"}");
-    Serial.println("→ State set to IDLE after EMPTY_INGREDIENT");
+    Serial.println("→ State set to IDLE after EMPTY_INGREDIENT (forced or normal)");
 }
 
 // Durations are defined in pin_config.h and used by drink_controller. Avoid duplicating here.

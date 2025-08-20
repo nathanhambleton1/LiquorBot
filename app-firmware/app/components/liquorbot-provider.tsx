@@ -50,6 +50,7 @@ interface LiquorBotContextValue {
   isOverridden       : boolean;
   clearPrevLiquorbotId: () => void;
   prevLiquorbotId    : string | null; // <-- Expose previous main device ID
+  pubsub             : any; // Expose pubsub instance for MQTT
 }
 
 const LiquorBotContext = createContext<LiquorBotContextValue>({} as any);
@@ -289,11 +290,12 @@ export function LiquorBotProvider({ children }: { children: ReactNode }) {
     /* overrides */
     temporaryOverrideId, restorePreviousId, isOverridden, clearPrevLiquorbotId,
     prevLiquorbotId, // <-- Expose previous main device ID
+    pubsub,
   }), [
     isConnected, slots, liquorbotId, slotCount,
     setLiquorbotId, forceDisconnect, hardReset, updateSlots, reconnect,
     groups, isAdmin, temporaryOverrideId, restorePreviousId, isOverridden, clearPrevLiquorbotId,
-    prevLiquorbotId,
+    prevLiquorbotId, pubsub
   ]);
 
   return <LiquorBotContext.Provider value={value}>{children}</LiquorBotContext.Provider>;

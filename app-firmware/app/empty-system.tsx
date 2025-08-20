@@ -1,7 +1,9 @@
+
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, FlatList, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, FlatList, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useLiquorBot } from './components/liquorbot-provider';
 
 const SOLENOIDS = Array.from({ length: 12 }, (_, i) => `Solenoid ${i + 1}`);
 const STEP_COLOR = '#CE975E';
@@ -34,6 +36,9 @@ const STEPS = [
 ];
 
 export default function EmptySystem() {
+  // Track if a stop command has been sent to avoid duplicates
+  const stopSentRef = useRef(false);
+
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
@@ -42,6 +47,58 @@ export default function EmptySystem() {
   const [stepTransitioning, setStepTransitioning] = useState(false);
   const anim = useRef(new Animated.Value(0)).current;
   const checkAnim = useRef(new Animated.Value(0)).current;
+
+  // LiquorBot context for ID and connection
+  const { liquorbotId, isConnected, pubsub } = useLiquorBot();
+  const maintenanceTopic = `liquorbot/liquorbot${liquorbotId}/maintenance`;
+
+  // Listen for status responses from the microcontroller
+  React.useEffect(() => {
+    if (!liquorbotId || liquorbotId === '000') return;
+    const sub = pubsub.subscribe({ topics: [maintenanceTopic] }).subscribe({
+      next: (event: any) => {
+        console.log('[EmptySystem] Full MQTT event:', event);
+        // Use event directly if it has action/status
+        const msg = event && typeof event === 'object' && ('action' in event || 'status' in event) ? event
+          : (event?.value ? (typeof event.value === 'string' ? JSON.parse(event.value) : event.value) : null);
+
+        if (!msg) {
+          console.log('[EmptySystem] MQTT message is missing action/status:', event);
+          return;
+        }
+        console.log('[EmptySystem] MQTT message received:', msg);
+        if (msg.status === 'ok' && msg.action === 'EMPTY_INGREDIENT_START') {
+          setIsEmptying(true);
+          stopSentRef.current = false;
+        }
+        if (msg.status === 'ok' && msg.action === 'EMPTY_INGREDIENT_STOP') {
+          console.log('[EmptySystem] Received EMPTY_INGREDIENT_STOP, transitioning to done page.');
+          setIsEmptying(false);
+          setStep(3);
+          stopSentRef.current = false;
+        }
+      },
+      error: (err: unknown) => {
+        console.log('[EmptySystem] MQTT subscription error:', err);
+      },
+    });
+    return () => sub.unsubscribe();
+  }, [liquorbotId, pubsub, maintenanceTopic]);
+
+  // Send stop command on unmount or navigation away
+  React.useEffect(() => {
+    return () => {
+      // Only send if we were emptying and haven't already sent
+      if (isEmptying && !stopSentRef.current) {
+        pubsub.publish({
+          topics: [maintenanceTopic],
+          message: { action: 'STOP_EMPTY_INGREDIENT' },
+        }).catch(() => {});
+        stopSentRef.current = true;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEmptying, liquorbotId, pubsub, maintenanceTopic]);
 
   React.useEffect(() => {
     Animated.timing(anim, {
@@ -75,14 +132,40 @@ export default function EmptySystem() {
   };
 
 
-  const handleStartEmpty = () => {
+
+  // Start emptying a single slot
+  const handleStartEmpty = async () => {
+    if (!isConnected) {
+      Alert.alert('Not Connected', 'Connect to a LiquorBot device first.');
+      return;
+    }
+    setIsEmptying(true); // Optimistically set to true for UI
     setStep(2);
-    setIsEmptying(true);
+    if (selected !== null) {
+      try {
+        await pubsub.publish({
+          topics: [maintenanceTopic],
+          message: { action: 'EMPTY_INGREDIENT', slot: selected + 1 },
+        });
+      } catch (err) {
+        Alert.alert('Error', 'Failed to send empty command.');
+      }
+    }
   };
 
-  const handleStopEmpty = () => {
-    setIsEmptying(false);
-    setStep(3);
+
+  // Stop emptying a single slot
+  const handleStopEmpty = async () => {
+    // Send stop command to microcontroller
+    try {
+      await pubsub.publish({
+        topics: [maintenanceTopic],
+        message: { action: 'STOP_EMPTY_INGREDIENT' },
+      });
+      stopSentRef.current = true;
+    } catch (err) {
+      Alert.alert('Error', 'Failed to send stop command.');
+    }
   };
 
   const handleBack = () => {
@@ -158,15 +241,15 @@ export default function EmptySystem() {
         <Text style={styles.stepTitle}>Emptying {SOLENOIDS[selected].replace('Solenoid', 'Ingredient')}</Text>
         <Text style={styles.stepDescription}>Press Stop when the ingredient is fully emptied.</Text>
         <Animated.View style={{ marginTop: 30, alignItems: 'center', width: '100%' }}>
-          {isEmptying ? (
-            <>
-              <ActivityIndicator size="large" color={STEP_COLOR} style={{ marginBottom: 18 }} />
-              <TouchableOpacity style={[styles.startButton, { backgroundColor: '#d44a4a', marginTop: 8 }]} onPress={handleStopEmpty}>
-                <Ionicons name="stop" size={22} color="#DFDCD9" />
-                <Text style={[styles.startButtonText, { color: '#DFDCD9' }]}>Stop</Text>
-              </TouchableOpacity>
-            </>
-          ) : null}
+          <ActivityIndicator size="large" color={STEP_COLOR} style={{ marginBottom: 18 }} />
+          <TouchableOpacity
+            style={[styles.startButton, { backgroundColor: isEmptying ? '#d44a4a' : '#888', marginTop: 8 }]}
+            onPress={handleStopEmpty}
+            disabled={!isEmptying}
+          >
+            <Ionicons name="stop" size={22} color="#DFDCD9" />
+            <Text style={[styles.startButtonText, { color: '#DFDCD9' }]}>Stop</Text>
+          </TouchableOpacity>
         </Animated.View>
       </Animated.View>
     );

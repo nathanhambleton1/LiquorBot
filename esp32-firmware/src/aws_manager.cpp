@@ -337,6 +337,12 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
             startEmptySystemTask();
         } else if (strcmp(action, "DEEP_CLEAN") == 0) {
             startDeepCleanTask();
+        } else if (strcmp(action, "EMPTY_INGREDIENT") == 0) {
+            // Expect slot as 1-based index
+            int slot = doc["slot"];
+            startEmptyIngredientTask((uint8_t)slot);
+        } else if (strcmp(action, "STOP_EMPTY_INGREDIENT") == 0) {
+            stopEmptyIngredientTask();
         }
         // All maintenance actions handled above
         return;

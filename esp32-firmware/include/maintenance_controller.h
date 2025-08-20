@@ -7,6 +7,7 @@
 #ifndef MAINTENANCE_CONTROLLER_H
 #define MAINTENANCE_CONTROLLER_H
 
+
 // Start the READY_SYSTEM (prime tubes) maintenance task
 void startReadySystemTask();
 
@@ -15,5 +16,12 @@ void startEmptySystemTask();
 
 // Start the DEEP_CLEAN maintenance task
 void startDeepCleanTask();
+
+
+// Start emptying a single ingredient slot (1-based)
+void startEmptyIngredientTask(uint8_t ingredientSlot);
+
+// Stop emptying a single ingredient (force cleanup)
+void stopEmptyIngredientTask();
 
 #endif // MAINTENANCE_CONTROLLER_H
