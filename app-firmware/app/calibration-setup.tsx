@@ -3,13 +3,31 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, Animated, Easing, Dime
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LineChart } from 'react-native-chart-kit';
+import { pubsub } from './_layout';
 
-// Placeholder: Replace with your actual MQTT or PubSub logic
-async function sendCalibrationCommand(action: string, solenoids: number) {
-  // Example: publishMaintenance({ action: 'CALIBRATE_START', solenoids })
-  // or pubsub.publish({ topics: [...], message: { action, solenoids } })
-  // For now, just log
-  console.log(`Send to ESP: ${action} for ${solenoids} solenoid(s)`);
+
+// Helper to get deviceId (stub: replace with real logic if needed)
+function getDeviceId() {
+  // TODO: Replace with actual device ID logic if available
+  return 'default-device';
+}
+
+// Send calibration results to ESP32 via PubSub
+async function sendFlowCalibration(flowRatesLps: number[], fitType: string, fitParams: any) {
+  const deviceId = getDeviceId();
+  const topic = `liquorbot/${deviceId}/calibrate/flow`;
+  const payload = {
+    type: 'flow_calibration',
+    rates_lps: flowRatesLps,
+    fit: { type: fitType, ...fitParams },
+    timestamp: Date.now(),
+  };
+  try {
+    await pubsub.publish({ topics: [topic], message: payload });
+    console.log('Published calibration:', payload);
+  } catch (e) {
+    console.error('Failed to publish calibration:', e);
+  }
 }
 
 const STEP_COLOR = '#CE975E'; // Gold theme for all steps
@@ -50,8 +68,10 @@ const CUP_VOLUME_LITERS = 0.236588; // 1 US cup in liters
 
 export default function CalibrationSetup() {
   const router = useRouter();
-  const [step, setStep] = useState(0);
+  // step: -1 = intro, 0 = step 1, ...
+  const [step, setStep] = useState(-1);
   const [isRunning, setIsRunning] = useState(false);
+  const [elapsed, setElapsed] = useState(0); // live timer in ms
   const [results, setResults] = useState<number[]>([]); // ms elapsed for each step
   const [showCheck, setShowCheck] = useState(false);
   const [stepTransitioning, setStepTransitioning] = useState(false);
@@ -86,21 +106,38 @@ export default function CalibrationSetup() {
     }
   }, [step]);
 
+  // Live timer effect
+  React.useEffect(() => {
+    let interval: NodeJS.Timeout | undefined;
+    if (isRunning) {
+      setElapsed(0);
+      startTimeRef.current = Date.now();
+      interval = setInterval(() => {
+        if (startTimeRef.current) {
+          setElapsed(Date.now() - startTimeRef.current);
+        }
+      }, 50);
+    } else {
+      if (interval) clearInterval(interval);
+    }
+    return () => { if (interval) clearInterval(interval); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRunning]);
+
   const handleStart = async () => {
     setIsRunning(true);
-    startTimeRef.current = Date.now();
-    await sendCalibrationCommand('CALIBRATE_START', step + 1);
+    // startTimeRef.current = Date.now(); // now handled in effect
   };
 
   const handleStop = async () => {
     setIsRunning(false);
-    const elapsed = Date.now() - (startTimeRef.current || Date.now());
+    const elapsedMs = Date.now() - (startTimeRef.current || Date.now());
     setResults(prev => {
       const next = [...prev];
-      next[step] = elapsed;
+      next[step] = elapsedMs;
       return next;
     });
-    await sendCalibrationCommand('CALIBRATE_STOP', step + 1);
+    setElapsed(0);
     setShowCheck(true);
     setStepTransitioning(true);
     checkAnim.setValue(0);
@@ -116,9 +153,38 @@ export default function CalibrationSetup() {
     }, 900);
   };
 
-  const handleFinish = () => {
+
+  const handleFinish = async () => {
     setShowCheck(false); // Hide checkmark immediately on finish
     checkAnim.setValue(0);
+    // Compute flow rates and fit params
+    const x = [1, 2, 3, 4, 5];
+    const y = results.map(t => t ? CUP_VOLUME_LITERS / (t / 1000) : 0); // L/s
+    // Linear fit
+    const n = x.length;
+    const sumX = x.reduce((a, b) => a + b, 0);
+    const sumY = y.reduce((a, b) => a + b, 0);
+    const sumXY = x.reduce((a, b, i) => a + b * y[i], 0);
+    const sumX2 = x.reduce((a, b) => a + b * b, 0);
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+    // Log fit
+    const lnX = x.map(xi => Math.log(xi));
+    const sumLnX = lnX.reduce((a, b) => a + b, 0);
+    const sumYLnX = lnX.reduce((a, b, i) => a + b * y[i], 0);
+    const sumLnX2 = lnX.reduce((a, b) => a + b * b, 0);
+    const b = (n * sumYLnX - sumLnX * sumY) / (n * sumLnX2 - sumLnX * sumLnX);
+    const a = (sumY - b * sumLnX) / n;
+    // Choose best fit
+    const fitY = x.map(xi => slope * xi + intercept);
+    const logFitY = x.map(xi => a + b * Math.log(xi));
+    const sseLinear = y.reduce((sum, yi, i) => sum + Math.pow(yi - fitY[i], 2), 0);
+    const sseLog = y.reduce((sum, yi, i) => sum + Math.pow(yi - logFitY[i], 2), 0);
+  let fitType = 'linear';
+  let fitParams: any = { slope, intercept };
+  if (sseLog < sseLinear) fitType = 'log', fitParams = { a, b };
+    // Send calibration to device
+    await sendFlowCalibration(y, fitType, fitParams);
     setTimeout(() => {
       Alert.alert('Calibration Complete', 'Your calibration data has been recorded. You can now proceed to use your LiquorBot with improved accuracy.');
       router.back();
@@ -171,7 +237,10 @@ export default function CalibrationSetup() {
 
   // UI for each step
   let content;
-  if (step < STEPS.length) {
+  if (step === -1) {
+    // Intro screen with Continue button
+    content = null; // handled below in main render
+  } else if (step < STEPS.length) {
     const { title, description, icon, color } = STEPS[step];
     content = (
       <Animated.View style={[styles.stepContainer, {
@@ -194,19 +263,28 @@ export default function CalibrationSetup() {
         </View>
         <Text style={styles.stepTitle}>{title}</Text>
         <Text style={styles.stepDescription}>{description}</Text>
-        <View style={{ marginVertical: 30 }}>
-          {!isRunning && !showCheck && !stepTransitioning ? (
-            <TouchableOpacity style={[styles.startButton, { backgroundColor: '#63d44a' }]} onPress={handleStart}>
-              <Ionicons name="play" size={22} color="#141414" />
-              <Text style={styles.startButtonText}>Start</Text>
-            </TouchableOpacity>
-          ) : null}
-          {isRunning && (
-            <TouchableOpacity style={styles.stopButton} onPress={handleStop}>
-              <Ionicons name="stop" size={22} color="#DFDCD9" />
-              <Text style={styles.stopButtonText}>Stop</Text>
-            </TouchableOpacity>
-          )}
+        <View style={{ marginVertical: 30, alignItems: 'center', width: '100%', position: 'relative', minHeight: 120 }}>
+          {/* Button always in same position */}
+          <View style={{ width: '100%', alignItems: 'center', position: 'absolute', top: 0, left: 0, right: 0 }}>
+            {!isRunning && !showCheck && !stepTransitioning ? (
+              <TouchableOpacity style={[styles.startButton, { backgroundColor: '#63d44a' }]} onPress={handleStart}>
+                <Ionicons name="play" size={22} color="#141414" />
+                <Text style={styles.startButtonText}>Start</Text>
+              </TouchableOpacity>
+            ) : null}
+            {isRunning && (
+              <TouchableOpacity style={styles.stopButton} onPress={handleStop}>
+                <Ionicons name="stop" size={22} color="#DFDCD9" />
+                <Text style={styles.stopButtonText}>Stop</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {/* Timer at bottom, does not move button */}
+          <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center' }}>
+            <Text style={{ color: '#CE975E', fontSize: 22, fontWeight: 'bold', marginBottom: 0 }}>
+              {`Timer: ${((isRunning ? elapsed : 0) / 1000).toFixed(2)} s`}
+            </Text>
+          </View>
         </View>
         {results[step] && (
           <Text style={styles.resultText}>
@@ -289,39 +367,64 @@ export default function CalibrationSetup() {
         </View>
       </View>
       <View style={styles.content}>
-      {/* Intro only on first step */}
-      {step === 0 && !isRunning && (
-        <Animated.View style={[styles.introBox, {
-          opacity: anim,
-          transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
-        }]}
-        >
-          <Ionicons name="flask" size={32} color="#CE975E" style={{ marginBottom: 10 }} />
-          <Text style={styles.introText}>
-            Welcome to calibration!
-          </Text>
-          <Text style={{
-            color: '#CE975E',
-            fontSize: 16,
-            fontWeight: 'bold',
-            textAlign: 'center',
-            marginBottom: 12,
-            marginTop: 2,
-            backgroundColor: '#2a210f',
-            borderRadius: 8,
-            paddingVertical: 7,
-            paddingHorizontal: 14,
-            letterSpacing: 0.5,
-            elevation: 2,
-          }}>
-            Please use a 1 cup (236.6 mL) measuring cup for calibration.
-          </Text>
-          <Text style={styles.instructions}>
-            You will need a measuring cup. For each step, press Start, fill the cup, then press Stop. Repeat as prompted. This will help your device pour accurately.
-          </Text>
-        </Animated.View>
-      )}
-        {content}
+        {step === -1 ? (
+          <Animated.View style={[styles.introBox, {
+            opacity: anim,
+            transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
+          }]}
+          >
+            <Ionicons name="flask" size={32} color="#CE975E" style={{ marginBottom: 10 }} />
+            <Text style={styles.introText}>
+              Welcome to calibration!
+            </Text>
+            <Text style={{
+              color: '#CE975E',
+              fontSize: 16,
+              fontWeight: 'bold',
+              textAlign: 'center',
+              marginBottom: 12,
+              marginTop: 2,
+              backgroundColor: '#2a210f',
+              borderRadius: 8,
+              paddingVertical: 7,
+              paddingHorizontal: 14,
+              letterSpacing: 0.5,
+              elevation: 2,
+            }}>
+              Please use a 1 cup (236.6 mL) measuring cup for calibration.
+            </Text>
+            <Text style={styles.instructions}>
+              You will need a measuring cup. For each step, press Start, hold the cup under the spout, wait till it's filled, then press Stop. Repeat as prompted. This will help your device pour accurately.
+            </Text>
+            <View style={{
+              backgroundColor: '#23201a',
+              borderRadius: 8,
+              paddingVertical: 8,
+              paddingHorizontal: 10,
+              marginBottom: 14,
+              marginTop: 2,
+              elevation: 1,
+              width: '100%',
+            }}>
+              <Text style={{ color: '#DFDCD9', fontSize: 15, fontWeight: 'bold', marginBottom: 4, textAlign: 'center' }}>
+                Before you start:
+              </Text>
+              <Text style={{ color: '#DFDCD9', fontSize: 15, marginBottom: 2 }}>
+                • Make sure slots 1-5 can dispense (ideally fill with water).
+              </Text>
+              <Text style={{ color: '#DFDCD9', fontSize: 15, marginBottom: 2 }}>
+                • To avoid wasting ingredients, swap to water in Maintenance.
+              </Text>
+              <Text style={{ color: '#DFDCD9', fontSize: 15, marginBottom: 2 }}>
+                • If you don't mind using current ingredients, just continue.
+              </Text>
+            </View>
+            <TouchableOpacity style={[styles.startButton, { backgroundColor: '#CE975E', marginTop: 18 }]} onPress={() => setStep(0)}>
+              <Ionicons name="arrow-forward" size={22} color="#141414" />
+              <Text style={styles.startButtonText}>Continue</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        ) : content}
       </View>
     </View>
   );

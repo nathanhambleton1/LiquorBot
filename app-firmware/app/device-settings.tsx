@@ -151,6 +151,9 @@ export default function DeviceSettings() {
     })();
   }, [isOverridden, liquorbotId]);
 
+      const handleEmptySystem = () => {
+        router.push('/empty-system'); // Navigate to empty system page
+      };
 
   useEffect(() => {
     (async () => {
@@ -191,6 +194,19 @@ export default function DeviceSettings() {
       useNativeDriver: true,
     }).start();
     setIsAdvancedCollapsed(!isAdvancedCollapsed);
+                  <ActionRow
+                    label="Empty System"
+                    icon="water"
+                    onPress={handleEmptySystem}
+                    info="Empty any slot for cleaning or maintenance."
+                    onInfoPress={() => {
+                      setSelectedInfo({
+                        title: 'Empty System',
+                        message: 'Select a slot to empty. Place a container under the output spout to collect the liquid. Use this before cleaning or swapping ingredients.'
+                      });
+                      setInfoModalVisible(true);
+                    }}
+                  />
   };
   const advancedRotate = advancedRot.interpolate({
     inputRange: [0, 1],
@@ -214,7 +230,7 @@ export default function DeviceSettings() {
     fn();
   };
   const handleReadySystem = () => publishMaintenance({ action: 'READY_SYSTEM' });
-  const handleEmptySystem = () => publishMaintenance({ action: 'EMPTY_SYSTEM' });
+  // Removed old handleEmptySystem to avoid redeclaration. Now handled by navigation to /empty-system
   const handleDeepClean = () => {
     strongVibration(); // Vibrate before showing the deep clean confirmation
     Alert.alert(

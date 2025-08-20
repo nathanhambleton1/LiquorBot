@@ -137,12 +137,18 @@ void ledSuccess() {
 }
 
 void ledFlashRedQuick() {
-  // Brief attention-grabbing red blink without long blocking
-  uint32_t red = strip.Color(255, 0, 0);
-  uint32_t off = strip.Color(0, 0, 0);
-  // Two short pulses ~400ms total
-  setLEDColor(red); delay(80);
-  setLEDColor(off); delay(80);
-  setLEDColor(red); delay(80);
-  // leave it red to indicate pause/error state
+  // Quick red fade pulse (smooth instead of harsh blink)
+  // Total ~300ms per call; external caller may add a small delay between pulses
+  const uint32_t red = strip.Color(255, 0, 0);
+  const uint32_t off = strip.Color(0, 0, 0);
+
+  // Ensure starting at red so the first transition is a fade down
+  if (currentColor != red) {
+    setLEDColor(red);
+  }
+
+  // Fast fade down to off, then back up to red
+  // Keep steps modest for a visibly smooth but quick effect
+  fadeToColor(off, 100, 25);  // ~5ms/step
+  fadeToColor(red, 100, 25);
 }

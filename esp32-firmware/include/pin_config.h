@@ -53,6 +53,14 @@
 #define CLEAN_AIR_TOP_MS   1500   // ms pump ON to push air out of top/spout (outputs 1/4 path)
 #define CLEAN_TRASH_MS     2500   // ms pump ON + trash/air valve (SPI slot 14) open to dump
 
+/* ----------------------------- Empty System Duration ------------------------- */
+// Time to run the backflow/empty routine (open slots 1..12, outputs 2&4 path, slots 13&14 open)
+#define EMPTY_SYSTEM_MS     4000   // ms
+
+/* ----------------------------- Deep Clean Duration --------------------------- */
+// Time to run deep clean (outputs 1&3 path, open 1..12 + water feed; pump forward)
+#define DEEP_CLEAN_MS        10000  // ms
+
 /* ----------------------------- Outlet/Top Solenoids (GPIO) --------------------- */
 // Four additional non-SPI solenoids near the outlet controlled directly via GPIO.
 // Index → GPIO mapping:

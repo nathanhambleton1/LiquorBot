@@ -1,3 +1,4 @@
+
 /*  aws_manager.cpp  – AWS‑IoT + slot‑config logic (non‑blocking pour)
  *  Author: Nathan Hambleton – refactor 16 May 2025 by ChatGPT
  * -------------------------------------------------------------------------- */
@@ -5,6 +6,7 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <Preferences.h>
 #include "aws_manager.h"     // LIQUORBOT_ID & topic macros
 #include "certs.h"
 #include "drink_controller.h"
@@ -14,8 +16,13 @@
 #include "maintenance_controller.h"
 #include "pressure_pad.h"
 
-/* ---------- NVS for slot‑config persistence ---------- */
-#include <Preferences.h>
+#define FLOW_CALIB_TOPIC  "liquorbot/liquorbot" LIQUORBOT_ID "/calibrate/flow"
+// Flow calibration (max 5 rates, linear/log fit)
+static float flowRatesLps[5] = {0};
+static int   flowRateCount = 0;
+static char  flowFitType[8] = "";
+static float flowFitA = 0, flowFitB = 0;
+
 static Preferences prefs;
 
 /* Up to 15 slots (adjust if needed) */
@@ -23,8 +30,37 @@ static uint16_t slotConfig[15] = {0};
 static float    slotVolumes[15] = {0}; // volume per slot, stored in liters (L)
 
 // Get slot count from first two digits of LIQUORBOT_ID
+
 static uint8_t getSlotCount() {
     return (LIQUORBOT_ID[0] - '0') * 10 + (LIQUORBOT_ID[1] - '0');
+}
+
+void saveFlowCalibrationToNVS(const float *ratesLps, int count, const char *fitType, float a, float b) {
+    prefs.begin("flowcalib", false);
+    prefs.putInt("count", count);
+    for (int i = 0; i < count && i < 5; ++i) {
+        char key[8]; snprintf(key, sizeof(key), "r%d", i);
+        prefs.putFloat(key, ratesLps[i]);
+    }
+    prefs.putString("fit", fitType);
+    prefs.putFloat("a", a);
+    prefs.putFloat("b", b);
+    prefs.end();
+}
+
+bool loadFlowCalibrationFromNVS(float *ratesLps, int &count, char *fitType, float &a, float &b) {
+    prefs.begin("flowcalib", true);
+    count = prefs.getInt("count", 0);
+    for (int i = 0; i < count && i < 5; ++i) {
+        char key[8]; snprintf(key, sizeof(key), "r%d", i);
+        ratesLps[i] = prefs.getFloat(key, 0);
+    }
+    String fit = prefs.getString("fit", "");
+    strncpy(fitType, fit.c_str(), 7); fitType[7] = 0;
+    a = prefs.getFloat("a", 0);
+    b = prefs.getFloat("b", 0);
+    prefs.end();
+    return count > 0;
 }
 
 /* Wi‑Fi + MQTT objects */
@@ -109,6 +145,7 @@ void processAWSMessages() {
             mqttClient.subscribe(SLOT_CONFIG_TOPIC);   // slot-config RPC
             mqttClient.subscribe(MAINTENANCE_TOPIC);   // deep-clean, etc.
             mqttClient.subscribe(HEARTBEAT_TOPIC);     // ping / ignore
+            mqttClient.subscribe(FLOW_CALIB_TOPIC);    // flow calibration
             Serial.println("✔ MQTT connected & topics subscribed");
             sentReady = false;                        // re-signal after reconnect
         }
@@ -152,6 +189,28 @@ void processAWSMessages() {
 void receiveData(char *topic, byte *payload, unsigned int length) {
     String message  = String((char *)payload).substring(0, length);
     String topicStr = String(topic);
+    // 0 · Flow calibration
+    if (String(topic) == FLOW_CALIB_TOPIC) {
+        StaticJsonDocument<256> doc;
+        if (deserializeJson(doc, message) == DeserializationError::Ok) {
+            // Parse array of rates (L/s), fit type, a, b
+            JsonArray arr = doc["rates_lps"];
+            int n = 0;
+            for (JsonVariant v : arr) {
+                if (n < 5) flowRatesLps[n++] = v.as<float>();
+            }
+            flowRateCount = n;
+            String fit = doc["fit"]["type"] | "";
+            strncpy(flowFitType, fit.c_str(), 7); flowFitType[7] = 0;
+            flowFitA = doc["fit"]["a"] | 0.0f;
+            flowFitB = doc["fit"]["b"] | 0.0f;
+            saveFlowCalibrationToNVS(flowRatesLps, flowRateCount, flowFitType, flowFitA, flowFitB);
+            Serial.printf("[CALIB] Flow calibration received: %d rates, fit=%s a=%.4f b=%.4f\n", flowRateCount, flowFitType, flowFitA, flowFitB);
+        } else {
+            Serial.println("[CALIB] Bad calibration JSON – ignored.");
+        }
+        return;
+    }
 
     /* 1 · Heartbeat ping or check */
     if (topicStr == HEARTBEAT_TOPIC) {

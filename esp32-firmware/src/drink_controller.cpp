@@ -37,6 +37,7 @@
 #include "pin_config.h"      // central pin & timing configuration
 #include "state_manager.h"
 #include "aws_manager.h"     // notifyPourResult(), sendData(), LIQUORBOT_ID
+#include <string.h>
 #include "led_control.h"
 #include "pressure_pad.h"
 
@@ -82,6 +83,15 @@ static float        estimatePourTime(const std::vector<IngredientCommand> &parse
 static void         pourDrinkTask(void *param);
 // LED success cue task (non-blocking)
 static void         ledSuccessTask(void *param);
+
+/* Public wrappers used by maintenance_controller */
+void dcSetSpiSlot(int slot, bool on) { ncvSetSlot(slot, on); }
+void dcOutletSetState(bool s1, bool s2, bool s3, bool s4) { outletSetState(s1,s2,s3,s4); }
+void dcOutletAllOff() { outletAllOff(); }
+void dcPumpForward(bool on) { pumpForward(on); }
+void dcPumpSetDuty(uint8_t duty) { pumpSetPWMDuty(duty); }
+void dcPumpStop() { pumpStop(); }
+uint8_t dcGetIngredientCount() { return getIngredientCountFromId(); }
 
 /* ============================================================================================ */
 /*                                           INIT                                               */
@@ -501,7 +511,34 @@ static float estimatePourTime(const std::vector<IngredientCommand> &parsed) {
   return totalSec + 4.0f; // include cleaning & latencies
 }
 
-static float flowRate(int n) { // oz/sec (tuned from old system)
+static float flowRate(int n) {
+  // Try to load calibration from NVS (cached in static)
+  static bool loaded = false;
+  static float ratesLps[5] = {0};
+  static int rateCount = 0;
+  static char fitType[8] = "";
+  static float a = 0, b = 0;
+  if (!loaded) {
+    if (loadFlowCalibrationFromNVS(ratesLps, rateCount, fitType, a, b)) {
+      loaded = true;
+    }
+  }
+  // Use calibration if available
+  if (loaded && rateCount > 0) {
+    if (n >= 1 && n <= rateCount) {
+      // Convert L/s to oz/s (1 L = 33.814 oz)
+      return ratesLps[n-1] * 33.814f;
+    } else if (strcmp(fitType, "log") == 0 && n > 0) {
+      float lps = a + b * logf((float)n);
+      if (lps < 0.01f) lps = 0.01f;
+      return lps * 33.814f;
+    } else if (strcmp(fitType, "linear") == 0 && n > 0) {
+      float lps = a + b * n;
+      if (lps < 0.01f) lps = 0.01f;
+      return lps * 33.814f;
+    }
+  }
+  // Fallback to hardcoded defaults
   switch (n) {
     case 1: return 0.38f;
     case 2: return 0.54f;

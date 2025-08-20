@@ -1,3 +1,7 @@
+#define FLOW_CALIB_TOPIC  "liquorbot/liquorbot" LIQUORBOT_ID "/calibrate/flow"
+// Flow calibration storage (max 5 rates, linear/log fit)
+void saveFlowCalibrationToNVS(const float *ratesLps, int count, const char *fitType, float a, float b);
+bool loadFlowCalibrationFromNVS(float *ratesLps, int &count, char *fitType, float &a, float &b);
 #ifndef AWS_MANAGER_H
 #define AWS_MANAGER_H
 
