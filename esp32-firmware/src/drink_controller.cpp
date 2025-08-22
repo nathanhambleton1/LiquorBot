@@ -223,7 +223,7 @@ static void pourDrinkTask(void *param) {
   Serial.println("[SAFETY] Waiting for cup on pressure pad before pour...");
   // If no cup at start, notify app immediately (single message) and continue waiting
   if (!isCupPresent()) {
-    StaticJsonDocument<128> doc;
+  JsonDocument doc;
     doc["status"] = "fail";
     doc["error"]  = "No Glass Detected - place glass to start";
     String out; serializeJson(doc, out);
@@ -454,7 +454,7 @@ static void dispenseParallelGroup(std::vector<IngredientCommand> &group) {
       Serial.println("[SAFETY] Cup removed – pausing pour until return...");
       // Notify app once per pause using existing status/error formatting
       if (!pauseAlertSent) {
-        StaticJsonDocument<128> doc;
+  JsonDocument doc;
         doc["status"] = "fail";
         doc["error"]  = "Glass Removed - replace glass to continue";
         String out; serializeJson(doc, out);
@@ -512,33 +512,45 @@ static float estimatePourTime(const std::vector<IngredientCommand> &parsed) {
 }
 
 static float flowRate(int n) {
-  // Try to load calibration from NVS (cached in static)
+  // Cached calibration with versioned hot-reload
   static bool loaded = false;
+  static uint32_t lastVer = 0;
   static float ratesLps[5] = {0};
   static int rateCount = 0;
   static char fitType[8] = "";
   static float a = 0, b = 0;
-  if (!loaded) {
+
+  uint32_t ver = getCalibrationVersion();
+  if (!loaded || ver != lastVer) {
     if (loadFlowCalibrationFromNVS(ratesLps, rateCount, fitType, a, b)) {
       loaded = true;
+      lastVer = ver;
     }
   }
-  // Use calibration if available
+
+  // Prefer discrete rates and clamp 6+ to the 5th value when present
   if (loaded && rateCount > 0) {
-    if (n >= 1 && n <= rateCount) {
-      // Convert L/s to oz/s (1 L = 33.814 oz)
-      return ratesLps[n-1] * 33.814f;
-    } else if (strcmp(fitType, "log") == 0 && n > 0) {
+    if (n <= 0) n = 1;
+    int idx = n;
+    if (idx > 5) idx = 5;
+    if (idx > rateCount) idx = rateCount;
+    float lps = ratesLps[idx - 1];
+    if (lps > 0.0f) return lps * 33.814f; // L/s → oz/s
+    // If somehow zero, fall through to fit/default
+  }
+  // If no discrete rates available, try fit (optional)
+  if (loaded && n > 0) {
+    if (strcmp(fitType, "log") == 0) {
       float lps = a + b * logf((float)n);
       if (lps < 0.01f) lps = 0.01f;
       return lps * 33.814f;
-    } else if (strcmp(fitType, "linear") == 0 && n > 0) {
+    } else if (strcmp(fitType, "linear") == 0) {
       float lps = a + b * n;
       if (lps < 0.01f) lps = 0.01f;
       return lps * 33.814f;
     }
   }
-  // Fallback to hardcoded defaults
+  // Fallback to legacy hardcoded oz/s
   switch (n) {
     case 1: return 0.38f;
     case 2: return 0.54f;

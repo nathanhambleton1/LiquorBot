@@ -23,7 +23,12 @@ static int   flowRateCount = 0;
 static char  flowFitType[8] = "";
 static float flowFitA = 0, flowFitB = 0;
 
-static Preferences prefs;
+static Preferences prefs;       // slotconfig + volumes (kept open during runtime)
+static Preferences flowPrefs;   // flowcalib (opened per op to avoid namespace conflicts)
+
+// Calibration change counter for hot-reload in drink_controller
+static volatile uint32_t g_flowCalibVersion = 0;
+uint32_t getCalibrationVersion() { return g_flowCalibVersion; }
 
 /* Up to 15 slots (adjust if needed) */
 static uint16_t slotConfig[15] = {0};
@@ -36,30 +41,57 @@ static uint8_t getSlotCount() {
 }
 
 void saveFlowCalibrationToNVS(const float *ratesLps, int count, const char *fitType, float a, float b) {
-    prefs.begin("flowcalib", false);
-    prefs.putInt("count", count);
+    flowPrefs.begin("flowcalib", false);
+    flowPrefs.putInt("count", count);
     for (int i = 0; i < count && i < 5; ++i) {
         char key[8]; snprintf(key, sizeof(key), "r%d", i);
-        prefs.putFloat(key, ratesLps[i]);
+        flowPrefs.putFloat(key, ratesLps[i]);
     }
-    prefs.putString("fit", fitType);
-    prefs.putFloat("a", a);
-    prefs.putFloat("b", b);
-    prefs.end();
+    flowPrefs.putString("fit", fitType);
+    flowPrefs.putFloat("a", a);
+    flowPrefs.putFloat("b", b);
+    flowPrefs.end();
+    // bump version for hot-reload
+    g_flowCalibVersion++;
 }
 
 bool loadFlowCalibrationFromNVS(float *ratesLps, int &count, char *fitType, float &a, float &b) {
-    prefs.begin("flowcalib", true);
-    count = prefs.getInt("count", 0);
-    for (int i = 0; i < count && i < 5; ++i) {
-        char key[8]; snprintf(key, sizeof(key), "r%d", i);
-        ratesLps[i] = prefs.getFloat(key, 0);
+    bool ok = flowPrefs.begin("flowcalib", true);
+    if (!ok) {
+        // Try RW to create namespace if missing
+        ok = flowPrefs.begin("flowcalib", false);
+        if (!ok) return false;
     }
-    String fit = prefs.getString("fit", "");
+    count = flowPrefs.getInt("count", 0);
+    // If first boot / missing, write defaults once
+    if (count <= 0) {
+        flowPrefs.end();
+        // Defaults based on legacy oz/s: [0.38, 0.54, 0.61, 0.65, 0.68] → L/s
+        float defLps[5] = {
+            0.38f / 33.814f,
+            0.54f / 33.814f,
+            0.61f / 33.814f,
+            0.65f / 33.814f,
+            0.68f / 33.814f,
+        };
+        saveFlowCalibrationToNVS(defLps, 5, "", 0.0f, 0.0f);
+        // Re-open RO to read back
+        flowPrefs.begin("flowcalib", true);
+        count = 5;
+    }
+    // Read rates
+    int readCount = (count > 5) ? 5 : count;
+    for (int i = 0; i < readCount; ++i) {
+        char key[8]; snprintf(key, sizeof(key), "r%d", i);
+        ratesLps[i] = flowPrefs.getFloat(key, 0);
+    }
+    // Zero-fill remainder if any
+    for (int i = readCount; i < 5; ++i) ratesLps[i] = 0.0f;
+    String fit = flowPrefs.getString("fit", "");
     strncpy(fitType, fit.c_str(), 7); fitType[7] = 0;
-    a = prefs.getFloat("a", 0);
-    b = prefs.getFloat("b", 0);
-    prefs.end();
+    a = flowPrefs.getFloat("a", 0);
+    b = flowPrefs.getFloat("b", 0);
+    flowPrefs.end();
     return count > 0;
 }
 
@@ -95,7 +127,7 @@ static void enqueueVolumeUpdate(uint8_t slot, float volL) {
 }
 
 void sendVolumeConfig() {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["action"] = "CURRENT_VOLUMES";
     doc["unit"] = "L"; // values are liters
     JsonArray arr = doc.createNestedArray("volumes");
@@ -173,7 +205,7 @@ void processAWSMessages() {
     while (!vuIsEmpty()) {
         VolumeUpdate vu = vuQueue[vuTail];
         vuTail = (uint8_t)(vuTail + 1) % VU_CAP;
-        StaticJsonDocument<96> doc;
+        JsonDocument doc;
         doc["action"] = "VOLUME_UPDATED";
         doc["slot"] = vu.slot;          // zero-based index
     doc["volume"] = vu.volumeL;    // liters
@@ -189,10 +221,29 @@ void processAWSMessages() {
 void receiveData(char *topic, byte *payload, unsigned int length) {
     String message  = String((char *)payload).substring(0, length);
     String topicStr = String(topic);
-    // 0 · Flow calibration
+    // 0 · Flow calibration & RPC
     if (String(topic) == FLOW_CALIB_TOPIC) {
-        StaticJsonDocument<256> doc;
+        JsonDocument doc;
         if (deserializeJson(doc, message) == DeserializationError::Ok) {
+            const char *action = doc["action"] | "";
+            if (action && !strcmp(action, "GET_CALIBRATION")) {
+                // Load current values from NVS to ensure freshness
+                float r[5] = {0}; int cnt = 0; char ftype[8] = ""; float A=0,B=0;
+                loadFlowCalibrationFromNVS(r, cnt, ftype, A, B);
+                JsonDocument resp;
+                resp["action"] = "CURRENT_CALIBRATION";
+                JsonArray arr = resp.createNestedArray("rates_lps");
+                int rc = (cnt>5)?5:cnt; if (rc<=0) rc=5; // ensure 5 if defaults present
+                for (int i=0;i<rc;i++) arr.add(r[i]);
+                JsonObject fit = resp.createNestedObject("fit");
+                fit["type"] = ftype;
+                fit["a"] = A;
+                fit["b"] = B;
+                String out; serializeJson(resp, out);
+                sendData(FLOW_CALIB_TOPIC, out);
+                return;
+            }
+
             // Parse array of rates (L/s), fit type, a, b
             JsonArray arr = doc["rates_lps"];
             int n = 0;
@@ -215,7 +266,7 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
     /* 1 · Heartbeat ping or check */
     if (topicStr == HEARTBEAT_TOPIC) {
         // If this is a heartbeat check request, respond immediately
-        StaticJsonDocument<64> doc;
+        JsonDocument doc;
         if (!deserializeJson(doc, message)) {
             const char *action = doc["action"];
             if (action && strcmp(action, "HEARTBEAT_CHECK") == 0) {
@@ -231,7 +282,7 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
     if (topicStr == AWS_PUBLISH_TOPIC) {
         // try parsing as a JSON string literal, otherwise strip quotes
         String cmd;
-        StaticJsonDocument<64> jdoc;
+        JsonDocument jdoc;
         if (deserializeJson(jdoc, message) == DeserializationError::Ok) {
             cmd = jdoc.as<const char*>(); 
         } else {
@@ -243,7 +294,7 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
 
         Serial.printf("[AWS] Drink command received: %s\n", cmd.c_str());
         if (getCurrentState() != State::IDLE) {
-            StaticJsonDocument<64> doc;
+            JsonDocument doc;
             doc["status"] = "fail";
             /* Distinguish *why* we're busy. */
             switch (getCurrentState()) {
@@ -259,7 +310,7 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
 
         // Require cup present BEFORE starting any pour processing
         if (!isCupPresent()) {
-            StaticJsonDocument<128> doc;
+            JsonDocument doc;
             doc["status"] = "fail";
             doc["error"]  = "No Glass Detected - place glass to start";
             String out; serializeJson(doc, out);
@@ -277,7 +328,7 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
     /* 3 · Slot‑config JSON or volume messages */
     if (topicStr == SLOT_CONFIG_TOPIC) {
         // Try to parse as JSON
-        StaticJsonDocument<128> doc;
+        JsonDocument doc;
         if (deserializeJson(doc, message) == DeserializationError::Ok) {
             // Check for volume get/set
             const char *action = doc["action"];
@@ -317,7 +368,7 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
     /* 4 · Maintenance actions (including DISCONNECT_WIFI) */
     if (topicStr == MAINTENANCE_TOPIC) {
         // Parse the message and ignore if it's a status response (status == "ok")
-        StaticJsonDocument<96> doc;
+        JsonDocument doc;
         if (deserializeJson(doc, message)) return;
         const char *status = doc["status"];
         if (status && strcmp(status, "ok") == 0) {
@@ -381,7 +432,7 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
 /*                    SLOT‑CONFIG JSON MESSAGE PARSER                         */
 /* -------------------------------------------------------------------------- */
 static void handleSlotConfigMessage(const String &json) {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     if (deserializeJson(doc, json)) {
         Serial.println("Bad slot‑config JSON – ignored.");
         return;
@@ -392,7 +443,7 @@ static void handleSlotConfigMessage(const String &json) {
 
     /* GET_CONFIG → send CURRENT_CONFIG */
     if (strcmp(action, "GET_CONFIG") == 0) {
-        StaticJsonDocument<256> resp;
+        JsonDocument resp;
         resp["action"] = "CURRENT_CONFIG";
         JsonArray arr  = resp.createNestedArray("slots");
         uint8_t slotCount = getSlotCount();
@@ -449,7 +500,7 @@ void sendHeartbeat() {
 
 /* ---------- Pour result notification (called from FreeRTOS task) ---------- */
 void notifyPourResult(bool success, const char *error) {
-    StaticJsonDocument<128> doc;
+    JsonDocument doc;
     doc["action"] = "POUR_RESULT";
     doc["success"] = success;
     if (!success && error) {

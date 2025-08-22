@@ -3,31 +3,42 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, Animated, Easing, Dime
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LineChart } from 'react-native-chart-kit';
-import { pubsub } from './_layout';
+import { useLiquorBot } from './components/liquorbot-provider';
 
 
-// Helper to get deviceId (stub: replace with real logic if needed)
-function getDeviceId() {
-  // TODO: Replace with actual device ID logic if available
-  return 'default-device';
-}
-
-// Send calibration results to ESP32 via PubSub
-async function sendFlowCalibration(flowRatesLps: number[], fitType: string, fitParams: any) {
-  const deviceId = getDeviceId();
-  const topic = `liquorbot/${deviceId}/calibrate/flow`;
+// Send calibration results to ESP32 via PubSub (topic uses current LiquorBot ID)
+async function sendFlowCalibration(pubsub: any, liquorbotId: string, flowRatesLps: number[], fit: { type: string, a: number, b: number }) {
+  if (!liquorbotId || liquorbotId === '000') throw new Error('No LiquorBot selected');
+  const topic = `liquorbot/liquorbot${liquorbotId}/calibrate/flow`;
   const payload = {
-    type: 'flow_calibration',
     rates_lps: flowRatesLps,
-    fit: { type: fitType, ...fitParams },
+    fit,
     timestamp: Date.now(),
   };
-  try {
-    await pubsub.publish({ topics: [topic], message: payload });
-    console.log('Published calibration:', payload);
-  } catch (e) {
-    console.error('Failed to publish calibration:', e);
-  }
+  await pubsub.publish({ topics: [topic], message: payload });
+}
+
+// Request CURRENT_CALIBRATION and resolve with the device reply (or null on timeout)
+async function fetchCurrentCalibration(pubsub: any, liquorbotId: string, timeoutMs = 4000): Promise<{ rates_lps: number[], fit: { type?: string, a?: number, b?: number } } | null> {
+  const topic = `liquorbot/liquorbot${liquorbotId}/calibrate/flow`;
+  return new Promise((resolve) => {
+    let done = false;
+    const timer = setTimeout(() => { if (!done) { done = true; sub?.unsubscribe?.(); resolve(null); } }, timeoutMs);
+    const sub = pubsub.subscribe({ topics: [topic] }).subscribe({
+      next: (d: any) => {
+        const msg = d?.value ?? d;
+        if (msg?.action === 'CURRENT_CALIBRATION' && !done) {
+          done = true;
+          clearTimeout(timer);
+          sub?.unsubscribe?.();
+          resolve({ rates_lps: Array.isArray(msg.rates_lps) ? msg.rates_lps : [], fit: msg.fit ?? {} });
+        }
+      },
+      error: () => { if (!done) { done = true; clearTimeout(timer); sub?.unsubscribe?.(); resolve(null); } },
+    });
+    // Kick the device to respond
+    pubsub.publish({ topics: [topic], message: { action: 'GET_CALIBRATION' } }).catch(() => {});
+  });
 }
 
 const STEP_COLOR = '#CE975E'; // Gold theme for all steps
@@ -68,6 +79,7 @@ const CUP_VOLUME_LITERS = 0.236588; // 1 US cup in liters
 
 export default function CalibrationSetup() {
   const router = useRouter();
+  const { liquorbotId, pubsub } = useLiquorBot();
   // step: -1 = intro, 0 = step 1, ...
   const [step, setStep] = useState(-1);
   const [isRunning, setIsRunning] = useState(false);
@@ -166,8 +178,8 @@ export default function CalibrationSetup() {
     const sumY = y.reduce((a, b) => a + b, 0);
     const sumXY = x.reduce((a, b, i) => a + b * y[i], 0);
     const sumX2 = x.reduce((a, b) => a + b * b, 0);
-    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-    const intercept = (sumY - slope * sumX) / n;
+  const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
     // Log fit
     const lnX = x.map(xi => Math.log(xi));
     const sumLnX = lnX.reduce((a, b) => a + b, 0);
@@ -180,15 +192,24 @@ export default function CalibrationSetup() {
     const logFitY = x.map(xi => a + b * Math.log(xi));
     const sseLinear = y.reduce((sum, yi, i) => sum + Math.pow(yi - fitY[i], 2), 0);
     const sseLog = y.reduce((sum, yi, i) => sum + Math.pow(yi - logFitY[i], 2), 0);
-  let fitType = 'linear';
-  let fitParams: any = { slope, intercept };
-  if (sseLog < sseLinear) fitType = 'log', fitParams = { a, b };
-    // Send calibration to device
-    await sendFlowCalibration(y, fitType, fitParams);
-    setTimeout(() => {
-      Alert.alert('Calibration Complete', 'Your calibration data has been recorded. You can now proceed to use your LiquorBot with improved accuracy.');
+  let fitType: 'linear' | 'log' = 'linear';
+  let fitA = intercept; // for linear, a=intercept
+  let fitB = slope;     // for linear, b=slope
+  if (sseLog < sseLinear) { fitType = 'log'; fitA = a; fitB = b; }
+    try {
+      // Send calibration to device (discrete rates + chosen fit with a/b keys)
+  await sendFlowCalibration(pubsub, liquorbotId, y, { type: fitType, a: fitA, b: fitB });
+      // Try to confirm from device
+  const resp = await fetchCurrentCalibration(pubsub, liquorbotId, 4000);
+      const ok = !!resp && Array.isArray(resp.rates_lps) && resp.rates_lps.length >= Math.min(5, y.length);
+      const msg = ok
+        ? 'Calibration saved and confirmed by device. Your pours and ETAs will now reflect these rates.'
+        : 'Calibration sent. Waiting for device confirmation… Your pours should already use the new rates.';
+      Alert.alert('Calibration Complete', msg);
       router.back();
-    }, 900);
+    } catch (e) {
+      Alert.alert('Calibration', 'Failed to send calibration. Please try again.');
+    }
   };
 
   // On finish page, calculate flow rates and best fit lines

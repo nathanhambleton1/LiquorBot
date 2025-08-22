@@ -2,6 +2,8 @@
 // Flow calibration storage (max 5 rates, linear/log fit)
 void saveFlowCalibrationToNVS(const float *ratesLps, int count, const char *fitType, float a, float b);
 bool loadFlowCalibrationFromNVS(float *ratesLps, int &count, char *fitType, float &a, float &b);
+// Version that increments every time calibration is saved; use to hot-reload cached values
+uint32_t getCalibrationVersion();
 #ifndef AWS_MANAGER_H
 #define AWS_MANAGER_H
 
