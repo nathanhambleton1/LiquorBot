@@ -49,7 +49,7 @@
 
 /* ----------------------------- Cleaning Durations ------------------------------ */
 // Slot 13 = WATER flush, Slot 14 = AIR (trash/purge) per drink_controller logic
-#define CLEAN_WATER_MS     2000   // ms pump ON from water valve (SPI slot 13) open to output spout
+#define CLEAN_WATER_MS     20000   // ms pump ON from water valve (SPI slot 13) open to output spout
 #define CLEAN_AIR_TOP_MS   1500   // ms pump ON to push air out of top/spout (outputs 1/4 path)
 #define CLEAN_TRASH_MS     2500   // ms pump ON + trash/air valve (SPI slot 14) open to dump
 
