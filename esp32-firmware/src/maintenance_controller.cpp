@@ -79,7 +79,7 @@ void stopEmptyIngredientTask() {
 // --- FreeRTOS task forward declarations ---
 static void readySystemTask(void *param);
 static void emptySystemTask(void *param);
-static void deepCleanTask(void *param);
+static void quickCleanTask(void *param);
 
 // Example: Ready system (prime tubes)
 void startReadySystemTask() {
@@ -107,16 +107,202 @@ void startEmptySystemTask() {
     }
 }
 
-void startDeepCleanTask() {
+// QUICK_CLEAN – short automatic rinse
+void startQuickCleanTask() {
     if (getCurrentState() != State::IDLE) {
-        Serial.println("✖ Cannot start DEEP_CLEAN: System not IDLE");
-        sendData(MAINTENANCE_TOPIC, "{\"status\":\"fail\",\"error\":\"busy\"}");
+        Serial.println("✖ Cannot start QUICK_CLEAN: System not IDLE");
+        sendData(MAINTENANCE_TOPIC, "{\"status\":\"fail\",\"action\":\"QUICK_CLEAN\",\"error\":\"busy\"}");
         return;
     }
-    if (xTaskCreate(deepCleanTask, "deepCleanTask", 4096, nullptr, 1, nullptr) != pdPASS) {
-        Serial.println("❌ Failed to create DEEP_CLEAN task");
-        sendData(MAINTENANCE_TOPIC, "{\"status\":\"fail\",\"error\":\"task_fail\"}");
+    if (xTaskCreate(quickCleanTask, "quickCleanTask", 4096, nullptr, 1, nullptr) != pdPASS) {
+        Serial.println("❌ Failed to create QUICK_CLEAN task");
+        sendData(MAINTENANCE_TOPIC, "{\"status\":\"fail\",\"action\":\"QUICK_CLEAN\",\"error\":\"task_fail\"}");
     }
+}
+
+// Custom clean controls – state tracked below
+static std::atomic<bool> customActive{false};
+static std::atomic<uint8_t> customSlot{0};
+static std::atomic<uint8_t> customPhase{1};
+
+void customCleanStart(uint8_t ingredientSlot, uint8_t phase) {
+    if (getCurrentState() != State::IDLE) {
+        Serial.println("✖ Cannot start CUSTOM_CLEAN: System not IDLE");
+        sendData(MAINTENANCE_TOPIC, "{\"status\":\"fail\",\"action\":\"CUSTOM_CLEAN\",\"error\":\"busy\"}");
+        return;
+    }
+    if (ingredientSlot < 1 || ingredientSlot > 12) {
+        Serial.println("✖ CUSTOM_CLEAN bad slot");
+        sendData(MAINTENANCE_TOPIC, "{\"status\":\"fail\",\"action\":\"CUSTOM_CLEAN\",\"error\":\"bad_slot\"}");
+        return;
+    }
+    setState(State::MAINTENANCE);
+    fadeToRed();
+    cleanupDrinkController();
+
+    // Route fluid to spout: OUT1=ON, OUT3=ON
+    dcOutletSetState(true, false, true, false);
+    // Specials closed; open only selected ingredient slot
+    dcSetSpiSlot(13, false);
+    dcSetSpiSlot(14, false);
+    for (uint8_t s = 1; s <= 12; ++s) dcSetSpiSlot(s, s == ingredientSlot);
+
+    // Pump forward at water duty
+    dcPumpForward(true);
+    dcPumpSetDuty(PUMP_WATER_DUTY);
+
+    customActive = true;
+    customSlot = ingredientSlot;
+    customPhase = phase;
+    // Immediate OK ack for UI "waiting for device"
+    {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "{\"status\":\"OK\",\"action\":\"CUSTOM_CLEAN_OK\",\"mode\":\"CUSTOM_CLEAN\",\"slot\":%u,\"phase\":%u}", (unsigned)ingredientSlot, (unsigned)phase);
+        sendData(MAINTENANCE_TOPIC, String(buf));
+    }
+}
+
+void customCleanStop() {
+    Serial.println("→ CUSTOM_CLEAN STOP pressed: starting post-clean sequence");
+    // Stay in MAINTENANCE until the sequence completes
+    setState(State::MAINTENANCE);
+    fadeToRed();
+
+    const uint8_t maxIngr = dcGetIngredientCount();
+
+    // STEP 1: Water forward flush to clear the selected line remnants
+    Serial.println("[CUSTOM_CLEAN][STEP 1] Water flush");
+    // Close all ingredient slots 1..N
+    for (uint8_t s = 1; s <= maxIngr; ++s) dcSetSpiSlot(s, false);
+    // Specials: 13 (water)=ON, 14 (trash/air)=OFF
+    dcSetSpiSlot(13, true);
+    dcSetSpiSlot(14, false);
+    // Outputs: 1=ON, 2=OFF, 3=ON, 4=OFF (route to spout)
+    dcOutletSetState(true, false, true, false);
+    Serial.println("  - Outputs: [1=ON,2=OFF,3=ON,4=OFF], SPI: [13=ON (water),14=OFF], Ingredients 1..N=OFF");
+    // Pump forward at water duty
+    dcPumpForward(true);
+    dcPumpSetDuty(PUMP_WATER_DUTY);
+    Serial.printf("  - Pump ON (water duty %u) for CLEAN_WATER_MS=%u ms\n", (unsigned)PUMP_WATER_DUTY, (unsigned)CLEAN_WATER_MS);
+    vTaskDelay(pdMS_TO_TICKS(CLEAN_WATER_MS));
+
+    // STEP 2: Air purge at the top/spout path (1 & 4)
+    Serial.println("[CUSTOM_CLEAN][STEP 2] Air purge at top/spout");
+    // Close water; keep trash closed
+    dcSetSpiSlot(13, false);
+    dcSetSpiSlot(14, false);
+    // Outputs: 1=ON, 2=OFF, 3=OFF, 4=ON
+    dcOutletSetState(true, false, false, true);
+    // Pump runs gentler for air purge
+    dcPumpSetDuty(PUMP_AIR_DUTY);
+    Serial.println("  - Outputs: [1=ON,2=OFF,3=OFF,4=ON], SPI: [13=OFF,14=OFF]");
+    Serial.printf("  - Pump ON (air duty %u) for CLEAN_AIR_TOP_MS=%u ms\n", (unsigned)PUMP_AIR_DUTY, (unsigned)CLEAN_AIR_TOP_MS);
+    vTaskDelay(pdMS_TO_TICKS(CLEAN_AIR_TOP_MS));
+
+    // STEP 3: Backflow to trash
+    Serial.println("[CUSTOM_CLEAN][STEP 3] Backflow to trash");
+    // Outputs: 1=OFF, 2=ON, 3=OFF, 4=ON
+    dcOutletSetState(false, true, false, true);
+    // Open trash/air SPI slot
+    dcSetSpiSlot(14, true);
+    // Keep air duty
+    Serial.println("  - Outputs: [1=OFF,2=ON,3=OFF,4=ON], SPI: [13=OFF,14=ON]");
+    Serial.printf("  - Pump ON (air duty %u) for CLEAN_TRASH_MS=%u ms\n", (unsigned)PUMP_AIR_DUTY, (unsigned)CLEAN_TRASH_MS);
+    vTaskDelay(pdMS_TO_TICKS(CLEAN_TRASH_MS));
+
+    // STEP 4: Shutdown and report
+    Serial.println("[CUSTOM_CLEAN][STEP 4] Shutdown – closing all solenoids and stopping pump");
+    for (uint8_t s = 1; s <= 14; ++s) dcSetSpiSlot(s, false);
+    dcPumpStop();
+    dcOutletAllOff();
+    setState(State::IDLE);
+    ledIdle();
+    customActive = false;
+    uint8_t slot = customSlot.load();
+    uint8_t phase = customPhase.load();
+    char buf[160];
+    snprintf(buf, sizeof(buf), "{\"status\":\"OK\",\"action\":\"CUSTOM_CLEAN_OK\",\"mode\":\"CUSTOM_CLEAN\",\"op\":\"STOP\",\"slot\":%u,\"phase\":%u}", (unsigned)slot, (unsigned)phase);
+    sendData(MAINTENANCE_TOPIC, String(buf));
+}
+
+void customCleanResume(uint8_t ingredientSlot, uint8_t phase) {
+    if (getCurrentState() != State::IDLE) {
+        Serial.println("✖ Cannot RESUME CUSTOM_CLEAN: System not IDLE");
+        sendData(MAINTENANCE_TOPIC, "{\"status\":\"fail\",\"action\":\"CUSTOM_CLEAN\",\"error\":\"busy\"}");
+        return;
+    }
+    customCleanStart(ingredientSlot, phase);
+}
+
+// Deep clean per-line control
+static std::atomic<bool> deepLineActive{false};
+static std::atomic<uint8_t> deepLineSlot{0};
+
+void deepCleanStartLine(uint8_t ingredientSlot) {
+    if (getCurrentState() != State::IDLE) {
+        Serial.println("✖ Cannot start DEEP_CLEAN line: System not IDLE");
+        sendData(MAINTENANCE_TOPIC, "{\"status\":\"fail\",\"action\":\"DEEP_CLEAN\",\"error\":\"busy\"}");
+        return;
+    }
+    if (ingredientSlot < 1 || ingredientSlot > 12) {
+        sendData(MAINTENANCE_TOPIC, "{\"status\":\"fail\",\"action\":\"DEEP_CLEAN\",\"error\":\"bad_slot\"}");
+        return;
+    }
+    setState(State::MAINTENANCE);
+    fadeToRed();
+    cleanupDrinkController();
+    // Route to spout
+    dcOutletSetState(true, false, true, false);
+    // Open chosen slot only, specials closed
+    for (uint8_t s = 1; s <= 14; ++s) dcSetSpiSlot(s, false);
+    dcSetSpiSlot(ingredientSlot, true);
+    dcPumpForward(true);
+    dcPumpSetDuty(PUMP_WATER_DUTY);
+    deepLineActive = true;
+    deepLineSlot = ingredientSlot;
+    char buf[96];
+        snprintf(buf, sizeof(buf), "{\"status\":\"OK\",\"action\":\"DEEP_CLEAN_OK\",\"mode\":\"DEEP_CLEAN\",\"slot\":%u,\"op\":\"START\"}", (unsigned)ingredientSlot);
+    sendData(MAINTENANCE_TOPIC, String(buf));
+}
+
+void deepCleanStopLine() {
+    Serial.println("Stopping DEEP_CLEAN line");
+    for (uint8_t s = 1; s <= 14; ++s) dcSetSpiSlot(s, false);
+    dcPumpStop();
+    dcOutletAllOff();
+    setState(State::IDLE);
+    ledIdle();
+    deepLineActive = false;
+    uint8_t slot = deepLineSlot.load();
+        char buf[128];
+        snprintf(buf, sizeof(buf), "{\"status\":\"OK\",\"action\":\"DEEP_CLEAN_OK\",\"mode\":\"DEEP_CLEAN\",\"slot\":%u,\"op\":\"STOP\"}", (unsigned)slot);
+    sendData(MAINTENANCE_TOPIC, String(buf));
+}
+
+void deepCleanFinalFlush() {
+    if (getCurrentState() != State::IDLE) {
+        Serial.println("✖ Cannot start DEEP_CLEAN_FINAL: System not IDLE");
+        sendData(MAINTENANCE_TOPIC, "{\"status\":\"fail\",\"action\":\"DEEP_CLEAN_FINAL\",\"error\":\"busy\"}");
+        return;
+    }
+    setState(State::MAINTENANCE);
+    fadeToRed();
+    cleanupDrinkController();
+    // Route to spout and open WATER feed to flush
+    dcOutletSetState(true, false, true, false);
+    for (uint8_t s = 1; s <= 12; ++s) dcSetSpiSlot(s, true); // open all lines
+    dcSetSpiSlot(13, true); // water
+    dcSetSpiSlot(14, false); // trash closed
+    dcPumpForward(true);
+    dcPumpSetDuty(PUMP_WATER_DUTY);
+    vTaskDelay(pdMS_TO_TICKS(DEEP_CLEAN_MS));
+    // Close all
+    for (uint8_t s = 1; s <= 14; ++s) dcSetSpiSlot(s, false);
+    dcPumpStop();
+    dcOutletAllOff();
+    setState(State::IDLE);
+    ledIdle();
+    sendData(MAINTENANCE_TOPIC, "{\"status\":\"OK\",\"action\":\"DEEP_CLEAN_OK\",\"mode\":\"DEEP_CLEAN_FINAL\",\"op\":\"FINAL\"}");
 }
 
 // --- FreeRTOS task implementations ---
@@ -231,39 +417,29 @@ static void emptySystemTask(void *param) {
     vTaskDelete(nullptr);
 }
 
-static void deepCleanTask(void *param) {
+// --- Task impls ---
+static void quickCleanTask(void *param) {
     setState(State::MAINTENANCE);
     fadeToRed();
-    Serial.println("→ State set to MAINTENANCE (DEEP_CLEAN)");
-    // Ensure all solenoids are closed, stop pump
+    Serial.println("→ State set to MAINTENANCE (QUICK_CLEAN)");
     cleanupDrinkController();
-    Serial.println("Starting deep clean sequence (water replace + full draw)");
-
-    // Route: OUT1=ON, OUT2=OFF, OUT3=ON, OUT4=OFF
+    // Route to spout
     dcOutletSetState(true, false, true, false);
-
-    // Open all ingredient slots 1..N and the water feed (13)
-    const uint8_t maxIngr = dcGetIngredientCount();
-    for (uint8_t slot = 1; slot <= maxIngr; ++slot) dcSetSpiSlot(slot, true);
-    dcSetSpiSlot(13, true);   // water supply on
-    dcSetSpiSlot(14, false);  // trash/air closed per your spec
-
-    // Run pump forward at water duty for DEEP_CLEAN_MS
+    // Open water, close trash
+    dcSetSpiSlot(13, true);
+    dcSetSpiSlot(14, false);
+    // Ingredients closed
+    for (uint8_t s = 1; s <= dcGetIngredientCount(); ++s) dcSetSpiSlot(s, false);
     dcPumpForward(true);
     dcPumpSetDuty(PUMP_WATER_DUTY);
-    vTaskDelay(pdMS_TO_TICKS(DEEP_CLEAN_MS));
-
-    // Close all
-    for (uint8_t slot = 1; slot <= maxIngr; ++slot) dcSetSpiSlot(slot, false);
-    dcSetSpiSlot(13, false);
-    dcSetSpiSlot(14, false);
+    // Run for configured quick-clean duration
+    vTaskDelay(pdMS_TO_TICKS(QUICK_CLEAN_MS));
+    // Stop
+    for (uint8_t s = 1; s <= 14; ++s) dcSetSpiSlot(s, false);
     dcPumpStop();
     dcOutletAllOff();
-
-    Serial.println("Deep clean sequence complete");
-    sendData(MAINTENANCE_TOPIC, "{\"status\":\"ok\",\"action\":\"DEEP_CLEAN\"}");
     setState(State::IDLE);
     ledIdle();
-    Serial.println("→ State set to IDLE after DEEP_CLEAN");
+    sendData(MAINTENANCE_TOPIC, "{\"status\":\"OK\",\"action\":\"QUICK_CLEAN_OK\",\"mode\":\"QUICK_CLEAN\"}");
     vTaskDelete(nullptr);
 }

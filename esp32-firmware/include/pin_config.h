@@ -49,9 +49,13 @@
 
 /* ----------------------------- Cleaning Durations ------------------------------ */
 // Slot 13 = WATER flush, Slot 14 = AIR (trash/purge) per drink_controller logic
-#define CLEAN_WATER_MS     2000   // ms pump ON + water valve (SPI slot 13) open
+#define CLEAN_WATER_MS     2000   // ms pump ON from water valve (SPI slot 13) open to output spout
 #define CLEAN_AIR_TOP_MS   1500   // ms pump ON to push air out of top/spout (outputs 1/4 path)
 #define CLEAN_TRASH_MS     2500   // ms pump ON + trash/air valve (SPI slot 14) open to dump
+
+/* ----------------------------- Quick Clean Duration -------------------------- */
+// Quick clean: water-only forward flush duration (outputs 1 & 3 path, slot 13 open, 1..12 closed, 14 closed)
+#define QUICK_CLEAN_MS     5000   // ms (tune as needed)
 
 /* ----------------------------- Empty System Duration ------------------------- */
 // Time to run the backflow/empty routine (open slots 1..12, outputs 2&4 path, slots 13&14 open)

@@ -181,7 +181,15 @@ export default function CleanSetup() {
           <Ionicons name="arrow-back" size={18} color="#DFDCD9" />
           <Text style={styles.secondaryBtnText}>Back to options</Text>
         </TouchableOpacity>
-        {!qcDone && (
+        {qcDone ? (
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="checkmark" size={18} color="#141414" />
+            <Text style={styles.primaryBtnText}>Finish</Text>
+          </TouchableOpacity>
+        ) : (
           <TouchableOpacity
             style={[styles.primaryBtn, (!isConnected || liquorbotId === '000' || qcCleaning) && { opacity: 0.5 }]}
             disabled={!isConnected || liquorbotId === '000' || qcCleaning}
@@ -200,10 +208,12 @@ export default function CleanSetup() {
 
   // ───────────────── Custom Clean Flow (TOP-LEVEL HOOKS) ─────────────────
   const [customSelSlot, setCustomSelSlot] = useState<number | null>(null); // 1-based
-  const [customPhase, setCustomPhase] = useState<1 | 2>(1); // 1: soap, 2: rinse
+  // Simplified to single step; retain phase for backend compatibility but keep at 1
+  const [customPhase, setCustomPhase] = useState<1 | 2>(1);
   const [customRunning, setCustomRunning] = useState(false);
   const [customAwaitingOk, setCustomAwaitingOk] = useState(false);
   const [customError, setCustomError] = useState<string | null>(null);
+  const [customHasStarted, setCustomHasStarted] = useState(false); // determines Start vs Resume label
 
   React.useEffect(() => {
     if (flow !== 'custom' || liquorbotId === '000') return;
@@ -247,6 +257,7 @@ export default function CleanSetup() {
 
   const onCustomStart = async () => {
     setCustomRunning(true);
+    setCustomHasStarted(true);
     await publishCustom('START');
   };
   const onCustomStop = async () => {
@@ -258,19 +269,15 @@ export default function CleanSetup() {
     setCustomRunning(true);
     await publishCustom('RESUME');
   };
-  const onCustomProceedToRinse = () => {
-    setCustomPhase(2);
-    setCustomRunning(false);
-    setCustomAwaitingOk(false);
-    setCustomError(null);
-  };
   const onCustomFinish = () => {
     setCustomSelSlot(null);
     setCustomPhase(1);
     setCustomRunning(false);
     setCustomAwaitingOk(false);
     setCustomError(null);
-    setFlow('menu');
+  setCustomHasStarted(false);
+  // Navigate back to device settings (same as header back)
+  router.back();
   };
 
   // ───────────────── Deep Clean Flow (TOP-LEVEL HOOKS) ─────────────────
@@ -398,10 +405,7 @@ export default function CleanSetup() {
   } else if (flow === 'quick') {
   content = QuickCleanContent;
   } else if (flow === 'custom') {
-    const phaseTitle = customPhase === 1 ? 'Step 1: Clean with solution' : 'Step 2: Rinse with clean water';
-    const phaseText = customPhase === 1
-      ? 'Empty the ingredient container. Fill it with warm soapy water or food-safe cleaner. Place a container at the output spout that is large enough to catch all fluid.'
-      : 'Refill the ingredient container with clean water. Place a container at the spout to catch all fluid. This removes any soap/cleaner residue.';
+  // Combined single-step instructions
 
     content = (
       <Animated.View style={[styles.stepContainer, {
@@ -428,19 +432,29 @@ export default function CleanSetup() {
                 );
               })}
             </View>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                onPress={() => setFlow('menu')}
+              >
+                <Ionicons name="arrow-back" size={18} color="#DFDCD9" />
+                <Text style={styles.secondaryBtnText}>Back to options</Text>
+              </TouchableOpacity>
+            </View>
           </>
         ) : (
           <>
             <Text style={[styles.stepDescription, { marginBottom: 6 }]}>Selected line: {customSelSlot}</Text>
-            <Text style={styles.stepDescription}>{phaseTitle}</Text>
-            <Text style={[styles.stepDescription, { marginTop: 6 }]}>{phaseText}</Text>
+            <Text style={styles.stepDescription}>
+              Empty the bottle for this line. Fill with warm soapy water or a food-safe cleaner and place a container at the spout to catch all fluid. Tap Start to flush. When you Stop, you can refill with clean water and tap Resume to rinse any residue.
+            </Text>
 
             {/* Status */}
             <View style={{ marginTop: 14, alignItems: 'center', minHeight: 24 }}>
               {customAwaitingOk ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <ActivityIndicator size="small" color={GOLD} />
-                  <Text style={{ color: GOLD, marginLeft: 8 }}>Waiting for device…</Text>
+                  <Text style={{ color: GOLD, marginLeft: 8 }}>Finishing up…</Text>
                 </View>
               ) : customError ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -455,7 +469,7 @@ export default function CleanSetup() {
               <TouchableOpacity
                 style={[styles.secondaryBtn, (customRunning || customAwaitingOk) && { opacity: 0.5 }]}
                 disabled={customRunning || customAwaitingOk}
-                onPress={() => setCustomSelSlot(null)}
+                onPress={() => { setCustomSelSlot(null); setCustomHasStarted(false); }}
               >
                 <Ionicons name="arrow-back" size={18} color="#DFDCD9" />
                 <Text style={styles.secondaryBtnText}>Change line</Text>
@@ -464,14 +478,14 @@ export default function CleanSetup() {
                 <TouchableOpacity
                   style={[styles.primaryBtn, (!isConnected || liquorbotId === '000' || customAwaitingOk) && { opacity: 0.5 }]}
                   disabled={!isConnected || liquorbotId === '000' || customAwaitingOk}
-                  onPress={customPhase === 1 && !customAwaitingOk ? onCustomStart : onCustomResume}
+                  onPress={!customHasStarted && !customAwaitingOk ? onCustomStart : onCustomResume}
                 >
                   <Ionicons name="play" size={18} color="#141414" />
-                  <Text style={styles.primaryBtnText}>{customAwaitingOk ? 'Please wait' : (customPhase === 1 ? 'Start clean' : 'Resume')}</Text>
+                  <Text style={styles.primaryBtnText}>{customAwaitingOk ? 'Please wait' : (customHasStarted ? 'Resume' : 'Start clean')}</Text>
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  style={[styles.primaryBtn]}
+                  style={[styles.primaryBtnDanger]}
                   onPress={onCustomStop}
                 >
                   <Ionicons name="pause" size={18} color="#141414" />
@@ -480,20 +494,13 @@ export default function CleanSetup() {
               )}
             </View>
 
-            {/* Advance buttons */}
-            {!customRunning && !customAwaitingOk && (
+            {/* Finish action */}
+            {customHasStarted && !customRunning && !customAwaitingOk && (
               <View style={{ width: '100%', marginTop: 12 }}>
-                {customPhase === 1 ? (
-                  <TouchableOpacity style={styles.advanceBtn} onPress={onCustomProceedToRinse}>
-                    <Ionicons name="arrow-forward" size={18} color={GOLD} />
-                    <Text style={styles.advanceBtnText}>Proceed to rinse</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity style={styles.advanceBtn} onPress={onCustomFinish}>
-                    <Ionicons name="checkmark" size={18} color={GOLD} />
-                    <Text style={styles.advanceBtnText}>Finish</Text>
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity style={styles.advanceBtn} onPress={onCustomFinish}>
+                  <Ionicons name="checkmark" size={18} color={GOLD} />
+                  <Text style={styles.advanceBtnText}>Finish</Text>
+                </TouchableOpacity>
               </View>
             )}
 
@@ -537,7 +544,7 @@ export default function CleanSetup() {
               onPress={() => { setDeepActive(true); setDeepStep(1); }}
             >
               <Ionicons name="play" size={18} color="#141414" />
-              <Text style={styles.primaryBtnText}>Start</Text>
+              <Text style={styles.primaryBtnText}>Continue</Text>
             </TouchableOpacity>
           </View>
           {!isConnected && (
@@ -636,7 +643,7 @@ export default function CleanSetup() {
             {deepAwaiting === 'final' ? (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <ActivityIndicator size="small" color={GOLD} />
-                <Text style={{ color: GOLD, marginLeft: 8 }}>Final cleaning… waiting for device</Text>
+                <Text style={{ color: GOLD, marginLeft: 8 }}>Final cleaning… finishing up</Text>
               </View>
             ) : deepCanContinue ? (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>

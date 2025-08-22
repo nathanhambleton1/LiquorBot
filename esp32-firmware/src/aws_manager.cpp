@@ -335,8 +335,33 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
             startReadySystemTask();
         } else if (strcmp(action, "EMPTY_SYSTEM") == 0) {
             startEmptySystemTask();
+        } else if (strcmp(action, "QUICK_CLEAN") == 0) {
+            startQuickCleanTask();
+        } else if (strcmp(action, "CUSTOM_CLEAN") == 0) {
+            const char *op = doc["op"] | "START";
+            int slot = doc["slot"] | 0;           // 1-based
+            int phase = doc["phase"] | 1;         // 1 or 2
+            if (!strcasecmp(op, "START")) {
+                customCleanStart((uint8_t)slot, (uint8_t)phase);
+            } else if (!strcasecmp(op, "STOP")) {
+                customCleanStop();
+            } else if (!strcasecmp(op, "RESUME")) {
+                customCleanResume((uint8_t)slot, (uint8_t)phase);
+            }
         } else if (strcmp(action, "DEEP_CLEAN") == 0) {
-            startDeepCleanTask();
+            // Per-line deep clean control
+            const char *op = doc["op"] | "START";
+            int slot = doc["slot"] | 0; // 1-based
+            if (!strcasecmp(op, "START")) {
+                deepCleanStartLine((uint8_t)slot);
+            } else if (!strcasecmp(op, "STOP")) {
+                deepCleanStopLine();
+            }
+        } else if (strcmp(action, "DEEP_CLEAN_FINAL") == 0) {
+            const char *op = doc["op"] | "START";
+            if (!strcasecmp(op, "START")) {
+                deepCleanFinalFlush();
+            }
         } else if (strcmp(action, "EMPTY_INGREDIENT") == 0) {
             // Expect slot as 1-based index
             int slot = doc["slot"];
