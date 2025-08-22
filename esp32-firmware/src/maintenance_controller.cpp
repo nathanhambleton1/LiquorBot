@@ -423,6 +423,7 @@ static void quickCleanTask(void *param) {
     fadeToRed();
     Serial.println("→ State set to MAINTENANCE (QUICK_CLEAN)");
     cleanupDrinkController();
+    // STEP 1: Water forward flush to spout (outputs 1 & 3)
     // Route to spout
     dcOutletSetState(true, false, true, false);
     // Open water, close trash
@@ -430,11 +431,41 @@ static void quickCleanTask(void *param) {
     dcSetSpiSlot(14, false);
     // Ingredients closed
     for (uint8_t s = 1; s <= dcGetIngredientCount(); ++s) dcSetSpiSlot(s, false);
+    // Pump forward at water duty
     dcPumpForward(true);
     dcPumpSetDuty(PUMP_WATER_DUTY);
+    Serial.println("[QUICK_CLEAN][STEP 1] Water flush to spout");
+    Serial.println("  - Outputs: [1=ON,2=OFF,3=ON,4=OFF], SPI: [13=ON (water),14=OFF], Ingredients 1..N=OFF");
+    Serial.printf("  - Pump ON (water duty %u) for QUICK_CLEAN_MS=%u ms\n", (unsigned)PUMP_WATER_DUTY, (unsigned)QUICK_CLEAN_MS);
     // Run for configured quick-clean duration
     vTaskDelay(pdMS_TO_TICKS(QUICK_CLEAN_MS));
-    // Stop
+
+    // STEP 2: Air purge at the top/spout path (outputs 1 & 4)
+    Serial.println("[QUICK_CLEAN][STEP 2] Air purge at top/spout");
+    // Close water; keep trash closed
+    dcSetSpiSlot(13, false);
+    dcSetSpiSlot(14, false);
+    // Outputs: 1=ON, 2=OFF, 3=OFF, 4=ON
+    dcOutletSetState(true, false, false, true);
+    // Pump runs gentler for air purge
+    dcPumpSetDuty(PUMP_AIR_DUTY);
+    Serial.println("  - Outputs: [1=ON,2=OFF,3=OFF,4=ON], SPI: [13=OFF,14=OFF]");
+    Serial.printf("  - Pump ON (air duty %u) for CLEAN_AIR_TOP_MS=%u ms\n", (unsigned)PUMP_AIR_DUTY, (unsigned)CLEAN_AIR_TOP_MS);
+    vTaskDelay(pdMS_TO_TICKS(CLEAN_AIR_TOP_MS));
+
+    // STEP 3: Backflow to trash
+    Serial.println("[QUICK_CLEAN][STEP 3] Backflow to trash");
+    // Outputs: 1=OFF, 2=ON, 3=OFF, 4=ON
+    dcOutletSetState(false, true, false, true);
+    // Open trash/air SPI slot
+    dcSetSpiSlot(14, true);
+    // Keep air duty
+    Serial.println("  - Outputs: [1=OFF,2=ON,3=OFF,4=ON], SPI: [13=OFF,14=ON]");
+    Serial.printf("  - Pump ON (air duty %u) for CLEAN_TRASH_MS=%u ms\n", (unsigned)PUMP_AIR_DUTY, (unsigned)CLEAN_TRASH_MS);
+    vTaskDelay(pdMS_TO_TICKS(CLEAN_TRASH_MS));
+
+    // STEP 4: Shutdown and report
+    Serial.println("[QUICK_CLEAN][STEP 4] Shutdown – closing all solenoids and stopping pump");
     for (uint8_t s = 1; s <= 14; ++s) dcSetSpiSlot(s, false);
     dcPumpStop();
     dcOutletAllOff();
