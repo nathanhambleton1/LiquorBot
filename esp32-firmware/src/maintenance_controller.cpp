@@ -251,13 +251,21 @@ void deepCleanStartLine(uint8_t ingredientSlot) {
     setState(State::MAINTENANCE);
     fadeToRed();
     cleanupDrinkController();
-    // Route to spout
+    // Route to spout (Outputs: 1=ON,2=OFF,3=ON,4=OFF)
     dcOutletSetState(true, false, true, false);
-    // Open chosen slot only, specials closed
+    // Open chosen slot only, specials closed (13=water OFF, 14=trash/air OFF)
     for (uint8_t s = 1; s <= 14; ++s) dcSetSpiSlot(s, false);
     dcSetSpiSlot(ingredientSlot, true);
+
+    // Pump forward at water duty
     dcPumpForward(true);
     dcPumpSetDuty(PUMP_WATER_DUTY);
+
+    // Verbose logging for parity with CUSTOM_CLEAN
+    Serial.println("[DEEP_CLEAN][START] Per-line deep clean");
+    Serial.printf("  - Outputs: [1=ON,2=OFF,3=ON,4=OFF]\n");
+    Serial.printf("  - SPI: [slot %u=ON, 13=OFF (water), 14=OFF (trash/air)]\n", (unsigned)ingredientSlot);
+    Serial.printf("  - Pump ON (water duty %u)\n", (unsigned)PUMP_WATER_DUTY);
     deepLineActive = true;
     deepLineSlot = ingredientSlot;
     char buf[96];
@@ -266,8 +274,10 @@ void deepCleanStartLine(uint8_t ingredientSlot) {
 }
 
 void deepCleanStopLine() {
-    Serial.println("Stopping DEEP_CLEAN line");
+    Serial.println("[DEEP_CLEAN][STOP] Stopping per-line deep clean");
+    // Close all SPI solenoids (includes the selected ingredient and specials)
     for (uint8_t s = 1; s <= 14; ++s) dcSetSpiSlot(s, false);
+    // Stop pump and close outlets
     dcPumpStop();
     dcOutletAllOff();
     setState(State::IDLE);
@@ -288,15 +298,47 @@ void deepCleanFinalFlush() {
     setState(State::MAINTENANCE);
     fadeToRed();
     cleanupDrinkController();
-    // Route to spout and open WATER feed to flush
+    // STEP 1: Water forward flush to spout (outputs 1 & 3), ingredients closed, water open
+    Serial.println("[DEEP_CLEAN_FINAL][STEP 1] Water flush to spout");
+    // Route to spout
     dcOutletSetState(true, false, true, false);
-    for (uint8_t s = 1; s <= 12; ++s) dcSetSpiSlot(s, true); // open all lines
-    dcSetSpiSlot(13, true); // water
-    dcSetSpiSlot(14, false); // trash closed
+    // Close ingredients 1..N
+    for (uint8_t s = 1; s <= dcGetIngredientCount(); ++s) dcSetSpiSlot(s, false);
+    // Open water, close trash/air
+    dcSetSpiSlot(13, true);
+    dcSetSpiSlot(14, false);
+    // Pump forward at water duty
     dcPumpForward(true);
     dcPumpSetDuty(PUMP_WATER_DUTY);
-    vTaskDelay(pdMS_TO_TICKS(DEEP_CLEAN_MS));
-    // Close all
+    Serial.println("  - Outputs: [1=ON,2=OFF,3=ON,4=OFF], SPI: [13=ON (water),14=OFF], Ingredients 1..N=OFF");
+    Serial.printf("  - Pump ON (water duty %u) for CLEAN_WATER_MS=%u ms\n", (unsigned)PUMP_WATER_DUTY, (unsigned)CLEAN_WATER_MS);
+    vTaskDelay(pdMS_TO_TICKS(CLEAN_WATER_MS));
+
+    // STEP 2: Air purge at the top/spout path (outputs 1 & 4); water OFF
+    Serial.println("[DEEP_CLEAN_FINAL][STEP 2] Air purge at top/spout");
+    dcSetSpiSlot(13, false); // close water
+    dcSetSpiSlot(14, false); // keep trash closed for this step
+    // Outputs: 1=ON,2=OFF,3=OFF,4=ON
+    dcOutletSetState(true, false, false, true);
+    // Pump runs gentler for air purge
+    dcPumpSetDuty(PUMP_AIR_DUTY);
+    Serial.println("  - Outputs: [1=ON,2=OFF,3=OFF,4=ON], SPI: [13=OFF,14=OFF]");
+    Serial.printf("  - Pump ON (air duty %u) for CLEAN_AIR_TOP_MS=%u ms\n", (unsigned)PUMP_AIR_DUTY, (unsigned)CLEAN_AIR_TOP_MS);
+    vTaskDelay(pdMS_TO_TICKS(CLEAN_AIR_TOP_MS));
+
+    // STEP 3: Backflow to trash (outputs 2 & 4), open trash/air valve; water OFF
+    Serial.println("[DEEP_CLEAN_FINAL][STEP 3] Backflow to trash");
+    // Outputs: 1=OFF, 2=ON, 3=OFF, 4=ON
+    dcOutletSetState(false, true, false, true);
+    dcSetSpiSlot(13, false);
+    dcSetSpiSlot(14, true);
+    // Keep air duty
+    Serial.println("  - Outputs: [1=OFF,2=ON,3=OFF,4=ON], SPI: [13=OFF,14=ON]");
+    Serial.printf("  - Pump ON (air duty %u) for CLEAN_TRASH_MS=%u ms\n", (unsigned)PUMP_AIR_DUTY, (unsigned)CLEAN_TRASH_MS);
+    vTaskDelay(pdMS_TO_TICKS(CLEAN_TRASH_MS));
+
+    // STEP 4: Shutdown
+    Serial.println("[DEEP_CLEAN_FINAL][STEP 4] Shutdown – closing all solenoids and stopping pump");
     for (uint8_t s = 1; s <= 14; ++s) dcSetSpiSlot(s, false);
     dcPumpStop();
     dcOutletAllOff();

@@ -266,8 +266,14 @@ export default function CleanSetup() {
     setCustomRunning(false);
   };
   const onCustomResume = async () => {
+    // Deprecated in UI; kept for compatibility if referenced elsewhere
     setCustomRunning(true);
     await publishCustom('RESUME');
+  };
+  const onCustomRedo = async () => {
+    // Redo/Restart the custom clean from the beginning (same as START)
+    setCustomRunning(true);
+    await publishCustom('START');
   };
   const onCustomFinish = () => {
     setCustomSelSlot(null);
@@ -446,7 +452,7 @@ export default function CleanSetup() {
           <>
             <Text style={[styles.stepDescription, { marginBottom: 6 }]}>Selected line: {customSelSlot}</Text>
             <Text style={styles.stepDescription}>
-              Empty the bottle for this line. Fill with warm soapy water or a food-safe cleaner and place a container at the spout to catch all fluid. Tap Start to flush. When you Stop, you can refill with clean water and tap Resume to rinse any residue.
+              Empty the bottle for this line. Fill with warm soapy water or a food-safe cleaner and place a container at the spout to catch all fluid. Tap Start to flush. When you Stop, you can refill with clean water and tap Redo to rinse any residue.
             </Text>
 
             {/* Status */}
@@ -474,14 +480,14 @@ export default function CleanSetup() {
                 <Ionicons name="arrow-back" size={18} color="#DFDCD9" />
                 <Text style={styles.secondaryBtnText}>Change line</Text>
               </TouchableOpacity>
-              {!customRunning ? (
+        {!customRunning ? (
                 <TouchableOpacity
                   style={[styles.primaryBtn, (!isConnected || liquorbotId === '000' || customAwaitingOk) && { opacity: 0.5 }]}
                   disabled={!isConnected || liquorbotId === '000' || customAwaitingOk}
-                  onPress={!customHasStarted && !customAwaitingOk ? onCustomStart : onCustomResume}
+                  onPress={!customHasStarted && !customAwaitingOk ? onCustomStart : onCustomRedo}
                 >
-                  <Ionicons name="play" size={18} color="#141414" />
-                  <Text style={styles.primaryBtnText}>{customAwaitingOk ? 'Please wait' : (customHasStarted ? 'Resume' : 'Start clean')}</Text>
+                  <Ionicons name={customHasStarted ? 'refresh' : 'play'} size={18} color="#141414" />
+                  <Text style={styles.primaryBtnText}>{customAwaitingOk ? 'Please wait' : (customHasStarted ? 'Redo' : 'Start clean')}</Text>
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
@@ -686,7 +692,16 @@ export default function CleanSetup() {
     <View style={styles.container}>
       {/* Header with back button and centered title (mirrors calibration) */}
       <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={async () => {
+            // If a Custom Clean is actively running, stop it before leaving
+            if (flow === 'custom' && customRunning) {
+              await onCustomStop();
+            }
+            router.back();
+          }}
+        >
           <Ionicons name="arrow-back" size={28} color="#DFDCD9" />
         </TouchableOpacity>
         <View style={styles.headerTitleWrapper}>
