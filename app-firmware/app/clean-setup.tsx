@@ -85,7 +85,7 @@ export default function CleanSetup() {
   );
 
   // ───────────────── Quick Clean Flow ─────────────────
-  const { isConnected, liquorbotId, pubsub } = useLiquorBot();
+  const { isConnected, liquorbotId, pubsub, slotCount } = useLiquorBot();
   const [qcCleaning, setQcCleaning] = useState(false);
   const [qcDone, setQcDone] = useState(false);
   const [qcError, setQcError] = useState<string | null>(null);
@@ -198,6 +198,170 @@ export default function CleanSetup() {
     </Animated.View>
   );
 
+  // ───────────────── Custom Clean Flow (TOP-LEVEL HOOKS) ─────────────────
+  const [customSelSlot, setCustomSelSlot] = useState<number | null>(null); // 1-based
+  const [customPhase, setCustomPhase] = useState<1 | 2>(1); // 1: soap, 2: rinse
+  const [customRunning, setCustomRunning] = useState(false);
+  const [customAwaitingOk, setCustomAwaitingOk] = useState(false);
+  const [customError, setCustomError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (flow !== 'custom' || liquorbotId === '000') return;
+    const topic = `liquorbot/liquorbot${liquorbotId}/maintenance`;
+    const sub = pubsub.subscribe({ topics: [topic] }).subscribe({
+      next: (d: any) => {
+        try {
+          const raw = d?.value ?? d;
+          const msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (!msg) return;
+          const action = msg.action || msg.type;
+          const status = msg.status;
+          const slot = Number(msg.slot ?? msg.line ?? msg.channel ?? -1);
+          const isForUs = customSelSlot !== null ? slot === customSelSlot || slot === -1 : true;
+          const isCustom = action?.includes('CUSTOM_CLEAN') || msg.mode === 'CUSTOM_CLEAN' || msg.context === 'CUSTOM_CLEAN';
+          const isOk = action === 'CUSTOM_CLEAN_OK' || action === 'OK' || status === 'OK' || msg.ok === true;
+          if (isForUs && isCustom && isOk) {
+            if (customAwaitingOk) setCustomAwaitingOk(false);
+          }
+        } catch {}
+      },
+      error: () => {
+        if (customRunning || customAwaitingOk) setCustomError('Connection lost during clean');
+        setCustomRunning(false);
+        setCustomAwaitingOk(false);
+      }
+    });
+    return () => sub.unsubscribe();
+  }, [flow, liquorbotId, pubsub, customSelSlot, customRunning, customAwaitingOk]);
+
+  const publishCustom = async (op: 'START' | 'STOP' | 'RESUME') => {
+    if (customSelSlot == null) return;
+    setCustomError(null);
+    const topic = `liquorbot/liquorbot${liquorbotId}/maintenance`;
+    try {
+      await pubsub.publish({ topics: [topic], message: { action: 'CUSTOM_CLEAN', slot: customSelSlot, op, phase: customPhase } });
+    } catch {
+      setCustomError('Failed to send command');
+    }
+  };
+
+  const onCustomStart = async () => {
+    setCustomRunning(true);
+    await publishCustom('START');
+  };
+  const onCustomStop = async () => {
+    setCustomAwaitingOk(true);
+    await publishCustom('STOP');
+    setCustomRunning(false);
+  };
+  const onCustomResume = async () => {
+    setCustomRunning(true);
+    await publishCustom('RESUME');
+  };
+  const onCustomProceedToRinse = () => {
+    setCustomPhase(2);
+    setCustomRunning(false);
+    setCustomAwaitingOk(false);
+    setCustomError(null);
+  };
+  const onCustomFinish = () => {
+    setCustomSelSlot(null);
+    setCustomPhase(1);
+    setCustomRunning(false);
+    setCustomAwaitingOk(false);
+    setCustomError(null);
+    setFlow('menu');
+  };
+
+  // ───────────────── Deep Clean Flow (TOP-LEVEL HOOKS) ─────────────────
+  const [deepActive, setDeepActive] = useState(false);
+  const [deepStep, setDeepStep] = useState(1); // 1..slotCount then final
+  const [deepRunning, setDeepRunning] = useState(false);
+  const [deepAwaiting, setDeepAwaiting] = useState<null | 'start' | 'stop' | 'final'>(null);
+  const [deepCanContinue, setDeepCanContinue] = useState(false);
+  const [deepError, setDeepError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (flow !== 'deep' || liquorbotId === '000') return;
+    const topic = `liquorbot/liquorbot${liquorbotId}/maintenance`;
+    const sub = pubsub.subscribe({ topics: [topic] }).subscribe({
+      next: (d: any) => {
+        try {
+          const raw = d?.value ?? d;
+          const msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (!msg) return;
+          const action = msg.action || msg.type || '';
+          const status = msg.status;
+          const mode = msg.mode || msg.context || '';
+          const isDeep = action.includes('DEEP_CLEAN') || mode === 'DEEP_CLEAN' || mode === 'DEEP_CLEAN_FINAL' || action.includes('FINAL');
+          const isOk = action === 'DEEP_CLEAN_OK' || action === 'DEEP_CLEAN_DONE' || action === 'OK' || status === 'OK' || msg.ok === true;
+          if (!isDeep || !isOk) return;
+          if (deepAwaiting === 'start') {
+            setDeepAwaiting(null);
+            setDeepRunning(true);
+            setDeepError(null);
+          } else if (deepAwaiting === 'stop') {
+            setDeepAwaiting(null);
+            setDeepRunning(false);
+            setDeepCanContinue(true);
+            setDeepError(null);
+          } else if (deepAwaiting === 'final') {
+            setDeepAwaiting(null);
+            setDeepError(null);
+            setDeepCanContinue(true);
+          }
+        } catch {/* ignore */}
+      },
+      error: () => {
+        if (deepAwaiting || deepRunning) setDeepError('Connection lost during clean');
+        setDeepRunning(false);
+        setDeepAwaiting(null);
+      }
+    });
+    return () => sub.unsubscribe();
+  }, [flow, liquorbotId, pubsub, deepAwaiting, deepRunning]);
+
+  const publishDeep = async (message: any) => {
+    setDeepError(null);
+    const topic = `liquorbot/liquorbot${liquorbotId}/maintenance`;
+    try { await pubsub.publish({ topics: [topic], message }); }
+    catch { setDeepError('Failed to send command'); }
+  };
+
+  const startDeepStep = async () => {
+    setDeepAwaiting('start');
+    setDeepCanContinue(false);
+    await publishDeep({ action: 'DEEP_CLEAN', slot: deepStep, op: 'START' });
+  };
+  const stopDeepStep = async () => {
+    setDeepAwaiting('stop');
+    await publishDeep({ action: 'DEEP_CLEAN', slot: deepStep, op: 'STOP' });
+  };
+  const redoDeepStep = async () => {
+    setDeepAwaiting('start');
+    setDeepCanContinue(false);
+    await publishDeep({ action: 'DEEP_CLEAN', slot: deepStep, op: 'START' });
+  };
+  const continueDeepStep = (totalSlots: number) => {
+    if (deepStep < totalSlots) {
+      setDeepStep(deepStep + 1);
+      setDeepRunning(false);
+      setDeepAwaiting(null);
+      setDeepCanContinue(false);
+      setDeepError(null);
+    } else {
+      setDeepStep(totalSlots + 1); // go to final page
+      setDeepRunning(false);
+      setDeepAwaiting(null);
+      setDeepCanContinue(false);
+      setDeepError(null);
+    }
+  };
+  const startFinalDeep = async () => {
+    setDeepAwaiting('final');
+    await publishDeep({ action: 'DEEP_CLEAN_FINAL', op: 'START' });
+  };
+
   const PlaceholderFlow = ({
     title,
     description,
@@ -234,21 +398,281 @@ export default function CleanSetup() {
   } else if (flow === 'quick') {
   content = QuickCleanContent;
   } else if (flow === 'custom') {
+    const phaseTitle = customPhase === 1 ? 'Step 1: Clean with solution' : 'Step 2: Rinse with clean water';
+    const phaseText = customPhase === 1
+      ? 'Empty the ingredient container. Fill it with warm soapy water or food-safe cleaner. Place a container at the output spout that is large enough to catch all fluid.'
+      : 'Refill the ingredient container with clean water. Place a container at the spout to catch all fluid. This removes any soap/cleaner residue.';
+
     content = (
-      <PlaceholderFlow
-        title="Custom Clean"
-        description="Clean a specific line. Next steps will let you pick which slot/ingredient to rinse."
-        icon="construct-outline"
-      />
+      <Animated.View style={[styles.stepContainer, {
+        opacity: anim,
+        transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }],
+      }]}
+      >
+        <View style={[styles.iconCircle, { backgroundColor: GOLD }]}> 
+          <Ionicons name="construct-outline" size={38} color="#141414" />
+        </View>
+        <Text style={styles.stepTitle}>Custom Clean</Text>
+
+        {/* Slot picker */}
+        {customSelSlot == null ? (
+          <>
+            <Text style={[styles.stepDescription, { marginBottom: 10 }]}>Choose which ingredient to clean.</Text>
+            <View style={styles.slotGrid}>
+              {Array.from({ length: Math.max(1, slotCount || 12) }).map((_, i) => {
+                const n = i + 1;
+                return (
+                  <TouchableOpacity key={n} style={styles.slotChip} onPress={() => setCustomSelSlot(n)}>
+                    <Text style={styles.slotChipText}>{n}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={[styles.stepDescription, { marginBottom: 6 }]}>Selected line: {customSelSlot}</Text>
+            <Text style={styles.stepDescription}>{phaseTitle}</Text>
+            <Text style={[styles.stepDescription, { marginTop: 6 }]}>{phaseText}</Text>
+
+            {/* Status */}
+            <View style={{ marginTop: 14, alignItems: 'center', minHeight: 24 }}>
+              {customAwaitingOk ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color={GOLD} />
+                  <Text style={{ color: GOLD, marginLeft: 8 }}>Waiting for device…</Text>
+                </View>
+              ) : customError ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="alert-circle" size={18} color="#d44a4a" />
+                  <Text style={{ color: '#d44a4a', marginLeft: 8 }}>{customError}</Text>
+                </View>
+              ) : null}
+            </View>
+
+            {/* Controls */}
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={[styles.secondaryBtn, (customRunning || customAwaitingOk) && { opacity: 0.5 }]}
+                disabled={customRunning || customAwaitingOk}
+                onPress={() => setCustomSelSlot(null)}
+              >
+                <Ionicons name="arrow-back" size={18} color="#DFDCD9" />
+                <Text style={styles.secondaryBtnText}>Change line</Text>
+              </TouchableOpacity>
+              {!customRunning ? (
+                <TouchableOpacity
+                  style={[styles.primaryBtn, (!isConnected || liquorbotId === '000' || customAwaitingOk) && { opacity: 0.5 }]}
+                  disabled={!isConnected || liquorbotId === '000' || customAwaitingOk}
+                  onPress={customPhase === 1 && !customAwaitingOk ? onCustomStart : onCustomResume}
+                >
+                  <Ionicons name="play" size={18} color="#141414" />
+                  <Text style={styles.primaryBtnText}>{customAwaitingOk ? 'Please wait' : (customPhase === 1 ? 'Start clean' : 'Resume')}</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.primaryBtn]}
+                  onPress={onCustomStop}
+                >
+                  <Ionicons name="pause" size={18} color="#141414" />
+                  <Text style={styles.primaryBtnText}>Stop</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Advance buttons */}
+            {!customRunning && !customAwaitingOk && (
+              <View style={{ width: '100%', marginTop: 12 }}>
+                {customPhase === 1 ? (
+                  <TouchableOpacity style={styles.advanceBtn} onPress={onCustomProceedToRinse}>
+                    <Ionicons name="arrow-forward" size={18} color={GOLD} />
+                    <Text style={styles.advanceBtnText}>Proceed to rinse</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={styles.advanceBtn} onPress={onCustomFinish}>
+                    <Ionicons name="checkmark" size={18} color={GOLD} />
+                    <Text style={styles.advanceBtnText}>Finish</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {!isConnected && (
+              <Text style={{ color: '#d44a4a', marginTop: 8 }}>Connect to a device to start.</Text>
+            )}
+          </>
+        )}
+      </Animated.View>
     );
   } else if (flow === 'deep') {
-    content = (
-      <PlaceholderFlow
-        title="Deep Clean"
-        description="Thoroughly clean every line. Make sure all bottles are removed before you begin."
-        icon="sparkles-outline"
-      />
-    );
+  const total = Math.max(1, slotCount || 12);
+
+    // Intro before starting
+    if (!deepActive) {
+      content = (
+        <Animated.View style={[styles.stepContainer, {
+          opacity: anim,
+          transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }],
+        }]}
+        >
+          <View style={[styles.iconCircle, { backgroundColor: GOLD }]}> 
+            <Ionicons name="sparkles-outline" size={38} color="#141414" />
+          </View>
+          <Text style={styles.stepTitle}>Deep Clean</Text>
+          <Text style={styles.stepDescription}>
+            You’ll clean each line one-by-one. Remove all ingredients. For each line, fill the bottle with warm soapy water or food-safe cleaner and place a large container at the spout. After stopping, it’s recommended to redo with clean water to rinse.
+          </Text>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={[styles.secondaryBtn, (!isConnected || liquorbotId === '000') && { opacity: 0.5 }]}
+              disabled={!isConnected || liquorbotId === '000'}
+              onPress={() => setFlow('menu')}
+            >
+              <Ionicons name="arrow-back" size={18} color="#DFDCD9" />
+              <Text style={styles.secondaryBtnText}>Back to options</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.primaryBtn, (!isConnected || liquorbotId === '000') && { opacity: 0.5 }]}
+              disabled={!isConnected || liquorbotId === '000'}
+              onPress={() => { setDeepActive(true); setDeepStep(1); }}
+            >
+              <Ionicons name="play" size={18} color="#141414" />
+              <Text style={styles.primaryBtnText}>Start</Text>
+            </TouchableOpacity>
+          </View>
+          {!isConnected && (
+            <Text style={{ color: '#d44a4a', marginTop: 8 }}>Connect to a device to start.</Text>
+          )}
+        </Animated.View>
+      );
+    } else if (deepStep <= total) {
+      // Step page
+      content = (
+        <Animated.View style={[styles.stepContainer, {
+          opacity: anim,
+          transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }],
+        }]}
+        >
+          <View style={[styles.iconCircle, { backgroundColor: GOLD }]}> 
+            <Ionicons name="sparkles-outline" size={38} color="#141414" />
+          </View>
+          <Text style={styles.stepTitle}>Deep Clean — Ingredient {deepStep} / {total}</Text>
+          <Text style={[styles.stepDescription, { marginTop: 6 }]}>
+            Empty bottle {deepStep}. Fill with warm soapy water or food-safe cleaner. Place a container at the spout to catch all fluid. Start to flush, Stop when done. It’s recommended to redo with clean water to rinse before continuing.
+          </Text>
+
+          {/* Status */}
+          <View style={{ marginTop: 14, alignItems: 'center', minHeight: 24 }}>
+            {deepAwaiting === 'start' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={GOLD} />
+                <Text style={{ color: GOLD, marginLeft: 8 }}>Starting…</Text>
+              </View>
+            )}
+            {deepAwaiting === 'stop' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={GOLD} />
+                <Text style={{ color: GOLD, marginLeft: 8 }}>Stopping…</Text>
+              </View>
+            )}
+            {deepError && (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="alert-circle" size={18} color="#d44a4a" />
+                <Text style={{ color: '#d44a4a', marginLeft: 8 }}>{deepError}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Controls */}
+          <View style={styles.buttonRow}>
+            {/* Back to options is hidden during the sequence */}
+            {!deepRunning && !deepCanContinue && (
+              <TouchableOpacity
+                style={[styles.primaryBtn, (!isConnected || liquorbotId === '000' || deepAwaiting !== null) && { opacity: 0.5 }]}
+                disabled={!isConnected || liquorbotId === '000' || deepAwaiting !== null}
+                onPress={startDeepStep}
+              >
+                <Ionicons name="play" size={18} color="#141414" />
+                <Text style={styles.primaryBtnText}>Start</Text>
+              </TouchableOpacity>
+            )}
+            {deepRunning && (
+              <TouchableOpacity style={styles.primaryBtnDanger} onPress={stopDeepStep}>
+                <Ionicons name="stop" size={18} color="#141414" />
+                <Text style={styles.primaryBtnText}>Stop</Text>
+              </TouchableOpacity>
+            )}
+            {!deepRunning && deepCanContinue && (
+              <>
+                <TouchableOpacity style={styles.secondaryBtn} onPress={redoDeepStep}>
+                  <Ionicons name="refresh" size={18} color="#DFDCD9" />
+                  <Text style={styles.secondaryBtnText}>Redo</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.primaryBtn} onPress={() => continueDeepStep(total)}>
+                  <Ionicons name="arrow-forward" size={18} color="#141414" />
+                  <Text style={styles.primaryBtnText}>Continue</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </Animated.View>
+      );
+    } else {
+      // Final clean page
+      content = (
+        <Animated.View style={[styles.stepContainer, {
+          opacity: anim,
+          transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }],
+        }]}
+        >
+          <View style={[styles.iconCircle, { backgroundColor: GOLD }]}> 
+            <Ionicons name="sparkles-outline" size={38} color="#141414" />
+          </View>
+          <Text style={styles.stepTitle}>Final Clean</Text>
+          <Text style={styles.stepDescription}>
+            Run a final system flush. Ensure the water source is filled and there’s room at the output container. This runs automatically to finish the deep clean.
+          </Text>
+          <View style={{ marginTop: 14, alignItems: 'center', minHeight: 24 }}>
+            {deepAwaiting === 'final' ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={GOLD} />
+                <Text style={{ color: GOLD, marginLeft: 8 }}>Final cleaning… waiting for device</Text>
+              </View>
+            ) : deepCanContinue ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="checkmark-circle" size={20} color="#63d44a" />
+                <Text style={{ color: '#63d44a', marginLeft: 8 }}>Done</Text>
+              </View>
+            ) : null}
+          </View>
+
+          <View style={styles.buttonRow}>
+      {!deepAwaiting && !deepCanContinue && (
+              <TouchableOpacity
+                style={[styles.primaryBtn, (!isConnected || liquorbotId === '000') && { opacity: 0.5 }]}
+                disabled={!isConnected || liquorbotId === '000'}
+        onPress={startFinalDeep}
+              >
+                <Ionicons name="play" size={18} color="#141414" />
+                <Text style={styles.primaryBtnText}>Start final clean</Text>
+              </TouchableOpacity>
+            )}
+            {deepCanContinue && (
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={() => router.back()}
+              >
+                <Ionicons name="checkmark" size={18} color="#141414" />
+                <Text style={styles.primaryBtnText}>Finish</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {!isConnected && (
+            <Text style={{ color: '#d44a4a', marginTop: 8 }}>Connect to a device to start.</Text>
+          )}
+        </Animated.View>
+      );
+    }
   }
 
   return (
@@ -321,5 +745,21 @@ const styles = StyleSheet.create({
     paddingVertical: 12, paddingHorizontal: 18
   },
   primaryBtnText: { color: '#141414', fontSize: 16, fontWeight: 'bold', marginLeft: 8 },
+  primaryBtnDanger: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#d44a4a', borderRadius: 10,
+    paddingVertical: 12, paddingHorizontal: 18
+  },
+
+  // custom clean slot picker
+  slotGrid: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 },
+  slotChip: {
+    width: 56, height: 40, borderRadius: 10, backgroundColor: '#1C1C1C', borderWidth: 1, borderColor: '#2a2a2a',
+    alignItems: 'center', justifyContent: 'center'
+  },
+  slotChipText: { color: '#DFDCD9', fontSize: 16, fontWeight: 'bold' },
+
+  // advance actions
+  advanceBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: GOLD, paddingVertical: 10 },
+  advanceBtnText: { color: GOLD, fontSize: 16, fontWeight: 'bold', marginLeft: 8, textAlign: 'center' },
 });
 
