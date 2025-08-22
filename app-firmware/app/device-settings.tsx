@@ -231,21 +231,8 @@ export default function DeviceSettings() {
   };
   const handleReadySystem = () => publishMaintenance({ action: 'READY_SYSTEM' });
   // Removed old handleEmptySystem to avoid redeclaration. Now handled by navigation to /empty-system
-  const handleDeepClean = () => {
-    strongVibration(); // Vibrate before showing the deep clean confirmation
-    Alert.alert(
-      'Deep Clean',
-      'All ingredient containers must be empty.\n\n'
-      + 'Place warm water in a spare container and attach it to Slot 1. Proceed with deep clean?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Start',
-          style: 'destructive',
-          onPress: () => publishMaintenance({ action: 'DEEP_CLEAN' }),
-        },
-      ]
-    );
+  const handleCleanSetup = () => {
+    router.push('/clean-setup');
   };
   const handleCalibrate = () => {
     router.push('/calibration-setup'); // Navigate to calibration setup page
@@ -666,12 +653,12 @@ export default function DeviceSettings() {
                 }}
               />
               <ActionRow
-                label="Deep Clean"
+                label="Clean"
                 icon="water-outline"
-                onPress={() => { strongVibration(); bumpIfDisconnected(handleDeepClean); }}
-                info="Runs warm water through all tubes. Bottles must be empty."
+                onPress={() => { strongVibration(); bumpIfDisconnected(handleCleanSetup); }}
+                info="Open cleaning options: Quick, Custom, or Deep—step-by-step like Calibration."
                 onInfoPress={() => {
-                  setSelectedInfo({ title: "Deep Clean", message: "Runs warm water through all tubes. Bottles must be empty." });
+                  setSelectedInfo({ title: "Clean", message: "Choose Quick (fast rinse), Custom (clean a specific line), or Deep (full system)." });
                   setInfoModalVisible(true);
                 }}
               />
