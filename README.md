@@ -115,7 +115,7 @@ amplify pull --appId <appId> --envName dev
 npx expo start                     # iOS Simulator / Android emulator / Expo Go
 
 # 5 · Flash firmware (VS Code + PlatformIO)
-cd firmware
+cd esp32-firmware
 pio run -t upload                  # update `platformio.ini` with your serial port
 
 # 6 · Pair over BLE, send Wi‑Fi creds, pour your first drink! 🥂
@@ -304,8 +304,8 @@ amplify push          # deploy all resources
 ### Building
 
 ```bash
-cd firmware
-cp include/secrets_template.h include/secrets.h   # fill in certs & keys
+cd esp32-firmware
+# Open include/certs.h and paste your AWS IoT Root CA, device cert, and private key
 pio run                                           # compile
 pio run -t upload                                 # flash
 pio device monitor -b 115200                      # serial console
@@ -320,14 +320,15 @@ pio device monitor -b 115200                      # serial console
 | Slot Config  | `liquorbot/liquorbot{ID}/slot-config` | `{ "action":"GET_CONFIG" }`, etc. |
 | Maintenance  | `liquorbot/liquorbot{ID}/maintenance` | `{ "action":"DEEP_CLEAN" }`       |
 | Heartbeat    | `liquorbot/liquorbot{ID}/heartbeat`   | `{ "msg":"heartbeat" }`           |
+| Calibration  | `liquorbot/liquorbot{ID}/calibrate/flow` | `{ "rates_lps":[...], "fit":{ "type":"linear|log", "a":<num>, "b":<num> } }` and `{ "action":"GET_CALIBRATION" }` |
 
 Additional slot‑config and maintenance actions used by the app:
 
 - Slot‑config actions
   - `GET_CONFIG` → device replies with `{ action: "CURRENT_CONFIG", slots: number[] }`
   - `SET_SLOT` with `{ slot: number, ingredientId: number }`
-  - `GET_VOLUMES` → device replies with `{ action: "CURRENT_VOLUMES", volumes: number[] }`
-  - `SET_VOLUME` with `{ slot: number, volume: number }` (slot is 0‑based for volume updates)
+  - `GET_VOLUMES` → device replies with `{ action: "CURRENT_VOLUMES", unit:"L", volumes: number[] }`
+  - `SET_VOLUME` with `{ slot: number, volume: number, unit?: "L"|"ML"|"OZ" }` (slot index is 0‑based for volume updates)
   - `CLEAR_CONFIG` resets all slots to 0
 - Maintenance actions
   - `READY_SYSTEM` (prime), `EMPTY_SYSTEM`
@@ -336,7 +337,221 @@ Additional slot‑config and maintenance actions used by the app:
   - `DEEP_CLEAN` per slot with `{ slot: number, op: "START" | "STOP" }` and a final stage `DEEP_CLEAN_FINAL`
   - Devices may respond with variations like `*_OK`, `*_DONE`, or `{ status: "OK" }`—the app normalizes these.
 
+Heartbeat actions
+
+- App may send `{ action: "HEARTBEAT_CHECK" }` to `/heartbeat`; device replies immediately.
+
+Calibration actions (flow)
+
+- App publishes `{ rates_lps:number[], fit?:{ type:"linear"|"log", a:number, b:number } }` to `/calibrate/flow`.
+- App can request `{ action:"GET_CALIBRATION" }` and the device replies with `{ action:"CURRENT_CALIBRATION", rates_lps:[], fit:{} }`.
+
 ---
+
+### Firmware internals (ESP32)
+
+High‑level behavior of the on‑device firmware.
+
+- Modules
+  - `main.cpp`: boot → BLE advertise, attempt saved Wi‑Fi, 1s heartbeat, idle LED reacts to cup presence.
+  - `aws_manager`: MQTT connect/reconnect, topic handlers (publish/receive/slot‑config/maintenance/heartbeat/calibrate), NVS for slot config, volumes (liters), and calibration.
+  - `drink_controller`: non‑blocking FreeRTOS pour task; NCV7240 SPI for 14 lines; DRV8870 pump; outlet GPIO solenoids; ETA emit; staged cleaning.
+  - `maintenance_controller`: READY_SYSTEM, EMPTY_SYSTEM, QUICK_CLEAN, CUSTOM_CLEAN (Start/Stop/Resume), DEEP_CLEAN per line + FINAL, EMPTY_INGREDIENT.
+  - `wifi_setup`/`bluetooth_setup`: NVS creds, STA connect; BLE GATT provisioning and status notify.
+  - `pressure_pad`: EMA‑filtered ADC sampler with hysteresis/debounce → `isCupPresent()`.
+  - `led_control`: WS2812 effects: idle/ok/error/success/flash red.
+
+- State machine
+  - `SETUP` → `IDLE`; `POURING` for pours; `MAINTENANCE` during service tasks; `ERROR` on failures.
+  - Busy states reject new pours with a reason.
+
+- Slots and routing
+  - 1..12 ingredients; 13 = water flush; 14 = trash/air purge.
+  - Two daisy‑chained NCV7240s; outlet path via GPIO solenoids 1..4.
+  - Slot count is derived from the first two digits of `LIQUORBOT_ID` (clamped by hardware max).
+
+- Pour algorithm
+  - Input `"slot:ounces[:priority],..."` parsed, grouped by priority; within a group, valves are time‑sliced proportional to remaining ounces using `flowRate(openCount)` from calibration.
+  - Safety: cup must be present to start; if removed mid‑pour, pump pauses, quick red flash, resume when replaced; emits status once for removal.
+  - Checks stock before starting; publishes ETA; on finish, updates per‑slot volumes (liters) and persists; then staged clean: water → air purge top → trash drain.
+
+- Volumes & units
+  - Stored in liters in NVS; publishes `CURRENT_VOLUMES { unit:"L", volumes:number[] }` sized to slotCount.
+  - Sends `VOLUME_UPDATED { slot:number, volume:number, unit:"L" }` events as levels change.
+  - `SET_VOLUME` supports `L`/`ML`/`OZ` conversion on device.
+
+- Maintenance flows (summarized)
+  - READY_SYSTEM (prime): route spout (outlets 1&3), open each ingredient briefly, pump water duty.
+  - EMPTY_SYSTEM (backflow): route trash (2&4), open 1..12 + water + trash, pump air duty for `EMPTY_SYSTEM_MS`.
+  - QUICK_CLEAN: forward water flush → air purge at top → trash drain; acks `QUICK_CLEAN_OK`.
+  - CUSTOM_CLEAN: per‑slot Start/Stop/Resume; Stop does short water→air→trash tidy sequence.
+  - DEEP_CLEAN: per‑slot Start/Stop with a `DEEP_CLEAN_FINAL` system flush.
+  - EMPTY_INGREDIENT: run a single line until stopped.
+
+- Calibration (flow)
+  - Accepts discrete `rates_lps` for 1..N open lines and optional `fit` (linear or log); persists with a version so running pours hot‑reload.
+  - Responds to `GET_CALIBRATION` with `CURRENT_CALIBRATION`.
+
+- BLE provisioning
+  - Service `e0be0301-718e-4700-8f55-a24d6160db08`; SSID `...302` (WRITE), PASS `...303` (WRITE), STATUS `...304` (READ/NOTIFY).
+  - STATUS “1” indicates Wi‑Fi + MQTT up; device then disconnects the central.
+
+- Pressure pad
+  - ADC1 on `PRESSURE_ADC_PIN` with optional attenuation; thresholds/debounce in `pin_config.h`.
+
+- LEDs and pins
+  - Status effects in `led_control`; all pins and durations centralized in `pin_config.h` (SPI, pump, outlets, LED, pressure, `CLEAN_*_MS`, `QUICK_CLEAN_MS`, `EMPTY_SYSTEM_MS`).
+
+
+### Pinout overview (from `esp32-firmware/include/pin_config.h`)
+
+| Subsystem  | Signal              | GPIO |
+|------------|---------------------|------|
+| SPI (NCV)  | MOSI                | 23   |
+|            | MISO                | 19   |
+|            | SCK                 | 18   |
+|            | CS                  | 5    |
+| Pump       | IN1 (PWM)           | 16   |
+|            | IN2 (LOW)           | 17   |
+| Outlets    | OUT_SOL1            | 25   |
+|            | OUT_SOL2            | 26   |
+|            | OUT_SOL3            | 27   |
+|            | OUT_SOL4            | 14   |
+| LED        | WS2812 Data         | 4    |
+| Pressure   | ADC1 pin            | 32   |
+
+Durations/duty presets (tunable): `CLEAN_WATER_MS=2000`, `CLEAN_AIR_TOP_MS=1500`, `CLEAN_TRASH_MS=2500`, `QUICK_CLEAN_MS=5000`, `EMPTY_SYSTEM_MS=4000`, `DEEP_CLEAN_MS=10000`, `PUMP_WATER_DUTY=255`, `PUMP_AIR_DUTY=160`.
+
+Slots: 1..12 ingredients; 13 water; 14 trash/air.
+
+
+### Topic payload examples
+
+Pour (happy path)
+
+App → Device (publish)
+
+```json
+"1:2:1,3:1"
+```
+
+Device → App (receive)
+
+```json
+{ "status": "eta", "seconds": 12 }
+```
+
+Device → App (on finish)
+
+```json
+{ "status": "success" }
+```
+
+Volume updates (as they change)
+
+```json
+{ "action": "VOLUME_UPDATED", "slot": 0, "volume": 0.45, "unit": "L" }
+```
+
+Pour (glass removed)
+
+```json
+{ "status": "error", "message": "Glass Removed - replace glass to continue" }
+```
+
+Insufficient ingredients
+
+```json
+{ "status": "error", "message": "Insufficient ingredients" }
+```
+
+Slot config
+
+```json
+// App → Device
+{ "action": "GET_CONFIG" }
+
+// Device → App
+{ "action": "CURRENT_CONFIG", "slots": [101, 0, 205, 0, 0, 0, 0, 0, 0, 0, 0, 0] }
+
+// Set a slot
+{ "action": "SET_SLOT", "slot": 2, "ingredientId": 205 }
+
+// Get volumes (liters)
+{ "action": "GET_VOLUMES" }
+
+// Device → App
+{ "action": "CURRENT_VOLUMES", "unit": "L", "volumes": [0.75,0.50,0.12,0,0,0,0,0,0,0,0,0] }
+```
+
+Maintenance
+
+```json
+// Quick clean
+{ "action": "QUICK_CLEAN" }
+
+// Device reply (shape may vary)
+{ "status": "OK", "action": "QUICK_CLEAN" }
+```
+
+Calibration (flow)
+
+```json
+// Publish calibration
+{ "rates_lps": [0.010, 0.019, 0.027, 0.034, 0.040], "fit": { "type": "log", "a": 0.013, "b": 0.022 } }
+
+// Request current
+{ "action": "GET_CALIBRATION" }
+
+// Device → App
+{ "action": "CURRENT_CALIBRATION", "rates_lps": [0.010,0.019,0.027,0.034,0.040], "fit": { "type": "log", "a": 0.013, "b": 0.022 } }
+```
+
+Heartbeat
+
+```json
+// App → Device
+{ "action": "HEARTBEAT_CHECK" }
+
+// Device → App
+{ "msg": "heartbeat" }
+```
+
+
+### Flow diagrams (ASCII)
+
+Pour lifecycle
+
+```text
+IDLE
+  │
+  ├─ App → publish "<slot:oz[:prio]>,..."
+  │
+  ├─ Check: not busy? ✔
+  ├─ Check: stock sufficient? ✔
+  ├─ Wait for cup present (≤30s) ──╮
+  │                                │ timeout → error
+  ├─ Emit ETA
+  ├─ Start pump + route outputs (1&3)
+  ├─ Parallel dispense by priority + proportional time‑slicing
+  │     └─ if cup removed → pause + flash red → resume on return
+  ├─ Finish dispense
+  ├─ Post‑clean: water → air (top) → trash drain
+  ├─ Persist volumes (liters)
+  └─ Emit success → IDLE
+```
+
+Quick clean
+
+```text
+IDLE → MAINTENANCE
+  ├─ Route spout (outlets 1&3), open water (13), close trash (14)
+  ├─ Pump forward for QUICK_CLEAN_MS
+  ├─ Air purge top (1&4) for CLEAN_AIR_TOP_MS
+  ├─ Trash drain (2&4 + 14) for CLEAN_TRASH_MS
+  └─ Close all → IDLE
+```
+
 
 ## Infrastructure & IoT
 
