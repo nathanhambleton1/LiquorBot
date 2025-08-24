@@ -655,22 +655,5 @@ to the maintenance topic or press the hardware **RESET** button.
 
 ---
 
-## Roadmap
-
-* ✅ Custom recipe editing & S3 image upload
-* ✅ Non‑blocking FreeRTOS pour task
-* 🔜 IOS App Test
-* 🔜 Push notifications when pours complete
-* 🔜 OTA firmware updates via Amplify Storage
-* 🔜 Web dashboard (Next.js SSR with Amplify)
-
----
-
-## License
-
-**MIT** © Nathan Hambleton & contributors — see [`LICENSE`](LICENSE).
-
----
-
 *Enjoy your perfectly poured cocktails!* 🥂
 
