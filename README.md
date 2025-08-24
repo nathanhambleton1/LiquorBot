@@ -145,6 +145,103 @@ pio run -t upload                  # update `platformio.ini` with your serial po
 
 ---
 
+### Connectivity & Provisioning (BLE + Wi‑Fi)
+
+LiquorBot supports a streamlined first‑time setup and a fast re‑connect path:
+
+- BLE discovery: advertises as `LiquorBot-<ID>`; the app scans for a custom GATT service and will surface a Wi‑Fi row when the device is already online to avoid duplicates.
+- Quick handshake: if the device reports it’s already connected to Wi‑Fi, tapping it sets the active LiquorBot ID immediately and the app reconnects MQTT without sending credentials.
+- Full provisioning: entering SSID and password over BLE writes to the following characteristics and shows a 3‑step progress modal.
+  - Service UUID: `e0be0301-718e-4700-8f55-a24d6160db08`
+  - SSID Char: `e0be0302-718e-4700-8f55-a24d6160db08`
+  - Password Char: `e0be0303-718e-4700-8f55-a24d6160db08`
+  - Status Char (read/monitor): `e0be0304-718e-4700-8f55-a24d6160db08`
+- 3‑step modal: Connecting to Wi‑Fi → Connecting to Server → Finalising Setup. A failsafe timeout surfaces wrong‑credentials errors.
+- Manual entry: users can directly enter a known LiquorBot ID to connect via MQTT without BLE.
+
+Permissions and resiliency:
+
+- Android runtime permissions are requested for Bluetooth scan/connect and nearby Wi‑Fi scanning.
+- iOS shows a helper sheet to enable Bluetooth in Settings when powered off.
+- Duplicate suppression merges the currently connected Wi‑Fi device so you don’t see two rows for the same unit.
+
+---
+
+### Device Maintenance & Slot Configuration
+
+From Device Settings, you can prime, empty, clean, calibrate, and assign ingredients to slots.
+
+- Maintenance actions (over MQTT maintenance topic):
+  - Load Ingredients (prime) to ensure first pours are instant.
+  - Empty System to safely return liquids to bottles before storage.
+  - Clean opens a guided Clean Setup with Quick, Custom, and Deep options.
+  - Calibrate opens Calibration Setup for pump flow calibration.
+- Configure Slots:
+  - Reads both CURRENT_CONFIG and CURRENT_VOLUMES and renders only up to the detected `slotCount` per device.
+  - Ingredient picker per slot with a companion Volume button (color‑coded: green/yellow/red/gray) to reflect fill level/health.
+  - Undo buffer (per user and device) allows one‑tap rollback after Clear All or bulk changes; uses AsyncStorage.
+  - Clear All publishes CLEAR_CONFIG and resets local state; Undo restores the previous config via SET_SLOT then GET_CONFIG.
+- Advanced/Danger Zone:
+  - Disconnect from Device with event‑aware prompts: delete the active event and disconnect all, wait until it ends, or cancel.
+  - Disconnect from Wi‑Fi to reboot into BLE pairing mode.
+
+---
+
+### Clean Setup (Quick, Custom, Deep)
+
+- Quick Clean: sends a single QUICK_CLEAN command; shows live progress and success/error states.
+- Custom Clean: pick a specific line, then Start/Stop to flush. Redo runs another pass (recommended to rinse). Finish returns to settings.
+- Deep Clean: guided per‑slot sequence 1..N; Start/Stop each slot, Redo if needed, Continue advances; concludes with a Final Clean stage.
+
+All flows are resilient to slightly different OK/status payload shapes and recover from temporary disconnections.
+
+---
+
+### Calibration Setup (Flow Rates)
+
+- Five‑step guided timing using a 1‑cup (236.6 mL) measuring cup; records elapsed times for consistent baselines.
+- Derives flow rates (L/s) and computes both linear and logarithmic fits; picks the model with the lower SSE (sum of squared errors).
+- Publishes discrete rates and the chosen fit parameters to the device; attempts to confirm by requesting the current calibration.
+- Visualises both the measured data and the best‑fit curve before you tap Finish.
+
+---
+
+### Events & Overrides
+
+- Event override: joining an active event temporarily switches your active LiquorBot to the event’s device. Your original pairing is preserved and automatically restored when the event ends or you leave the event.
+- Owner/guest roles: owners can delete events from Danger Zone; deletion immediately disconnects all guests and resets the device association.
+
+---
+
+### Pouring, Make‑able Filter, and Notifications
+
+- Menu shows “make‑able” drinks based on current slot configuration and per‑slot volumes.
+- Pour slider animates and publishes pour commands; ETA is tracked and optional local notifications can announce completion.
+- Pours are logged to the backend and pour history is retrievable for users.
+
+---
+
+### Caching & Offline Behavior
+
+- Drinks/ingredients JSON and event lists are cached locally for fast loads and offline browsing.
+- Image assets (drink artwork) are cached on device storage to reduce bandwidth and speed up the UI.
+- Various UI preferences and transient states are persisted, including undo buffers and device pairing.
+
+---
+
+### Providers & Deep Linking
+
+- LiquorBotProvider: centralizes MQTT heartbeat/connection, slot state, volumes, device ID/pairing, and dynamic `slotCount` per unit.
+- DeepLinkProvider: captures app links for joining events (e.g., `join/<code>`) and routes through the auth modal when required.
+- Global Auth Modal: sign‑in/up, forgot/confirm, and a session‑loading state that can auto‑close when Amplify resumes a session.
+
+---
+
+### Access Control
+
+- Role‑based gating hides admin‑only tabs and actions for non‑admins and guards guest access to protected screens (e.g., Menu expand/likes).
+- GraphQL uses owner/public rules; PubSub uses Cognito auth for MQTT credentials.
+
 ## Amplify Backend (v6)
 
 | Category          | Purpose                                             | Notes                                         |
@@ -223,6 +320,21 @@ pio device monitor -b 115200                      # serial console
 | Slot Config  | `liquorbot/liquorbot{ID}/slot-config` | `{ "action":"GET_CONFIG" }`, etc. |
 | Maintenance  | `liquorbot/liquorbot{ID}/maintenance` | `{ "action":"DEEP_CLEAN" }`       |
 | Heartbeat    | `liquorbot/liquorbot{ID}/heartbeat`   | `{ "msg":"heartbeat" }`           |
+
+Additional slot‑config and maintenance actions used by the app:
+
+- Slot‑config actions
+  - `GET_CONFIG` → device replies with `{ action: "CURRENT_CONFIG", slots: number[] }`
+  - `SET_SLOT` with `{ slot: number, ingredientId: number }`
+  - `GET_VOLUMES` → device replies with `{ action: "CURRENT_VOLUMES", volumes: number[] }`
+  - `SET_VOLUME` with `{ slot: number, volume: number }` (slot is 0‑based for volume updates)
+  - `CLEAR_CONFIG` resets all slots to 0
+- Maintenance actions
+  - `READY_SYSTEM` (prime), `EMPTY_SYSTEM`
+  - `QUICK_CLEAN`
+  - `CUSTOM_CLEAN` with `{ slot: number, op: "START" | "STOP" | "RESUME" }`
+  - `DEEP_CLEAN` per slot with `{ slot: number, op: "START" | "STOP" }` and a final stage `DEEP_CLEAN_FINAL`
+  - Devices may respond with variations like `*_OK`, `*_DONE`, or `{ status: "OK" }`—the app normalizes these.
 
 ---
 
