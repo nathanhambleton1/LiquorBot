@@ -74,7 +74,8 @@ const EventsPage: React.FC = () => {
   const [ingredientSet, setIngredientSet] = useState<Set<number>>(new Set());
   const [slotsOK, setSlotsOK] = useState(true);
   // Max unique ingredient slots derived from the first 2 digits of the device ID
-  const [maxSlots, setMaxSlots] = useState<number>(15);
+  // Default to 0 when no device ID provided so UI shows 0/0
+  const [maxSlots, setMaxSlots] = useState<number>(0);
   // Error feedback for drink selection
   const [errorItemId, setErrorItemId] = useState<number | string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -105,10 +106,10 @@ const EventsPage: React.FC = () => {
   // Parse allowed slots from the first two digits of the device ID
   const parseMaxSlotsFromDeviceId = (id: string) => {
     const s = id.trim();
-    if (!s) return 15;
+    if (!s) return 0;
     const firstTwo = s.slice(0, 2);
     const n = parseInt(firstTwo, 10);
-    if (isNaN(n) || n <= 0) return 15;
+    if (isNaN(n) || n <= 0) return 0;
     return n;
   };
 
@@ -764,10 +765,10 @@ const EventsPage: React.FC = () => {
       </div>
 
       {!loading && events.length === 0 ? (
-        <div className="empty-events" style={{ textAlign: 'center', padding: '36px 12px' }}>
-          <FiCalendar size={120} style={{ marginBottom: 18, color: '#ce975e', textAlign: 'center' }} />
-          <p style={{ fontSize: 20, fontWeight: 600, marginTop: 4 }}>You haven't created or joined any events yet</p>
-          <p style={{ color: '#cecece', maxWidth: 600, margin: '12px auto 0', fontSize: 16 }}>Create a new event or join one using an invite code</p>
+        <div className="empty-events" style={{ textAlign: 'center', padding: '28px 12px' }}>
+          <FiCalendar size={72} style={{ marginBottom: 12, color: '#ce975e', textAlign: 'center' }} />
+          <p style={{ color: '#cecece', maxWidth: 600, margin: '8px auto 0', fontSize: 16 }}>You haven't created or joined any events yet</p>
+          <p style={{ color: '#cecece', maxWidth: 600, margin: '8px auto 0', fontSize: 16 }}>Create a new event or join one using an invite code</p>
         </div>
       ) : events.length > 0 ? (
         <div className="events-grid">
@@ -1083,7 +1084,7 @@ const EventsPage: React.FC = () => {
                     className="lb-btn secondary"
                     onClick={() => {
                       if (!isDeviceIdValid()) {
-                        setFormError('Enter a valid Device ID first (1-6 digits).');
+                        setFormError('Enter a valid Device ID first.');
                         setFormShake(true);
                         setTimeout(() => setFormShake(false), 500);
                         return;
