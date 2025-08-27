@@ -764,9 +764,10 @@ const EventsPage: React.FC = () => {
       </div>
 
       {!loading && events.length === 0 ? (
-        <div className="empty-events">
-          <p>You haven't created or joined any events yet</p>
-          <p>Create a new event or join one using an invite code</p>
+        <div className="empty-events" style={{ textAlign: 'center', padding: '36px 12px' }}>
+          <FiCalendar size={120} style={{ marginBottom: 18, color: '#ce975e', textAlign: 'center' }} />
+          <p style={{ fontSize: 20, fontWeight: 600, marginTop: 4 }}>You haven't created or joined any events yet</p>
+          <p style={{ color: '#cecece', maxWidth: 600, margin: '12px auto 0', fontSize: 16 }}>Create a new event or join one using an invite code</p>
         </div>
       ) : events.length > 0 ? (
         <div className="events-grid">
@@ -1325,18 +1326,27 @@ const EventsPage: React.FC = () => {
                   <div className="drink-grid">
                     {filteredDrinks().map(drink => {
                       const isError = errorItemId === drink.id;
+                      const isSelected = selectedDrinkIds.includes(drink.id);
+                      const isDisabled = !isSelected && !canAddDrink(drink);
                       return (
                       <div 
                         key={drink.id} 
-                        className={`drink-item ${selectedDrinkIds.includes(drink.id) ? 'selected' : ''} ${isError ? 'shake' : ''}`}
+                        className={`drink-item ${isSelected ? 'selected' : ''} ${isError ? 'shake' : ''} ${isDisabled ? 'disabled' : ''}`}
                         onClick={() => {
-                          if (selectedDrinkIds.includes(drink.id)) {
+                          if (isDisabled) {
+                            // show error bubble only
+                            setErrorItemId(drink.id);
+                            setErrorMessage(`Cannot add: exceeds ${maxSlots} unique ingredients`);
+                            setTimeout(() => setErrorItemId(null), 2000);
+                            return;
+                          }
+                          if (isSelected) {
                             removeDrink(drink.id);
                           } else {
                             addDrinkToEvent(drink.id);
                           }
                         }}
-                        style={{ position: 'relative' }}
+                        style={{ position: 'relative', opacity: isDisabled ? 0.45 : 1, cursor: isDisabled ? 'not-allowed' : 'pointer' }}
                       >
                         <div className="drink-info">
                           <div className="drink-name">{drink.name}</div>
@@ -1358,18 +1368,26 @@ const EventsPage: React.FC = () => {
                     <div className="drink-grid">
                       {Object.values(customRecipes).map(recipe => {
                         const isErr = errorItemId === recipe.id;
+                        const isSelected = selectedCustomIds.includes(recipe.id);
+                        const isDisabled = !isSelected && !canAddDrink(recipe as CustomRecipe);
                         return (
                         <div 
                           key={recipe.id} 
-                          className={`drink-item ${selectedCustomIds.includes(recipe.id) ? 'selected' : ''} ${isErr ? 'shake' : ''}`}
+                          className={`drink-item ${isSelected ? 'selected' : ''} ${isErr ? 'shake' : ''} ${isDisabled ? 'disabled' : ''}`}
                           onClick={() => {
-                            if (selectedCustomIds.includes(recipe.id)) {
+                            if (isDisabled) {
+                              setErrorItemId(recipe.id);
+                              setErrorMessage(`Cannot add: exceeds ${maxSlots} unique ingredients`);
+                              setTimeout(() => setErrorItemId(null), 2000);
+                              return;
+                            }
+                            if (isSelected) {
                               removeCustom(recipe.id);
                             } else {
                               addCustomToEvent(recipe.id);
                             }
                           }}
-                          style={{ position: 'relative' }}
+                          style={{ position: 'relative', opacity: isDisabled ? 0.45 : 1, cursor: isDisabled ? 'not-allowed' : 'pointer' }}
                         >
                           <div className="drink-info">
                             <div className="drink-name">{recipe.name}</div>
