@@ -73,6 +73,8 @@ const EventsPage: React.FC = () => {
   const [showSlots, setShowSlots] = useState(false);
   const [ingredientSet, setIngredientSet] = useState<Set<number>>(new Set());
   const [slotsOK, setSlotsOK] = useState(true);
+  // Max unique ingredient slots derived from the first 2 digits of the device ID
+  const [maxSlots, setMaxSlots] = useState<number>(15);
   // Error feedback for drink selection
   const [errorItemId, setErrorItemId] = useState<number | string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -93,6 +95,22 @@ const EventsPage: React.FC = () => {
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrLink, setQrLink] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
+
+  // Helper: determine if device ID is present and valid (1-6 digits)
+  const isDeviceIdValid = (id?: string) => {
+    const val = (typeof id === 'string' ? id : eventDeviceId).trim();
+    return /^\d{1,6}$/.test(val);
+  };
+
+  // Parse allowed slots from the first two digits of the device ID
+  const parseMaxSlotsFromDeviceId = (id: string) => {
+    const s = id.trim();
+    if (!s) return 15;
+    const firstTwo = s.slice(0, 2);
+    const n = parseInt(firstTwo, 10);
+    if (isNaN(n) || n <= 0) return 15;
+    return n;
+  };
 
   const categories = ['All', 'Vodka', 'Rum', 'Tequila', 'Whiskey', 'Gin', 'Brandy', 'Liqueur', 'Custom'];
 
@@ -546,7 +564,7 @@ const EventsPage: React.FC = () => {
     if (drink && !canAddDrink(drink)) {
       // Trigger shake and show message
       setErrorItemId(id);
-      setErrorMessage('Cannot add: exceeds 15 unique ingredients');
+  setErrorMessage(`Cannot add: exceeds ${maxSlots} unique ingredients`);
       setTimeout(() => setErrorItemId(null), 2000);
       return;
     }
@@ -558,7 +576,7 @@ const EventsPage: React.FC = () => {
     if (recipe && !canAddDrink(recipe)) {
       // Trigger shake and show message
       setErrorItemId(id);
-      setErrorMessage('Cannot add: exceeds 15 unique ingredients');
+  setErrorMessage(`Cannot add: exceeds ${maxSlots} unique ingredients`);
       setTimeout(() => setErrorItemId(null), 2000);
       return;
     }
@@ -598,6 +616,11 @@ const EventsPage: React.FC = () => {
     fetchIngredients();
   }, []);
 
+  // Update maxSlots whenever the device id field changes
+  useEffect(() => {
+    setMaxSlots(parseMaxSlotsFromDeviceId(eventDeviceId || ''));
+  }, [eventDeviceId]);
+
   // Function to parse ingredients from a drink
   const parseIngredients = (item: Drink | CustomRecipe): number[] => {
     if ('ingredients' in item && typeof item.ingredients === 'string') {
@@ -634,8 +657,8 @@ const EventsPage: React.FC = () => {
     });
     
     setIngredientSet(newSet);
-    setSlotsOK(newSet.size <= 15);
-  }, [selectedDrinkIds, selectedCustomIds, standardDrinks, customRecipes]);
+    setSlotsOK(newSet.size <= maxSlots);
+  }, [selectedDrinkIds, selectedCustomIds, standardDrinks, customRecipes, maxSlots]);
 
   useEffect(() => {
     calculateIngredientSet();
@@ -646,7 +669,7 @@ const EventsPage: React.FC = () => {
     const tempSet = new Set(ingredientSet);
     const itemIngredients = parseIngredients(item);
     itemIngredients.forEach(ingId => tempSet.add(ingId));
-    return tempSet.size <= 15;
+  return tempSet.size <= maxSlots;
   };
 
   const IngredientSlots = () => (
@@ -657,7 +680,7 @@ const EventsPage: React.FC = () => {
         style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
       >
         <span style={{ color: slotsOK ? '#cecece' : '#d9534f' }}>
-          {ingredientSet.size}/15 unique ingredients
+          {ingredientSet.size}/{maxSlots} unique ingredients
         </span>
         {ingredientSet.size > 0 && (
           <span style={{ marginLeft: 8 }}>
@@ -1057,7 +1080,16 @@ const EventsPage: React.FC = () => {
                   <button 
                     type="button" 
                     className="lb-btn secondary"
-                    onClick={() => setShowDrinkPicker(true)}
+                    onClick={() => {
+                      if (!isDeviceIdValid()) {
+                        setFormError('Enter a valid Device ID first (1-6 digits).');
+                        setFormShake(true);
+                        setTimeout(() => setFormShake(false), 500);
+                        return;
+                      }
+                      setFormError(null);
+                      setShowDrinkPicker(true);
+                    }}
                   >
                     <FiPlus /> Add Drinks
                   </button>
@@ -1192,7 +1224,16 @@ const EventsPage: React.FC = () => {
                   <button 
                     type="button" 
                     className="lb-btn secondary"
-                    onClick={() => setShowDrinkPicker(true)}
+                    onClick={() => {
+                      if (!isDeviceIdValid()) {
+                        setFormError('Enter a valid Device ID first (1-6 digits).');
+                        setFormShake(true);
+                        setTimeout(() => setFormShake(false), 500);
+                        return;
+                      }
+                      setFormError(null);
+                      setShowDrinkPicker(true);
+                    }}
                   >
                     <FiPlus /> Add Drinks
                   </button>
