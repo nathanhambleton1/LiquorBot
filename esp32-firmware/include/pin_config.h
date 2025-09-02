@@ -28,10 +28,6 @@
 #define PUMP_IN1_PIN    16
 #define PUMP_IN2_PIN    17
 
-// Backward compatibility (legacy names used elsewhere)
-#define PUMP1_PIN       PUMP_IN1_PIN
-#define PUMP2_PIN       PUMP_IN2_PIN
-
 /* ----------------------------- Optional NCV7240 control ------------------------ */
 // If your hardware exposes EN or LHI (latched fault) control lines, set real GPIOs.
 // Use -1 to indicate the line is not connected / managed in software.

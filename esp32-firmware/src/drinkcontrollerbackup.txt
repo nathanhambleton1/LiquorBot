@@ -37,10 +37,10 @@ void initDrinkController() {
     writeNCV7240(ncvState);
     Serial.println("NCV7240 SPI initialized, all outputs OFF.");
 
-    pinMode(PUMP1_PIN, OUTPUT);
-    pinMode(PUMP2_PIN, OUTPUT);
-    digitalWrite(PUMP1_PIN, LOW);
-    digitalWrite(PUMP2_PIN, LOW);
+    pinMode(PUMP_IN1_PIN, OUTPUT);
+    pinMode(PUMP_IN2_PIN, OUTPUT);
+    digitalWrite(PUMP_IN1_PIN, LOW);
+    digitalWrite(PUMP_IN2_PIN, LOW);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -262,9 +262,9 @@ static void dispenseParallelGroup(std::vector<IngredientCommand> &group) {
 
 // --------------------- MAIN DISPENSE FUNCTION ---------------------
 void dispenseDrink(std::vector<IngredientCommand> &parsedCommand) {
-    // Turn on Pump1 to start pouring
-    digitalWrite(PUMP1_PIN, HIGH);
-    Serial.println("Pump1 ON (FOWARD).");
+    // Turn on pump (IN1 HIGH, IN2 LOW in modern code)
+    digitalWrite(PUMP_IN1_PIN, HIGH);
+    Serial.println("Pump IN1 HIGH (FORWARD).");
 
     // Sort ascending by priority
     std::sort(parsedCommand.begin(), parsedCommand.end(),
@@ -285,9 +285,9 @@ void dispenseDrink(std::vector<IngredientCommand> &parsedCommand) {
         dispenseParallelGroup(group);
     }
 
-    // Turn off Pump1 once done
-    digitalWrite(PUMP1_PIN, LOW);
-    Serial.println("Pump1 OFF (FOWARD).");
+    // Turn off pump
+    digitalWrite(PUMP_IN1_PIN, LOW);
+    Serial.println("Pump IN1 LOW (OFF).");
 
     // Call cleanup function
     cleanupDrinkController();

@@ -23,7 +23,7 @@
 
 #include "state_manager.h"   // setState(), isBusy()
 #include "aws_manager.h"     // notifyPourResult()
-#include "pin_config.h"      // PUMP1_PIN (use DRIVER1+ 17)
+#include "pin_config.h"      // use PUMP_IN1_PIN / PUMP_IN2_PIN
 #include "led_control.h"
 
 // Cleaning durations (in milliseconds)
@@ -76,15 +76,15 @@ static float estimatePourTime(const std::vector<IngredientCommand> &parsed);
 /* -------------------------------------------------------------------------- */
 void initDrinkController() {
     /* Pump */
-    pinMode(PUMP1_PIN, OUTPUT);
-    digitalWrite(PUMP1_PIN, LOW);
-    // PWM setup for PUMP1
+    pinMode(PUMP_IN1_PIN, OUTPUT);
+    digitalWrite(PUMP_IN1_PIN, LOW);
+    // PWM setup for pump IN1 (legacy PUMP1_PWM_CHANNEL defines kept in this file)
     ledcSetup(PUMP1_PWM_CHANNEL, PUMP1_PWM_FREQ, PUMP1_PWM_RES);
-    ledcAttachPin(PUMP1_PIN, PUMP1_PWM_CHANNEL);
+    ledcAttachPin(PUMP_IN1_PIN, PUMP1_PWM_CHANNEL);
     ledcWrite(PUMP1_PWM_CHANNEL, 0); // Start off
 
-    pinMode(PUMP2_PIN, OUTPUT);
-    digitalWrite(PUMP2_PIN, LOW);
+    pinMode(PUMP_IN2_PIN, OUTPUT);
+    digitalWrite(PUMP_IN2_PIN, LOW);
 
     /* Common outlet */
     pinMode(SOL_OUTPUT_PIN, OUTPUT);
@@ -294,7 +294,7 @@ static void dispenseDrink(std::vector<IngredientCommand> &parsed) {
 
     // now turn everything off again
     ledcWrite(PUMP1_PWM_CHANNEL, 0);
-    digitalWrite(PUMP1_PIN, LOW);
+    digitalWrite(PUMP_IN1_PIN, LOW);
     digitalWrite(SOL_OUTPUT_PIN, LOW);
     Serial.println("Tube cleaning sequence complete");
 }
