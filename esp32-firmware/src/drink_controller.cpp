@@ -75,7 +75,7 @@ static inline void  ncvSetPair(uint16_t &word, uint8_t ch/*1..8*/, uint8_t cmd);
 static void         ncvSetSlot(int slot/*1..16*/, bool on);
 static void         ncvAll(uint8_t cmd);
 static void         ncvWriteBoth();
-static void         dispenseParallelGroup(std::vector<IngredientCommand> &group);
+static void         dispenseParallelGroup(std::vector<IngredientCommand> &group, bool overrideNoCup = false);
 static float        flowRate(int numOpen);
 static uint8_t      getIngredientCountFromId();
 static bool         isValidIngredientSlot(int slot);
@@ -118,7 +118,9 @@ void initDrinkController() {
 /* ============================================================================================ */
 /*                                   PUBLIC API (non‑blocking)                                  */
 /* ============================================================================================ */
-void startPourTask(const String &commandStr) {
+struct PourTaskParams { char *cmd; bool overrideNoCup; };
+
+void startPourTask(const String &commandStr, bool overrideNoCup) {
   char *buf = strdup(commandStr.c_str());
   if (!buf) {
     Serial.println("❌ strdup failed – OOM");
@@ -127,11 +129,23 @@ void startPourTask(const String &commandStr) {
     notifyPourResult(false, "alloc_fail");
     return;
   }
-  if (xTaskCreatePinnedToCore(pourDrinkTask, "PourTask", 8192, buf, 1, nullptr, 1) != pdPASS) {
+  PourTaskParams *p = (PourTaskParams*)malloc(sizeof(PourTaskParams));
+  if (!p) {
+    Serial.println("❌ malloc failed – OOM (params)");
+    setState(State::ERROR);
+    ledError();
+    free(buf);
+    notifyPourResult(false, "alloc_fail");
+    return;
+  }
+  p->cmd = buf;
+  p->overrideNoCup = overrideNoCup;
+  if (xTaskCreatePinnedToCore(pourDrinkTask, "PourTask", 8192, p, 1, nullptr, 1) != pdPASS) {
     Serial.println("❌ xTaskCreatePinnedToCore failed");
     setState(State::ERROR);
     ledError();
     free(buf);
+    free(p);
     notifyPourResult(false, "task_fail");
   }
 }
@@ -139,10 +153,30 @@ void startPourTask(const String &commandStr) {
 /* ============================================================================================ */
 /*                                   FREE RTOS TASK                                             */
 /* ============================================================================================ */
+static void pressurizeSystem() {
+  Serial.println("[PRESSURIZE] Starting pressurization sequence");
+  // Turn on pump
+  pumpForward(true);
+  pumpSetPWMDuty(PUMP_WATER_DUTY);
+  // Turn on output solenoids 1 & 3 (OUT1=ON, OUT3=ON)
+  outletSetState(true, false, true, false);
+  // Turn on slot 14 (trash/air)
+  ncvSetSlot(14, true);
+  Serial.println("[PRESSURIZE] Pump ON, OUT1=ON, OUT3=ON, slot 14=OPEN");
+  // Wait 5 seconds
+  vTaskDelay(5000 / portTICK_PERIOD_MS);
+  // Turn off slot 14
+  ncvSetSlot(14, false);
+  Serial.println("[PRESSURIZE] slot 14=CLOSED, pressurization complete");
+  // Pump and OUT1/OUT3 remain ON for pour
+}
+
 static void pourDrinkTask(void *param) {
-  char *raw = static_cast<char*>(param);
-  String cmdStr(raw);
-  free(raw);
+  PourTaskParams *pp = static_cast<PourTaskParams*>(param);
+  String cmdStr(pp->cmd);
+  bool overrideNoCup = pp->overrideNoCup;
+  free(pp->cmd);
+  free(pp);
 
   setState(State::POURING);
   Serial.println("→ State set to POURING");
@@ -203,8 +237,8 @@ static void pourDrinkTask(void *param) {
   for (auto &ic : parsed) {
     Serial.printf("   • Slot %2d → %5.2f oz   (prio %d)\n", ic.slot, ic.amount, ic.priority);
   }
-  float eta = estimatePourTime(parsed);
-  Serial.printf("Estimated total pour time: %.2f s\n", eta);
+  float eta = estimatePourTime(parsed) + 3.0f; // Add 3s for pressurization
+  Serial.printf("Estimated total pour time (with pressurization): %.2f s\n", eta);
   Serial.println("---------------------------------");
   {
     JsonDocument doc;
@@ -219,45 +253,44 @@ static void pourDrinkTask(void *param) {
   ncvAll(NCV_CMD_STBY); // clear latches per‑channel
   ncvAll(NCV_CMD_OFF);  // baseline OFF (slots 1..16)
 
-  // Guard: require cup present before starting pour
-  Serial.println("[SAFETY] Waiting for cup on pressure pad before pour...");
-  // If no cup at start, notify app immediately (single message) and continue waiting
-  if (!isCupPresent()) {
-  JsonDocument doc;
-    doc["status"] = "fail";
-    doc["error"]  = "No Glass Detected - place glass to start";
-    String out; serializeJson(doc, out);
-    sendData(AWS_RECEIVE_TOPIC, out);
-  }
-  unsigned long waitStart = millis();
-  while (!isCupPresent()) {
-    if ((millis() - waitStart) > 30000UL) {
-      Serial.println("[SAFETY] No cup detected within 30s. Aborting pour.");
-      notifyPourResult(false, "no_cup");
-      setState(State::IDLE);
-      ledIdle();
-      vTaskDelete(nullptr);
+  // Guard: require cup present before starting pour unless override flag is set
+  if (!overrideNoCup) {
+    Serial.println("[SAFETY] Waiting for cup on pressure pad before pour...");
+    // If no cup at start, notify app immediately (single message) and continue waiting
+    if (!isCupPresent()) {
+      JsonDocument doc;
+      doc["status"] = "fail";
+      doc["error"]  = "No Glass Detected - place glass to start";
+      String out; serializeJson(doc, out);
+      sendData(AWS_RECEIVE_TOPIC, out);
     }
-    delay(50);
+    unsigned long waitStart = millis();
+    while (!isCupPresent()) {
+      if ((millis() - waitStart) > 30000UL) {
+        Serial.println("[SAFETY] No cup detected within 30s. Aborting pour.");
+        notifyPourResult(false, "no_cup");
+        setState(State::IDLE);
+        ledIdle();
+        vTaskDelete(nullptr);
+      }
+      delay(50);
+    }
+    Serial.println("[SAFETY] Cup detected. Proceeding with pour.");
+  } else {
+    Serial.println("[SAFETY] Override enabled – skipping cup presence check.");
   }
-  Serial.println("[SAFETY] Cup detected. Proceeding with pour.");
 
   // Now that we are actually starting the pour, fade LED to red
   fadeToRed();
 
-  // Explicitly assert starting outlet/SPI state for safety:
-  //  • Output solenoids: 1=ON, 3=ON (pour path), 2=OFF, 4=OFF
-  //  • SPI specials: slot 13 (water) OFF, slot 14 (trash/air) OFF
-  Serial.println("[POUR] Setting outlet path: OUT1=ON, OUT3=ON, OUT2=OFF, OUT4=OFF");
-  outletSetState(true, false, true, false);
+  // Start pressurization sequence before pour
+  pressurizeSystem();
+
+  // After pressurization, ensure slot 13 (water) and slot 14 (trash/air) are CLOSED
   Serial.println("[POUR] Ensuring slot 13 (water) and slot 14 (trash/air) are CLOSED");
   ncvSetSlot(13, false);
   ncvSetSlot(14, false);
-
-  // Start pump at full water duty for pour
-  Serial.printf("[POUR] Starting pump (duty=%u)\n", (unsigned)PUMP_WATER_DUTY);
-  pumpForward(true);
-  pumpSetPWMDuty(PUMP_WATER_DUTY);
+  // Pump and OUT1/OUT3 remain ON for pour
 
   // Sort by priority
   std::sort(parsed.begin(), parsed.end(),
@@ -269,7 +302,8 @@ static void pourDrinkTask(void *param) {
     std::vector<IngredientCommand> group;
     while (i < parsed.size() && parsed[i].priority == pr) { group.push_back(parsed[i]); ++i; }
     Serial.printf("\n— Priority %d (%u items) —\n", pr, (unsigned)group.size());
-    dispenseParallelGroup(group);
+    Serial.println("[POUR] Starting ingredient pour (after pressurization)");
+    dispenseParallelGroup(group, overrideNoCup);
   }
 
   // Finish dispense: stop mechanics
@@ -429,7 +463,7 @@ void dispenseDrink(std::vector<IngredientCommand> &parsed) {
   outletAllOff();
 }
 
-static void dispenseParallelGroup(std::vector<IngredientCommand> &group) {
+static void dispenseParallelGroup(std::vector<IngredientCommand> &group, bool overrideNoCup) {
   std::vector<PourState> pours;
   for (auto &ic : group) {
     if (!isValidIngredientSlot(ic.slot)) continue; // safe
@@ -448,7 +482,7 @@ static void dispenseParallelGroup(std::vector<IngredientCommand> &group) {
 
   while (true) {
     // Pause/resume safety: if cup removed, STOP pump, keep solenoids as-is, and wait
-    if (!isCupPresent()) {
+    if (!overrideNoCup && !isCupPresent()) {
       // Immediately stop pump to prevent spillage; leave valves as they are
       pumpStop();
       Serial.println("[SAFETY] Cup removed – pausing pour until return...");

@@ -935,6 +935,21 @@ export default function DeviceSettings() {
           <View style={styles.infoModalContent}>
             <Text style={styles.infoModalTitle}>{selectedInfo?.title}</Text>
             <Text style={styles.infoModalText}>{selectedInfo?.message}</Text>
+            {/* Add Reset to Default button for Calibrate info */}
+            {selectedInfo?.title === 'Calibrate' && (
+              <TouchableOpacity
+                style={[styles.infoModalButton, { marginBottom: 10 }]}
+                onPress={async () => {
+                  setInfoModalVisible(false);
+                  // Send RESET_CALIBRATION to ESP32
+                  const calibrationTopic = `liquorbot/liquorbot${liquorbotId}/calibrate/flow`;
+                  await pubsub.publish({ topics: [calibrationTopic], message: { action: 'RESET_CALIBRATION' } });
+                  Alert.alert('Reset', 'Calibration settings have been reset to default.');
+                }}
+              >
+                <Text style={styles.infoModalButtonText}>Reset to Default</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.infoModalButton} onPress={() => setInfoModalVisible(false)}>
               <Text style={styles.infoModalButtonText}>Close</Text>
             </TouchableOpacity>

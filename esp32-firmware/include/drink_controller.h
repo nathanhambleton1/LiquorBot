@@ -29,7 +29,8 @@ std::vector<IngredientCommand> parseDrinkCommand(const String &commandStr);
 void dispenseDrink(std::vector<IngredientCommand> &parsedCommand);
 
 // ---------- NEW: kick off non‑blocking pour ----------
-void startPourTask(const String &commandStr);
+// If overrideNoCup is true, pour proceeds without requiring cup presence.
+void startPourTask(const String &commandStr, bool overrideNoCup = false);
 
 // ---------- Cleanup ----------
 void cleanupDrinkController();

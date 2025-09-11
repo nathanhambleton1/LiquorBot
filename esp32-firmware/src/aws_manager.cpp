@@ -243,6 +243,30 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
                 sendData(FLOW_CALIB_TOPIC, out);
                 return;
             }
+            if (action && !strcmp(action, "RESET_CALIBRATION")) {
+                // Reset calibration to default values
+                float defLps[5] = {
+                    0.38f / 33.814f,
+                    0.54f / 33.814f,
+                    0.61f / 33.814f,
+                    0.65f / 33.814f,
+                    0.68f / 33.814f,
+                };
+                saveFlowCalibrationToNVS(defLps, 5, "", 0.0f, 0.0f);
+                Serial.println("[CALIB] Calibration reset to default values.");
+                // Optionally, send confirmation
+                JsonDocument resp;
+                resp["action"] = "CURRENT_CALIBRATION";
+                JsonArray arr = resp.createNestedArray("rates_lps");
+                for (int i=0;i<5;i++) arr.add(defLps[i]);
+                JsonObject fit = resp.createNestedObject("fit");
+                fit["type"] = "";
+                fit["a"] = 0.0f;
+                fit["b"] = 0.0f;
+                String out; serializeJson(resp, out);
+                sendData(FLOW_CALIB_TOPIC, out);
+                return;
+            }
 
             // Parse array of rates (L/s), fit type, a, b
             JsonArray arr = doc["rates_lps"];
@@ -280,11 +304,20 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
 
     /* 2 · Drink command */
     if (topicStr == AWS_PUBLISH_TOPIC) {
-        // try parsing as a JSON string literal, otherwise strip quotes
-        String cmd;
+        // Accept either a raw string or JSON object { command: string, override?: bool }
+        String cmd; bool overrideNoCup = false;
         JsonDocument jdoc;
         if (deserializeJson(jdoc, message) == DeserializationError::Ok) {
-            cmd = jdoc.as<const char*>(); 
+            if (jdoc.is<JsonObject>()) {
+                cmd = jdoc["command"] | "";
+                overrideNoCup = jdoc["override"] | false;
+                if (!cmd.length()) {
+                    // also accept if message was a JSON string literal
+                    cmd = jdoc.as<const char*>();
+                }
+            } else {
+                cmd = jdoc.as<const char*>();
+            }
         } else {
             cmd = message;
             if (cmd.startsWith("\"") && cmd.endsWith("\"")) {
@@ -308,8 +341,8 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
             return;
         }
 
-        // Require cup present BEFORE starting any pour processing
-        if (!isCupPresent()) {
+        // Require cup present BEFORE starting pour unless override flag is set
+        if (!overrideNoCup && !isCupPresent()) {
             JsonDocument doc;
             doc["status"] = "fail";
             doc["error"]  = "No Glass Detected - place glass to start";
@@ -320,8 +353,8 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
         }
         setState(State::POURING);
         Serial.println("→ State set to POURING");
-        /* Kick off non-blocking FreeRTOS task with the clean command */
-        startPourTask(cmd);
+        /* Kick off non-blocking FreeRTOS task with the command and override flag */
+        startPourTask(cmd, overrideNoCup);
         return; // main loop continues running
     }
 

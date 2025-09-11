@@ -272,13 +272,24 @@ function DrinkItem({
   }, [isExpanded]);
 
   /* --------------- pour-drink helpers --------------- */
+  const lastCommandRef = useRef<string | null>(null);
+
   async function publishDrinkCommand() {
     const cmd = buildSlotCommand(drink.ingredients ?? '', slots, quantity);
     if (!cmd) throw new Error('No valid ingredients to pour');
-
+    lastCommandRef.current = cmd;
     await pubsub.publish({
       topics: [`liquorbot/liquorbot${liquorbotId}/publish`],
       message: cmd,
+    });
+  }
+
+  async function resendWithOverride() {
+    if (!lastCommandRef.current) return;
+    const payload = { command: lastCommandRef.current, override: true };
+    await pubsub.publish({
+      topics: [`liquorbot/liquorbot${liquorbotId}/publish`],
+      message: payload,
     });
   }
 
@@ -553,7 +564,7 @@ function DrinkItem({
         triggerStatus('error', 'No response from device');
         setLogging(false);
       }
-    }, 30_000);
+    }, 45_000);
 
     const sub = pubsub
       .subscribe({ topics: [`liquorbot/liquorbot${liquorbotId}/receive`] })
@@ -624,17 +635,65 @@ function DrinkItem({
               typeof payload === 'object' && payload?.error
                 ? ` – ${payload.error}`
                 : '';
-            triggerStatus('error', `Pour Failed${reason}.`);
-            if (Platform.OS === 'ios') {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            const errText = (payload?.error ?? '').toString();
+            // Intercept "No Glass Detected" to offer override prompt
+            if (/no\s*glass\s*detected/i.test(errText)) {
+              try {
+                const user = await getCurrentUser();
+                const uname = user?.username ?? 'User';
+                const title = `Hey ${uname} — pour blocked`;
+                const msg = 'No glass seems to be present. Are you sure you want to pour anyway?';
+                // iOS style Alert; for Android this maps to a dialog
+                Alert.alert(title, msg, [
+                  { text: 'Cancel', style: 'cancel', onPress: () => {
+                      triggerStatus('error', `Pour Failed${reason}.`);
+                      if (Platform.OS === 'ios') {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                      }
+                      if (scheduledNotificationId) {
+                        Notifications.cancelScheduledNotificationAsync(scheduledNotificationId).catch(() => {});
+                        setScheduledNotificationId(null);
+                      }
+                      setLogging(false);
+                      clearTimeout(timeoutId);
+                    } },
+                  { text: 'Pour Anyways', style: 'destructive', onPress: async () => {
+                      try {
+                        // Keep logging active and resend with override
+                        await resendWithOverride();
+                        triggerStatus('error', 'Override sent – pouring without glass check.');
+                      } catch (e) {
+                        triggerStatus('error', 'Failed to send override.');
+                        setLogging(false);
+                      }
+                    } },
+                ]);
+              } catch {
+                // If we fail to get user or show alert, fallback to default handling
+                triggerStatus('error', `Pour Failed${reason}.`);
+                if (Platform.OS === 'ios') {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                }
+                if (scheduledNotificationId) {
+                  await Notifications.cancelScheduledNotificationAsync(scheduledNotificationId);
+                  setScheduledNotificationId(null);
+                }
+                setLogging(false);
+                clearTimeout(timeoutId);
+              }
+            } else {
+              // Default failure handling
+              triggerStatus('error', `Pour Failed${reason}.`);
+              if (Platform.OS === 'ios') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              }
+              if (scheduledNotificationId) {
+                await Notifications.cancelScheduledNotificationAsync(scheduledNotificationId);
+                setScheduledNotificationId(null);
+              }
+              setLogging(false);
+              clearTimeout(timeoutId);
             }
-            // Cancel any pending notification if pour failed
-            if (scheduledNotificationId) {
-              await Notifications.cancelScheduledNotificationAsync(scheduledNotificationId);
-              setScheduledNotificationId(null);
-            }
-            setLogging(false);
-            clearTimeout(timeoutId);
           }
         },
         error: (err: any) => {
