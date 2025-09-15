@@ -74,8 +74,26 @@ bool connectToWiFi() {
         setState(State::IDLE); // Set state to IDLE after successful connection
         return true;
     }
-    
+
     Serial.println("\n✖ Connection failed");
+    // Print detailed failure reason
+    wl_status_t wifiStatus = WiFi.status();
+    switch (wifiStatus) {
+        case WL_NO_SSID_AVAIL:
+            Serial.println("Reason: SSID not available (network not found)");
+            break;
+        case WL_CONNECT_FAILED:
+            Serial.println("Reason: Connection failed (possibly unsupported network or 5GHz)");
+            break;
+        case WL_IDLE_STATUS:
+            Serial.println("Reason: WiFi idle (not started)");
+            break;
+        default:
+            Serial.print("Reason: Unknown (status code: ");
+            Serial.print(wifiStatus);
+            Serial.println(")");
+            break;
+    }
     setState(State::ERROR); // Set state to ERROR on failure
     return false;
 }
