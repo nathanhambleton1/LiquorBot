@@ -43,10 +43,10 @@ void dcSetSpiSlot(int slot, bool on);
 void dcOutletSetState(bool s1, bool s2, bool s3, bool s4);
 void dcOutletAllOff();
 
-// Pump controls (DRV8870). Forward=drive with IN2=LOW and PWM on IN1.
-void dcPumpForward(bool on);
-void dcPumpSetDuty(uint8_t duty);
-void dcPumpStop();
+
+// Pump controls (MOSFET). Simple ON/OFF via GPIO.
+void dcPumpOn();
+void dcPumpOff();
 
 // Return the number of ingredient slots available based on LIQUORBOT_ID (clamped 0..12).
 uint8_t dcGetIngredientCount();

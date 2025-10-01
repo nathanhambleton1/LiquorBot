@@ -61,9 +61,8 @@ struct PourState { int slot; float ouncesLeft; bool done; };
 
 /* Forward decls */
 static void         pumpSetup();
-static void         pumpForward(bool on);
-static void         pumpSetPWMDuty(uint8_t duty); // 0..255, on IN1 (drive/coast PWM)
-static void         pumpStop();
+static void         pumpOn();
+static void         pumpOff();
 // Outlet solenoids (GPIO direct)
 static void         outletSolenoidsSetup();
 static void         outletSolenoidSet(uint8_t idx, bool on); // idx 1..4
@@ -88,9 +87,8 @@ static void         ledSuccessTask(void *param);
 void dcSetSpiSlot(int slot, bool on) { ncvSetSlot(slot, on); }
 void dcOutletSetState(bool s1, bool s2, bool s3, bool s4) { outletSetState(s1,s2,s3,s4); }
 void dcOutletAllOff() { outletAllOff(); }
-void dcPumpForward(bool on) { pumpForward(on); }
-void dcPumpSetDuty(uint8_t duty) { pumpSetPWMDuty(duty); }
-void dcPumpStop() { pumpStop(); }
+void dcPumpOn() { pumpOn(); }
+void dcPumpOff() { pumpOff(); }
 uint8_t dcGetIngredientCount() { return getIngredientCountFromId(); }
 
 /* ============================================================================================ */
@@ -155,9 +153,8 @@ void startPourTask(const String &commandStr, bool overrideNoCup) {
 /* ============================================================================================ */
 static void pressurizeSystem() {
   Serial.println("[PRESSURIZE] Starting pressurization sequence");
-  // Turn on pump
-  pumpForward(true);
-  pumpSetPWMDuty(PUMP_WATER_DUTY);
+  // Turn on pump (MOSFET)
+  pumpOn();
   // Turn on output solenoids 1 & 3 (OUT1=ON, OUT3=ON)
   outletSetState(true, false, true, false);
   // Turn on slot 14 (trash/air)
@@ -307,7 +304,7 @@ static void pourDrinkTask(void *param) {
   }
 
   // Finish dispense: stop mechanics
-  pumpStop();
+  pumpOff();
   cleanupDrinkController();
 
   // =====================
@@ -322,8 +319,7 @@ static void pourDrinkTask(void *param) {
   // Step 1: Water flush → outputs 1=ON,3=ON,2=OFF,4=OFF; open slot 13 for CLEAN_WATER_MS
   Serial.printf("[CLEAN-1] Water flush: OUT1=ON, OUT3=ON, OUT2=OFF, OUT4=OFF; slot13=OPEN for %u ms\n", (unsigned)CLEAN_WATER_MS);
   outletSetState(true, false, true, false);
-  pumpForward(true);
-  pumpSetPWMDuty(PUMP_WATER_DUTY);
+  pumpOn();
   ncvSetSlot(13, true);
   delay(CLEAN_WATER_MS);
   ncvSetSlot(13, false);
@@ -332,8 +328,7 @@ static void pourDrinkTask(void *param) {
   // Step 2: Air purge (top) → outputs 1=ON,3=OFF,2=OFF,4=ON; push out to spout
   Serial.printf("[CLEAN-2] Air purge top: OUT1=ON, OUT3=OFF, OUT2=OFF, OUT4=ON for %u ms\n", (unsigned)CLEAN_AIR_TOP_MS);
   outletSetState(true, false, false, true);
-  pumpForward(true);
-  pumpSetPWMDuty(PUMP_AIR_DUTY);
+  pumpOn();
   delay(CLEAN_AIR_TOP_MS);
   Serial.println("[CLEAN-2] Air purge top complete");
 
@@ -343,15 +338,14 @@ static void pourDrinkTask(void *param) {
   // Step 3: Trash drain (combined) → OUT1=OFF, OUT2=ON, OUT3=OFF, OUT4=ON; slot14=OPEN
   Serial.printf("[CLEAN-3] Trash drain: OUT1=OFF, OUT2=ON, OUT3=OFF, OUT4=ON; slot14=OPEN for %u ms\n", (unsigned)CLEAN_TRASH_MS);
   outletSetState(false, true, false, true);
-  pumpForward(true);
-  pumpSetPWMDuty(PUMP_AIR_DUTY);
+  pumpOn();
   ncvSetSlot(14, true);
   delay(CLEAN_TRASH_MS);
   ncvSetSlot(14, false);
   Serial.println("[CLEAN-3] Trash drain complete; slot14=CLOSED");
 
   // Stop pump and close all outlets
-  pumpStop();
+  pumpOff();
   Serial.println("[CLEAN] Staged cleaning sequence complete; stopping pump and closing outlets");
   outletAllOff();
 
@@ -439,9 +433,8 @@ void dispenseDrink(std::vector<IngredientCommand> &parsed) {
   outletSolenoidSet(1, true);
   outletSolenoidSet(3, true);
 
-  // Start pump full speed
-  pumpForward(true);
-  pumpSetPWMDuty(255);
+  // Start pump
+  pumpOn();
 
   std::sort(parsed.begin(), parsed.end(),
             [](const IngredientCommand &a, const IngredientCommand &b){ return a.priority < b.priority; });
@@ -455,7 +448,7 @@ void dispenseDrink(std::vector<IngredientCommand> &parsed) {
     dispenseParallelGroup(group);
   }
 
-  pumpStop();
+  pumpOff();
 
   // Close auxiliary outlet solenoids after dispense
   outletSolenoidSet(1, false);
@@ -484,7 +477,7 @@ static void dispenseParallelGroup(std::vector<IngredientCommand> &group, bool ov
     // Pause/resume safety: if cup removed, STOP pump, keep solenoids as-is, and wait
     if (!overrideNoCup && !isCupPresent()) {
       // Immediately stop pump to prevent spillage; leave valves as they are
-      pumpStop();
+      pumpOff();
       Serial.println("[SAFETY] Cup removed – pausing pour until return...");
       // Notify app once per pause using existing status/error formatting
       if (!pauseAlertSent) {
@@ -503,7 +496,7 @@ static void dispenseParallelGroup(std::vector<IngredientCommand> &group, bool ov
       Serial.println("[SAFETY] Cup returned – resuming pour.");
       // Back to solid red and resume pump
       fadeToRed();
-      pumpSetPWMDuty(PUMP_WATER_DUTY);
+      pumpOn();
       pauseAlertSent = false; // allow future pauses to alert again
     }
     int openCnt = 0; float needSum = 0.0f;
@@ -613,35 +606,16 @@ static bool isValidIngredientSlot(int slot) {
 
 /* ------------------------------- PUMP (DRV8870) -------------------------------- */
 static void pumpSetup() {
-  pinMode(PUMP_IN1_PIN, OUTPUT);
-  pinMode(PUMP_IN2_PIN, OUTPUT);
-  digitalWrite(PUMP_IN1_PIN, LOW);
-  digitalWrite(PUMP_IN2_PIN, LOW);
-  ledcSetup(PUMP_PWM_CHANNEL, PUMP_PWM_FREQ, PUMP_PWM_RES);
-  ledcAttachPin(PUMP_IN1_PIN, PUMP_PWM_CHANNEL); // PWM on IN1 (drive/coast PWM)
-  ledcWrite(PUMP_PWM_CHANNEL, 0);
+  pinMode(PUMP_MOSFET_PIN, OUTPUT);
+  digitalWrite(PUMP_MOSFET_PIN, LOW); // Ensure pump is off at boot
 }
 
-static void pumpForward(bool on) {
-  if (on) {
-    digitalWrite(PUMP_IN2_PIN, LOW);     // drive direction: IN2=0
-    ledcWrite(PUMP_PWM_CHANNEL, 255);    // full duty on IN1
-  } else {
-    pumpStop();
-  }
+static void pumpOn() {
+  digitalWrite(PUMP_MOSFET_PIN, HIGH); // Turn pump ON
 }
 
-static void pumpSetPWMDuty(uint8_t duty) {
-  // Ensure direction is forward (IN2=0); speed via IN1 PWM
-  digitalWrite(PUMP_IN2_PIN, LOW);
-  ledcWrite(PUMP_PWM_CHANNEL, duty);
-}
-
-static void pumpStop() {
-  // Coast/sleep: both low (device may enter sleep after ~1 ms)
-  ledcWrite(PUMP_PWM_CHANNEL, 0);
-  digitalWrite(PUMP_IN1_PIN, LOW);
-  digitalWrite(PUMP_IN2_PIN, LOW);
+static void pumpOff() {
+  digitalWrite(PUMP_MOSFET_PIN, LOW); // Turn pump OFF
 }
 
 /* ------------------------------- NCV7240 SPI ----------------------------------- */
@@ -697,7 +671,7 @@ void cleanupDrinkController() {
   // Ensure all NCV outputs are OFF
   ncvAll(NCV_CMD_OFF);
   // Pump stop
-  pumpStop();
+  pumpOff();
 }
 
 /* ------------------------ Outlet/Top Solenoids (GPIO) ------------------------- */

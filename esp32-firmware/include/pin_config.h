@@ -23,10 +23,10 @@
 #define SPI_SCK         18
 #define SPI_CS          5   // Chip Select for the (daisy‑chained) NCV7240 drivers
 
-/* ----------------------------- Pump (DRV8870) ---------------------------------- */
-// H‑bridge control pins (IN1 PWM, IN2 static LOW for forward drive)
-#define PUMP_IN1_PIN    16
-#define PUMP_IN2_PIN    17
+
+/* ----------------------------- Pump (MOSFET) ----------------------------------- */
+// MOSFET gate control pin for pump
+#define PUMP_MOSFET_PIN 33
 
 /* ----------------------------- Optional NCV7240 control ------------------------ */
 // If your hardware exposes EN or LHI (latched fault) control lines, set real GPIOs.
@@ -34,14 +34,8 @@
 #define NCV_EN_PIN      -1
 #define NCV_LHI_PIN     -1
 
-/* ----------------------------- Pump PWM (LEDC) --------------------------------- */
-#define PUMP_PWM_CHANNEL 0      // LEDC channel index
-#define PUMP_PWM_FREQ    1000   // Hz
-#define PUMP_PWM_RES     8      // bits (0..255 duty)
 
-// Pump duty presets for water flush vs. air purge (can be tuned per hardware)
-#define PUMP_WATER_DUTY  255    // full speed for water
-#define PUMP_AIR_DUTY    160    // gentler for air purge/back-blow
+// No PWM/duty needed for MOSFET pump control
 
 /* ----------------------------- Cleaning Durations ------------------------------ */
 // Slot 13 = WATER flush, Slot 14 = AIR (trash/purge) per drink_controller logic
