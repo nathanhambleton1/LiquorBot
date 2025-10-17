@@ -138,11 +138,39 @@ export default function CalibrationSetup() {
 
   const handleStart = async () => {
     setIsRunning(true);
+    // Send START_CALIBRATION command with solenoid count (step 0 = 1 solenoid, step 1 = 2 solenoids, etc.)
+    const solenoids = step + 1;
+    const topic = `liquorbot/liquorbot${liquorbotId}/calibrate/flow`;
+    try {
+      await pubsub.publish({
+        topics: [topic],
+        message: {
+          action: 'START_CALIBRATION',
+          solenoids: solenoids
+        }
+      });
+      console.log(`Started calibration with ${solenoids} solenoids`);
+    } catch (error) {
+      console.error('Failed to start calibration:', error);
+    }
     // startTimeRef.current = Date.now(); // now handled in effect
   };
 
   const handleStop = async () => {
     setIsRunning(false);
+    // Send STOP_CALIBRATION command
+    const topic = `liquorbot/liquorbot${liquorbotId}/calibrate/flow`;
+    try {
+      await pubsub.publish({
+        topics: [topic],
+        message: {
+          action: 'STOP_CALIBRATION'
+        }
+      });
+      console.log('Stopped calibration');
+    } catch (error) {
+      console.error('Failed to stop calibration:', error);
+    }
     const elapsedMs = Date.now() - (startTimeRef.current || Date.now());
     setResults(prev => {
       const next = [...prev];

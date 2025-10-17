@@ -36,4 +36,8 @@ void startEmptyIngredientTask(uint8_t ingredientSlot);
 // Stop emptying a single ingredient (force cleanup)
 void stopEmptyIngredientTask();
 
+// Calibration mode: turn on pump and specified number of solenoids for flow rate testing
+void startCalibrationMode(int solenoids);
+void stopCalibrationMode();
+
 #endif // MAINTENANCE_CONTROLLER_H

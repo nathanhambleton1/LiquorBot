@@ -244,13 +244,13 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
                 return;
             }
             if (action && !strcmp(action, "RESET_CALIBRATION")) {
-                // Reset calibration to default values
+                // Reset calibration to default values (corrected for multi-solenoid pressure drop)
                 float defLps[5] = {
-                    0.38f / 33.814f,
-                    0.54f / 33.814f,
-                    0.61f / 33.814f,
-                    0.65f / 33.814f,
-                    0.68f / 33.814f,
+                    0.38f / 33.814f,   // 1 solenoid: perfect as-is
+                    0.473f / 33.814f,  // 2 solenoids: decreased from 0.54 (actual rate is 87.5% of expected)
+                    0.458f / 33.814f,  // 3 solenoids: decreased from 0.61 (actual rate is 75% of expected)
+                    0.488f / 33.814f,  // 4 solenoids: decreased from 0.65 (actual rate is 75% of expected)
+                    0.510f / 33.814f,  // 5 solenoids: decreased from 0.68 (extrapolated)
                 };
                 saveFlowCalibrationToNVS(defLps, 5, "", 0.0f, 0.0f);
                 Serial.println("[CALIB] Calibration reset to default values.");
@@ -263,6 +263,26 @@ void receiveData(char *topic, byte *payload, unsigned int length) {
                 fit["type"] = "";
                 fit["a"] = 0.0f;
                 fit["b"] = 0.0f;
+                String out; serializeJson(resp, out);
+                sendData(FLOW_CALIB_TOPIC, out);
+                return;
+            }
+            if (action && !strcmp(action, "START_CALIBRATION")) {
+                // Start calibration mode - turn on pump and specified number of solenoids
+                int solenoids = doc["solenoids"] | 1; // default to 1 solenoid
+                startCalibrationMode(solenoids);
+                JsonDocument resp;
+                resp["action"] = "CALIBRATION_STARTED";
+                resp["solenoids"] = solenoids;
+                String out; serializeJson(resp, out);
+                sendData(FLOW_CALIB_TOPIC, out);
+                return;
+            }
+            if (action && !strcmp(action, "STOP_CALIBRATION")) {
+                // Stop calibration mode - turn off pump and all solenoids
+                stopCalibrationMode();
+                JsonDocument resp;
+                resp["action"] = "CALIBRATION_STOPPED";
                 String out; serializeJson(resp, out);
                 sendData(FLOW_CALIB_TOPIC, out);
                 return;

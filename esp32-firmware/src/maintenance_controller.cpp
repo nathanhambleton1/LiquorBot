@@ -18,6 +18,10 @@
 static std::atomic<bool> emptyingSingleIngredient{false};
 static uint8_t currentEmptySlot = 0;
 
+// --- Calibration state ---
+static std::atomic<bool> calibrationActive{false};
+static uint8_t calibrationSolenoids = 0;
+
 // Start emptying a single ingredient (slot 1-12)
 void startEmptyIngredientTask(uint8_t ingredientSlot) {
     if (getCurrentState() != State::IDLE) {
@@ -528,4 +532,66 @@ static void deepCleanFinalFlushTask(void *param) {
     ledIdle();
     sendData(MAINTENANCE_TOPIC, "{\"status\":\"OK\",\"action\":\"DEEP_CLEAN_OK\",\"mode\":\"DEEP_CLEAN_FINAL\",\"op\":\"FINAL\"}");
     vTaskDelete(nullptr);
+}
+
+// --- Calibration mode functions ---
+void startCalibrationMode(int solenoids) {
+    if (getCurrentState() != State::IDLE) {
+        Serial.println("✖ Cannot start calibration: System not IDLE");
+        return;
+    }
+    if (solenoids < 1 || solenoids > 5) {
+        Serial.println("✖ Invalid solenoid count for calibration (must be 1-5)");
+        return;
+    }
+    
+    setState(State::MAINTENANCE);
+    fadeToRed();
+    Serial.printf("→ State set to MAINTENANCE (CALIBRATION with %d solenoids)\n", solenoids);
+    cleanupDrinkController();
+
+    // Output path: OUT1=ON, OUT2=OFF, OUT3=ON, OUT4=OFF (route to spout)
+    dcOutletSetState(true, false, true, false);
+    
+    // Ensure WATER and TRASH/AIR are OFF
+    dcSetSpiSlot(13, false);
+    dcSetSpiSlot(14, false);
+
+    // Close all ingredient slots first
+    for (uint8_t slot = 1; slot <= 12; ++slot) {
+        dcSetSpiSlot(slot, false);
+    }
+    
+    // Open the specified number of solenoids (1 through N)
+    for (int i = 1; i <= solenoids; ++i) {
+        dcSetSpiSlot(i, true);
+    }
+
+    // Start pump
+    dcPumpOn();
+
+    calibrationActive = true;
+    calibrationSolenoids = solenoids;
+    Serial.printf("[CALIBRATION] Started with %d solenoids and pump ON\n", solenoids);
+}
+
+void stopCalibrationMode() {
+    Serial.println("[CALIBRATION] Stopping calibration mode");
+    
+    // Close all solenoids
+    for (uint8_t slot = 1; slot <= 14; ++slot) {
+        dcSetSpiSlot(slot, false);
+    }
+    
+    // Stop pump and close outlets
+    dcPumpOff();
+    dcOutletAllOff();
+    
+    setState(State::IDLE);
+    ledIdle();
+    
+    calibrationActive = false;
+    calibrationSolenoids = 0;
+    
+    Serial.println("→ State set to IDLE after calibration");
 }

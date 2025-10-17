@@ -6,8 +6,8 @@
  *
  *  Summary:
  *    • Two daisy‑chained NCV7240 octal low‑side drivers over SPI control 14 solenoids
- *      — Board A (near MCU) : slots 1..8  (only 1..6 used if your harness is 6‑up)
- *      — Board B (far MCU)  : slots 9..16 (we use 7..14 → map to 9..16 internally)
+ *      — Board A (near MCU) : slots 1..6  (ingredient solenoids)
+ *      — Board B (far MCU)  : slots 7..14 (ingredients 7-12 + slot 13=WATER + slot 14=TRASH/AIR)
  *      — Slot mapping: 1‑12 = ingredients, 13 = WATER flush, 14 = TRASH / AIR purge
  *    • One pump via DRV8870 H‑bridge (IN1/IN2), simple PWM on IN1 for speed control
  *    • Non‑blocking pour: command string "slot:ounces[:priority],..." → FreeRTOS task
@@ -32,7 +32,6 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <ArduinoJson.h>
-
 #include "drink_controller.h"
 #include "pin_config.h"      // central pin & timing configuration
 #include "state_manager.h"
@@ -53,7 +52,7 @@ static constexpr uint8_t NCV_CMD_INPUT = 0b01; // INx parallel control (unused h
 static constexpr uint8_t NCV_CMD_ON    = 0b10; // output ON (low‑side sinks current)
 static constexpr uint8_t NCV_CMD_OFF   = 0b11; // output OFF
 
-/* Two devices in chain: index 0 = NEAR (slots 1..8), index 1 = FAR (slots 9..16) */
+/* Two devices in chain: index 0 = NEAR (slots 1..6), index 1 = FAR (slots 7..14) */
 static uint16_t ncvWord[2] = { 0xFFFF, 0xFFFF }; // default all channels OFF (11)
 
 /* -------------------------- Types ---------------------------- */
@@ -151,22 +150,7 @@ void startPourTask(const String &commandStr, bool overrideNoCup) {
 /* ============================================================================================ */
 /*                                   FREE RTOS TASK                                             */
 /* ============================================================================================ */
-static void pressurizeSystem() {
-  Serial.println("[PRESSURIZE] Starting pressurization sequence");
-  // Turn on pump (MOSFET)
-  pumpOn();
-  // Turn on output solenoids 1 & 3 (OUT1=ON, OUT3=ON)
-  outletSetState(true, false, true, false);
-  // Turn on slot 14 (trash/air)
-  ncvSetSlot(14, true);
-  Serial.println("[PRESSURIZE] Pump ON, OUT1=ON, OUT3=ON, slot 14=OPEN");
-  // Wait 5 seconds
-  vTaskDelay(5000 / portTICK_PERIOD_MS);
-  // Turn off slot 14
-  ncvSetSlot(14, false);
-  Serial.println("[PRESSURIZE] slot 14=CLOSED, pressurization complete");
-  // Pump and OUT1/OUT3 remain ON for pour
-}
+
 
 static void pourDrinkTask(void *param) {
   PourTaskParams *pp = static_cast<PourTaskParams*>(param);
@@ -234,8 +218,8 @@ static void pourDrinkTask(void *param) {
   for (auto &ic : parsed) {
     Serial.printf("   • Slot %2d → %5.2f oz   (prio %d)\n", ic.slot, ic.amount, ic.priority);
   }
-  float eta = estimatePourTime(parsed) + 3.0f; // Add 3s for pressurization
-  Serial.printf("Estimated total pour time (with pressurization): %.2f s\n", eta);
+  float eta = estimatePourTime(parsed);
+  Serial.printf("Estimated total pour time: %.2f s\n", eta);
   Serial.println("---------------------------------");
   {
     JsonDocument doc;
@@ -280,14 +264,15 @@ static void pourDrinkTask(void *param) {
   // Now that we are actually starting the pour, fade LED to red
   fadeToRed();
 
-  // Start pressurization sequence before pour
-  pressurizeSystem();
+  // Set up outlet solenoids for pour (OUT1=ON, OUT3=ON) and start pump
+  Serial.println("[POUR] Setting up outlet solenoids and starting pump");
+  outletSetState(true, false, true, false);
+  pumpOn();
 
-  // After pressurization, ensure slot 13 (water) and slot 14 (trash/air) are CLOSED
+  // Ensure slot 13 (water) and slot 14 (trash/air) are CLOSED for ingredient pour
   Serial.println("[POUR] Ensuring slot 13 (water) and slot 14 (trash/air) are CLOSED");
   ncvSetSlot(13, false);
   ncvSetSlot(14, false);
-  // Pump and OUT1/OUT3 remain ON for pour
 
   // Sort by priority
   std::sort(parsed.begin(), parsed.end(),
@@ -332,6 +317,10 @@ static void pourDrinkTask(void *param) {
   delay(CLEAN_AIR_TOP_MS);
   Serial.println("[CLEAN-2] Air purge top complete");
 
+  // Notify drink completion AFTER air purge top is complete - drink is now ready!
+  notifyPourResult(true, nullptr);
+  Serial.println("✅ Drink completion notified after air purge");
+
   // Start success LED sequence AFTER water flush and top air purge, but don't block trash drain
   xTaskCreatePinnedToCore(ledSuccessTask, "LedSuccess", 2048, nullptr, 1, nullptr, 1);
 
@@ -369,7 +358,6 @@ static void pourDrinkTask(void *param) {
     saveVolumesNow();
   }
 
-  notifyPourResult(true, nullptr);
   setState(State::IDLE);
   // Ensure steady white idle after cleaning
   ledIdle();
@@ -535,7 +523,9 @@ static float estimatePourTime(const std::vector<IngredientCommand> &parsed) {
     while (i < v.size() && v[i].priority == pr) { groupSumOz += v[i].amount; count++; i++; }
     float rate = flowRate(count); if (rate > 0.0f) totalSec += groupSumOz / rate;
   }
-  return totalSec + 4.0f; // include cleaning & latencies
+  // Include complete cleaning cycle timing: water flush + air purge top + trash drain + latencies
+  float cleaningTime = (CLEAN_WATER_MS + CLEAN_AIR_TOP_MS) / 1000.0f;
+  return totalSec + cleaningTime; // cleaning time + extra latency buffer
 }
 
 static float flowRate(int n) {
@@ -635,8 +625,8 @@ static inline void ncvSetPair(uint16_t &word, uint8_t ch, uint8_t cmd) {
 
 static void ncvSetSlot(int slot, bool on) {
   if (slot < 1 || slot > 16) return;
-  uint8_t chip = (slot <= 8) ? 0 : 1;        // 0=NEAR, 1=FAR
-  uint8_t ch   = (slot <= 8) ? slot : (slot - 8); // 1..8
+  uint8_t chip = (slot <= 6) ? 0 : 1;        // 0=NEAR (1-6), 1=FAR (7-14)
+  uint8_t ch   = (slot <= 6) ? slot : (slot - 6); // Map 7-14 to channels 1-8 on FAR chip
   ncvSetPair(ncvWord[chip], ch, on ? NCV_CMD_ON : NCV_CMD_OFF);
   ncvWriteBoth();
 }

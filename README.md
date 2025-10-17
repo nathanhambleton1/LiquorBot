@@ -420,7 +420,7 @@ High‑level behavior of the on‑device firmware.
 | LED        | WS2812 Data         | 4    |
 | Pressure   | ADC1 pin            | 32   |
 
-Durations/duty presets (tunable): `CLEAN_WATER_MS=2000`, `CLEAN_AIR_TOP_MS=1500`, `CLEAN_TRASH_MS=2500`, `QUICK_CLEAN_MS=5000`, `EMPTY_SYSTEM_MS=4000`, `DEEP_CLEAN_MS=10000`, `PUMP_WATER_DUTY=255`, `PUMP_AIR_DUTY=160`.
+Durations/duty presets (tunable): `CLEAN_WATER_MS=2500`, `CLEAN_AIR_TOP_MS=2000`, `CLEAN_TRASH_MS=3000`, `QUICK_CLEAN_MS=5000`, `EMPTY_SYSTEM_MS=4000`, `DEEP_CLEAN_MS=10000`, `PUMP_WATER_DUTY=255`, `PUMP_AIR_DUTY=160`.
 
 Slots: 1..12 ingredients; 13 water; 14 trash/air.
 
