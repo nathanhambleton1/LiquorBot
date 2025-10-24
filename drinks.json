@@ -61,7 +61,7 @@
     "category": "Vodka",
     "description": "Simple, tart mix of vodka and cranberry juice.",
     "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/vodka_cranberry.png",
-    "ingredients": "1:2:1,51:4:1"
+    "ingredients": "1:1.5:1,51:4.5:1"
   },
   {
     "id": 9,
@@ -85,7 +85,7 @@
     "category": "Vodka",
     "description": "Classic mix of vodka and orange juice.",
     "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/screwdriver.png",
-    "ingredients": "1:2:1,49:4:1"
+    "ingredients": "1:1.5:1,49:4.5:1"
   },
   {
     "id": 12,
@@ -117,7 +117,7 @@
     "category": "Rum",
     "description": "Simple blend of rum, lime juice, and sugar syrup.",
     "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/classic_daiquiri.png",
-    "ingredients": "3:2:1,36:1:1,40:0.75:1"
+    "ingredients": "3:1.5:1,36:1:1,40:0.75:1"
   },
   {
     "id": 16,
@@ -125,7 +125,7 @@
     "category": "Vodka",
     "description": "Sophisticated mix of vodka, Cointreau, cranberry, and lime.",
     "image": "https://liquorbot-storage-8cb6bcd8a9244-dev.s3.amazonaws.com/public/drinkMenu/drinkPictures/cosmopolitan.png",
-    "ingredients": "1:1.5:1,9:0.75:1,51:1:1,36:0.5:1"
+    "ingredients": "1:1.5:1,9:0.75:1,51:2:1,36:1:1"
   },
   {
     "id": 17,
